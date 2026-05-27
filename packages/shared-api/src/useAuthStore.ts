@@ -1,6 +1,21 @@
+import axios from "axios";
 import { create } from "zustand";
 import { AuthApi, AuthError } from "./authApi";
 import { TokenStore, TOKEN_KEYS } from "./tokenStore";
+
+/**
+ * "Network error" = no llegamos al server. Axios sin response object,
+ * o codes específicos (ECONNREFUSED, ETIMEDOUT, etc.). Distinto a
+ * "auth error" = el server respondió pero rechazó el token.
+ */
+function isNetworkError(e: unknown): boolean {
+  if (axios.isAxiosError(e)) {
+    return !e.response; // no response = no llegó al server
+  }
+  // AuthError tiene code de auth — NO es network
+  if (e instanceof AuthError) return false;
+  return false;
+}
 
 /**
  * Estado de auth global. Mantiene el access token + user en memoria para
@@ -50,13 +65,38 @@ export const useAuthStore = create<AuthState>((set, get) => ({
     const api = new AuthApi(baseURL);
     set({ _api: api, _store: tokenStore });
 
-    // Si hay refresh token persistido, intentamos refresh para arrancar logueado.
     const refresh = await tokenStore.get(TOKEN_KEYS.REFRESH);
+    const cachedAccess = await tokenStore.get(TOKEN_KEYS.ACCESS);
+    const cachedUserRaw = await tokenStore.get(TOKEN_KEYS.USER);
+
     if (!refresh) {
+      // No hay refresh persistido → forzosamente login fresco
       set({ isInitializing: false });
       return;
     }
 
+    // Offline-first: si hay tokens cacheados los aplicamos YA antes de
+    // intentar el refresh. Así el user entra a la app aunque esté sin
+    // internet, viendo data cacheada (productores en WMDB local).
+    if (cachedAccess && cachedUserRaw) {
+      try {
+        const cachedUser = JSON.parse(cachedUserRaw) as UserSummary;
+        set({
+          accessToken: cachedAccess,
+          user: cachedUser,
+          isAuthenticated: true,
+        });
+      } catch {
+        // raw inválido — ignoramos y dejamos que el refresh decida
+      }
+    }
+
+    // Intentamos refresh para conseguir tokens frescos. Si falla:
+    //   - Network error (offline) → mantenemos estado cacheado, no wipe.
+    //     Cuando vuelva el internet, el próximo 401-retry en apiClient
+    //     dispara un refresh real; mientras tanto el access cacheado
+    //     puede estar vencido pero el user al menos ve sus datos.
+    //   - Auth error (token revocado/expirado del lado server) → wipe.
     try {
       const resp = await api.refresh({ refreshToken: refresh });
       await tokenStore.set(TOKEN_KEYS.ACCESS, resp.accessToken);
@@ -69,12 +109,22 @@ export const useAuthStore = create<AuthState>((set, get) => ({
         isAuthenticated: true,
         isInitializing: false,
       });
-    } catch {
-      // Refresh fail = token expirado/revocado. Limpiar y arrancar fresco.
-      await tokenStore.remove(TOKEN_KEYS.ACCESS);
-      await tokenStore.remove(TOKEN_KEYS.REFRESH);
-      await tokenStore.remove(TOKEN_KEYS.USER);
-      set({ isInitializing: false });
+    } catch (e) {
+      if (isNetworkError(e)) {
+        // Offline — mantener estado cacheado (si lo aplicamos arriba).
+        set({ isInitializing: false });
+      } else {
+        // Auth error real → wipe.
+        await tokenStore.remove(TOKEN_KEYS.ACCESS);
+        await tokenStore.remove(TOKEN_KEYS.REFRESH);
+        await tokenStore.remove(TOKEN_KEYS.USER);
+        set({
+          accessToken: null,
+          user: null,
+          isAuthenticated: false,
+          isInitializing: false,
+        });
+      }
     }
   },
 
@@ -113,7 +163,11 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       });
       return resp.accessToken;
     } catch (e) {
-      // Refresh fail → wipe everything → user re-loguea.
+      // Network error → no wipe, user sigue offline con tokens viejos.
+      // El próximo call HTTP fallará con 401, el apiClient lo capturará
+      // y eventualmente le devolverá el error al UI para mostrar "sin conexión".
+      if (isNetworkError(e)) return null;
+      // Auth error real (server rechazó) → wipe.
       await get().logout();
       if (e instanceof AuthError) throw e;
       return null;

@@ -1,14 +1,11 @@
-// Metro config para monorepo pnpm. Sin esto, Metro busca módulos solo en
-// node_modules del app y falla al resolver @erp/shared-* (que viven en
-// ../../packages/* via symlinks de pnpm).
+// Metro config minimal para monorepo pnpm con node-linker=hoisted.
+// Con linker hoisted la estructura de node_modules es flat (estilo npm),
+// así que solo necesitamos avisarle a Metro de los paths del workspace
+// para que watch + resolución funcionen.
 //
-// Config requerido:
-//   - watchFolders: paths a vigilar para hot-reload + resolución.
-//   - nodeModulesPaths: dónde buscar deps (app + workspace root).
-//   - disableHierarchicalLookup: pnpm symlinks confunden el lookup default.
-//   - unstable_enableSymlinks: Metro debe SEGUIR los symlinks que crea pnpm.
-//   - unstable_enablePackageExports: respeta el "exports" field de package.json,
-//     necesario para algunos paquetes Expo modernos.
+// Sin los workarounds que necesitaba pnpm nested (disableHierarchicalLookup,
+// unstable_enableSymlinks) — expo-doctor se queja si están seteados sin
+// necesidad real.
 
 const { getDefaultConfig } = require("expo/metro-config");
 const path = require("node:path");
@@ -18,13 +15,14 @@ const workspaceRoot = path.resolve(projectRoot, "../..");
 
 const config = getDefaultConfig(projectRoot);
 
-config.watchFolders = [workspaceRoot];
+// Append (no override) los watchFolders default para que Metro vea cambios
+// en packages/* además de los suyos propios.
+config.watchFolders = [...(config.watchFolders ?? []), workspaceRoot];
+
+// Buscar deps también en el node_modules del root del workspace.
 config.resolver.nodeModulesPaths = [
   path.resolve(projectRoot, "node_modules"),
   path.resolve(workspaceRoot, "node_modules"),
 ];
-config.resolver.disableHierarchicalLookup = true;
-config.resolver.unstable_enableSymlinks = true;
-config.resolver.unstable_enablePackageExports = true;
 
 module.exports = config;

@@ -10,7 +10,9 @@
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "cr.confeldan.recibos",
       "versionCode": 1,
@@ -20,7 +22,14 @@
       ]
     },
     "extra": {
-      "apiBaseUrl": "http://10.0.2.2:5249"
-    }
+      "apiBaseUrl": "http://10.0.2.2:5249",
+      "eas": {
+        "projectId": "51dc23bb-a5b3-4902-a268-2ad5c533b6cf"
+      }
+    },
+    "plugins": [
+      "expo-secure-store"
+    ],
+    "owner": "alfredosantibanez"
   }
 }
