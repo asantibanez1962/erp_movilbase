@@ -1,0 +1,24 @@
+{
+  "name": "@erp/shared-api",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@erp/shared-types": "workspace:*",
+    "axios": "^1.7.0",
+    "zustand": "^4.5.0"
+  },
+  "peerDependencies": {
+    "expo-secure-store": "*"
+  },
+  "peerDependenciesMeta": {
+    "expo-secure-store": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

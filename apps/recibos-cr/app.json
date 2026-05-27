@@ -1,0 +1,26 @@
+{
+  "expo": {
+    "name": "Recibos CR",
+    "slug": "recibos-cr",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": ["**/*"],
+    "android": {
+      "package": "cr.confeldan.recibos",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
+    },
+    "extra": {
+      "apiBaseUrl": "http://10.0.2.2:5249"
+    }
+  }
+}

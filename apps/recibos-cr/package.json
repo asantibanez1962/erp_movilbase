@@ -1,0 +1,29 @@
+{
+  "name": "@erp/recibos-cr",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "lint": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@erp/shared-api": "workspace:*",
+    "@erp/shared-types": "workspace:*",
+    "axios": "^1.7.0",
+    "expo": "~54.0.34",
+    "expo-constants": "~18.0.13",
+    "expo-secure-store": "~14.2.4",
+    "expo-status-bar": "~3.0.9",
+    "react": "19.1.4",
+    "react-native": "0.81.6",
+    "react-native-safe-area-context": "~5.6.0",
+    "zustand": "^4.5.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.25.0",
+    "@types/react": "~19.1.4",
+    "typescript": "^5.3.3"
+  }
+}

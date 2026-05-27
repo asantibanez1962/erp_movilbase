@@ -1,0 +1,53 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Build output
+dist/
+build/
+*.tsbuildinfo
+
+# Expo / RN
+.expo/
+.expo-shared/
+expo-env.d.ts
+web-build/
+
+# Android native
+**/android/build/
+**/android/app/build/
+**/android/.gradle/
+**/android/local.properties
+**/android/app/google-services.json
+**/android/app/release/
+
+# iOS native (futuro)
+**/ios/Pods/
+**/ios/build/
+
+# Keystores (DO NOT COMMIT — backup separately!)
+*.keystore
+*.jks
+keystore.properties
+
+# EAS / Expo secrets
+.env
+.env.local
+.env.*.local
+eas-secret.json
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+*.log
+npm-debug.log*
+
+# Testing
+coverage/
+
+# Cache
+.cache/
+.turbo/
+.metro-cache/

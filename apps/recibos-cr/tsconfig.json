@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-native",
+    "lib": ["ES2022", "DOM"],
+    "moduleResolution": "bundler",
+    "paths": {
+      "@erp/shared-types": ["../../packages/shared-types/src"],
+      "@erp/shared-api": ["../../packages/shared-api/src"]
+    },
+    "types": ["react-native"]
+  },
+  "include": ["src/**/*", "index.ts", "App.tsx"]
+}
