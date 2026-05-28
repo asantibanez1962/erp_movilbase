@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useLayoutEffect, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -18,19 +18,14 @@ import { database } from "../lib/db";
 import { config } from "../lib/config";
 
 /**
- * Form para crear un recibo nuevo. Todo offline — guarda en WMDB local
- * con push_status=null. Próximo sync lo sube al BE.
+ * Form crear recibo. Stack le da el header con back automático;
+ * el botón Guardar lo agregamos en headerRight via setOptions
+ * (touch target generoso, estilo nativo).
  *
- * Campos del POC:
- *   - numero_recibo (texto libre, hasta que metamos reservation)
- *   - productor (picker de productores cacheados)
- *   - fecha (default hoy, editable)
- *   - cantidad (decimal)
- *   - precio (decimal)
- *
- * Validaciones mínimas: todos los campos requeridos, cantidad > 0, precio > 0.
+ * Modal presentation (configurado en App.tsx Stack.Screen) — slide-up
+ * desde abajo, swipe-down para cancelar.
  */
-export function NewReciboScreen({ onDone }: { onDone: () => void }) {
+export function NewReciboScreen({ navigation }: Readonly<{ navigation: any }>) {
   const [numeroRecibo, setNumeroRecibo] = useState("");
   const [productor, setProductor] = useState<Productor | null>(null);
   const [fecha, setFecha] = useState(isoToday());
@@ -41,16 +36,16 @@ export function NewReciboScreen({ onDone }: { onDone: () => void }) {
   const [pickerOpen, setPickerOpen] = useState(false);
 
   const total =
-    parseFloat(cantidad || "0") * parseFloat(precio || "0");
+    Number.parseFloat(cantidad || "0") * Number.parseFloat(precio || "0");
   const isValid =
     numeroRecibo.trim().length > 0 &&
     productor !== null &&
     fecha.length > 0 &&
-    parseFloat(cantidad) > 0 &&
-    parseFloat(precio) > 0;
+    Number.parseFloat(cantidad) > 0 &&
+    Number.parseFloat(precio) > 0;
 
   const submit = async () => {
-    if (!isValid || saving) return;
+    if (!isValid || saving || !productor) return;
     setSaving(true);
     setError(null);
     try {
@@ -58,16 +53,16 @@ export function NewReciboScreen({ onDone }: { onDone: () => void }) {
       await database.write(async () => {
         await collection.create((r) => {
           r.numeroRecibo = numeroRecibo.trim();
-          r.socioId = Number(productor!.id);
+          r.socioId = Number(productor.id);
           r.fecha = fecha;
-          r.cantidad = parseFloat(cantidad);
-          r.precio = parseFloat(precio);
+          r.cantidad = Number.parseFloat(cantidad);
+          r.precio = Number.parseFloat(precio);
           r.compania = config.companyId;
           r.pushStatus = null;
           r.pushError = null;
         });
       });
-      onDone();
+      navigation.goBack();
     } catch (e: any) {
       setError(e?.message ?? "Error al guardar el recibo");
     } finally {
@@ -75,26 +70,34 @@ export function NewReciboScreen({ onDone }: { onDone: () => void }) {
     }
   };
 
+  // Guardar va al header derecho. Touch target nativo de Stack (~48dp alto).
+  useLayoutEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={submit}
+          disabled={!isValid || saving}
+          style={styles.headerSaveBtn}
+        >
+          <Text
+            style={[
+              styles.headerSaveText,
+              (!isValid || saving) && styles.headerSaveDisabled,
+            ]}
+          >
+            {saving ? "..." : "Guardar"}
+          </Text>
+        </TouchableOpacity>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, isValid, saving, numeroRecibo, productor, fecha, cantidad, precio]);
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === "ios" ? "padding" : undefined}
     >
-      <View style={styles.header}>
-        <TouchableOpacity onPress={onDone}>
-          <Text style={styles.cancelText}>Cancelar</Text>
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Nuevo recibo</Text>
-        <TouchableOpacity
-          onPress={submit}
-          disabled={!isValid || saving}
-        >
-          <Text style={[styles.saveText, (!isValid || saving) && styles.disabled]}>
-            {saving ? "..." : "Guardar"}
-          </Text>
-        </TouchableOpacity>
-      </View>
-
       <ScrollView style={styles.form} keyboardShouldPersistTaps="handled">
         <Field label="Número de recibo">
           <TextInput
@@ -162,11 +165,25 @@ export function NewReciboScreen({ onDone }: { onDone: () => void }) {
         <View style={styles.totalBox}>
           <Text style={styles.totalLabel}>Total</Text>
           <Text style={styles.totalValue}>
-            ₡{isNaN(total) ? "0.00" : total.toFixed(2)}
+            ₡{Number.isNaN(total) ? "0.00" : total.toFixed(2)}
           </Text>
         </View>
 
         {error && <Text style={styles.error}>⚠ {error}</Text>}
+
+        {/* Botón Guardar también visible en pantalla — además del header right —
+            para los usuarios que prefieren tap abajo después de llenar el form */}
+        <TouchableOpacity
+          style={[styles.submitBtn, (!isValid || saving) && styles.submitDisabled]}
+          onPress={submit}
+          disabled={!isValid || saving}
+        >
+          {saving ? (
+            <ActivityIndicator color="#fff" />
+          ) : (
+            <Text style={styles.submitText}>Guardar recibo</Text>
+          )}
+        </TouchableOpacity>
       </ScrollView>
 
       <ProductorPicker
@@ -181,7 +198,7 @@ export function NewReciboScreen({ onDone }: { onDone: () => void }) {
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Field({ label, children }: Readonly<{ label: string; children: React.ReactNode }>) {
   return (
     <View style={styles.field}>
       <Text style={styles.fieldLabel}>{label}</Text>
@@ -194,11 +211,11 @@ function ProductorPicker({
   visible,
   onClose,
   onSelect,
-}: {
+}: Readonly<{
   visible: boolean;
   onClose: () => void;
   onSelect: (p: Productor) => void;
-}) {
+}>) {
   const [items, setItems] = useState<Productor[]>([]);
   const [filter, setFilter] = useState("");
   const [loading, setLoading] = useState(true);
@@ -228,11 +245,11 @@ function ProductorPicker({
     <Modal visible={visible} animationType="slide" onRequestClose={onClose}>
       <View style={styles.modalRoot}>
         <View style={styles.modalHeader}>
-          <TouchableOpacity onPress={onClose}>
-            <Text style={styles.cancelText}>Cancelar</Text>
+          <TouchableOpacity onPress={onClose} style={styles.modalCancelBtn}>
+            <Text style={styles.modalCancelText}>Cancelar</Text>
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Productor</Text>
-          <View style={{ width: 60 }} />
+          <Text style={styles.modalTitle}>Productor</Text>
+          <View style={{ width: 80 }} />
         </View>
 
         <TextInput
@@ -282,21 +299,15 @@ function isoToday(): string {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#f8fafc" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
+  headerSaveBtn: {
     paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
-    backgroundColor: "#0f172a",
+    paddingVertical: 10,
+    marginRight: 4,
   },
-  cancelText: { color: "#cbd5e1", fontSize: 14 },
-  saveText: { color: "#3b82f6", fontSize: 15, fontWeight: "700" },
-  disabled: { opacity: 0.4 },
-  headerTitle: { color: "#f1f5f9", fontSize: 17, fontWeight: "700" },
+  headerSaveText: { color: "#3b82f6", fontSize: 16, fontWeight: "700" },
+  headerSaveDisabled: { opacity: 0.4 },
   form: { flex: 1, padding: 16 },
-  field: { marginBottom: 16 },
+  field: { marginBottom: 18 },
   fieldLabel: {
     fontSize: 12,
     color: "#475569",
@@ -310,7 +321,7 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 10,
+    paddingVertical: 12,
     fontSize: 16,
     color: "#0f172a",
   },
@@ -320,7 +331,7 @@ const styles = StyleSheet.create({
     borderColor: "#cbd5e1",
     borderRadius: 8,
     paddingHorizontal: 12,
-    paddingVertical: 12,
+    paddingVertical: 14,
   },
   pickerSelected: { fontSize: 16, color: "#0f172a" },
   pickerPlaceholder: { fontSize: 16, color: "#cbd5e1" },
@@ -330,35 +341,49 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     alignItems: "center",
     backgroundColor: "#1e293b",
-    padding: 16,
+    padding: 18,
     borderRadius: 8,
     marginTop: 12,
   },
   totalLabel: { color: "#cbd5e1", fontSize: 14, fontWeight: "600" },
   totalValue: { color: "#f1f5f9", fontSize: 22, fontWeight: "700" },
   error: { color: "#b91c1c", fontSize: 13, marginTop: 12 },
+  submitBtn: {
+    backgroundColor: "#3b82f6",
+    borderRadius: 10,
+    padding: 18,
+    alignItems: "center",
+    marginTop: 24,
+    marginBottom: 24,
+  },
+  submitDisabled: { opacity: 0.4 },
+  submitText: { color: "#fff", fontSize: 17, fontWeight: "700" },
+
   // Picker modal
   modalRoot: { flex: 1, backgroundColor: "#f8fafc" },
   modalHeader: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingTop: 12,
     paddingBottom: 12,
     backgroundColor: "#0f172a",
   },
+  modalCancelBtn: { paddingHorizontal: 12, paddingVertical: 8 },
+  modalCancelText: { color: "#cbd5e1", fontSize: 15 },
+  modalTitle: { color: "#f1f5f9", fontSize: 17, fontWeight: "700" },
   searchInput: {
     backgroundColor: "#fff",
     borderBottomWidth: 1,
     borderBottomColor: "#e2e8f0",
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     fontSize: 15,
     color: "#0f172a",
   },
   separator: { height: 1, backgroundColor: "#e2e8f0" },
-  pickerRow: { padding: 16, backgroundColor: "#fff" },
+  pickerRow: { padding: 18, backgroundColor: "#fff" },
   pickerRowName: { fontSize: 15, fontWeight: "600", color: "#0f172a" },
   pickerRowMeta: { fontSize: 13, color: "#64748b", marginTop: 2 },
   empty: { textAlign: "center", padding: 32, color: "#94a3b8" },

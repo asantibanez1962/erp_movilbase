@@ -5,7 +5,6 @@ import {
   RefreshControl,
   StyleSheet,
   Text,
-  TouchableOpacity,
   View,
 } from "react-native";
 import { Q } from "@nozbe/watermelondb";
@@ -16,19 +15,11 @@ import { syncNow } from "../lib/sync";
 import { config } from "../lib/config";
 
 /**
- * Fuente de verdad: WMDB local. La UI se subscribe a la collection
- * "productores" y re-rendea cuando hay cambios (post-sync, edits locales,
- * etc.).
- *
- * Flow del usuario:
- *   1. Mount → si la DB local está vacía, dispara sync silencioso.
- *   2. Pull-to-refresh → fuerza sync explícito.
- *   3. Sin internet → sigue mostrando los productores cacheados.
- *
- * El sync errores no bloquean la UI: si offline, mostramos lo que hay
- * en cache + un banner sutil "sin conexión".
+ * Lista de productores cacheados localmente en WMDB. Pull-to-refresh
+ * dispara sync. Header lo provee el Stack (no más custom header acá).
+ * Logout y "Sincronizar todo" viven en el drawer (≡ swipe izquierdo).
  */
-export function ProductoresScreen({ onGoRecibos }: { onGoRecibos: () => void }) {
+export function ProductoresScreen() {
   const [productores, setProductores] = useState<Productor[]>([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
@@ -36,11 +27,9 @@ export function ProductoresScreen({ onGoRecibos }: { onGoRecibos: () => void }) 
   const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
 
   const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
 
-  // Subscribe to WMDB collection. Se desuscribe al unmount.
   useEffect(() => {
-    const subscription = database
+    const sub = database
       .get<Productor>("productores")
       .query(Q.sortBy("nombre", Q.asc))
       .observe()
@@ -48,11 +37,9 @@ export function ProductoresScreen({ onGoRecibos }: { onGoRecibos: () => void }) 
         setProductores(rows);
         setLoading(false);
       });
-
-    return () => subscription.unsubscribe();
+    return () => sub.unsubscribe();
   }, []);
 
-  // Sync inicial al mount (silencioso — UI ya muestra cache si hay).
   useEffect(() => {
     triggerSync(false);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -68,8 +55,6 @@ export function ProductoresScreen({ onGoRecibos }: { onGoRecibos: () => void }) 
       setError(null);
     } catch (e: any) {
       const msg = e?.message ?? "Error de sincronización";
-      // Solo mostramos el error si fue gesture del usuario — sync silencioso
-      // que falla (boot offline) no debe asustar.
       if (userInitiated) setError(msg);
     } finally {
       setSyncing(false);
@@ -87,24 +72,14 @@ export function ProductoresScreen({ onGoRecibos }: { onGoRecibos: () => void }) 
 
   return (
     <View style={styles.root}>
-      <View style={styles.header}>
-        <View style={{ flex: 1 }}>
-          <Text style={styles.headerTitle}>Productores</Text>
-          <Text style={styles.headerSubtitle}>
-            {productores.length} {productores.length === 1 ? "registro" : "registros"}
-            {" • "}Empresa {config.companyId}
-            {lastSyncAt && ` • Sync: ${formatTime(lastSyncAt)}`}
-          </Text>
-        </View>
-        <TouchableOpacity onPress={onGoRecibos} style={styles.recibosBtn}>
-          <Text style={styles.recibosText}>Recibos ›</Text>
-        </TouchableOpacity>
-        <TouchableOpacity onPress={logout} style={styles.logoutBtn}>
-          <Text style={styles.logoutText}>Salir</Text>
-        </TouchableOpacity>
+      <View style={styles.summary}>
+        <Text style={styles.summaryText}>
+          {productores.length} {productores.length === 1 ? "registro" : "registros"}
+          {" • "}Empresa {config.companyId}
+          {user && ` • ${user.usuario}`}
+          {lastSyncAt && ` • Sync ${formatTime(lastSyncAt)}`}
+        </Text>
       </View>
-
-      {user && <Text style={styles.userLine}>Sesión: {user.usuario}</Text>}
 
       {error && (
         <View style={styles.errorBanner}>
@@ -164,39 +139,12 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: "#f8fafc" },
   center: { justifyContent: "center", alignItems: "center" },
   loadingText: { marginTop: 12, color: "#64748b" },
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#0f172a",
+  summary: {
+    backgroundColor: "#e2e8f0",
     paddingHorizontal: 16,
-    paddingTop: 16,
-    paddingBottom: 12,
+    paddingVertical: 8,
   },
-  headerTitle: { color: "#f1f5f9", fontSize: 22, fontWeight: "700" },
-  headerSubtitle: { color: "#94a3b8", fontSize: 12, marginTop: 2 },
-  recibosBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    backgroundColor: "#3b82f6",
-    borderRadius: 6,
-    marginRight: 8,
-  },
-  recibosText: { color: "#fff", fontSize: 13, fontWeight: "600" },
-  logoutBtn: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderWidth: 1,
-    borderColor: "#475569",
-    borderRadius: 6,
-  },
-  logoutText: { color: "#e2e8f0", fontSize: 13 },
-  userLine: {
-    color: "#94a3b8",
-    fontSize: 11,
-    backgroundColor: "#0f172a",
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-  },
+  summaryText: { color: "#475569", fontSize: 12 },
   errorBanner: {
     backgroundColor: "#fef2f2",
     padding: 12,
@@ -205,7 +153,7 @@ const styles = StyleSheet.create({
   },
   errorText: { color: "#b91c1c", fontSize: 13 },
   separator: { height: 1, backgroundColor: "#e2e8f0" },
-  row: { paddingHorizontal: 16, paddingVertical: 12, backgroundColor: "#fff" },
+  row: { paddingHorizontal: 16, paddingVertical: 14, backgroundColor: "#fff" },
   rowName: { fontSize: 16, fontWeight: "600", color: "#0f172a" },
   rowMeta: { fontSize: 13, color: "#64748b", marginTop: 2 },
   empty: { padding: 32, alignItems: "center" },

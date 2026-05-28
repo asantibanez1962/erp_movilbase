@@ -38,7 +38,7 @@ function buildReciboHtml(
 <head>
 <meta charset="UTF-8">
 <style>
-  @page { size: 80mm auto; margin: 4mm; }
+  @page { size: 80mm 400mm; margin: 4mm; }
   body {
     font-family: 'Courier New', Courier, monospace;
     font-size: 11pt;
@@ -107,6 +107,11 @@ function buildReciboHtml(
   <div class="row"><span class="label">Precio:</span><span class="value">₡ ${fmtMoney(recibo.precio)}</span></div>
 
   <hr class="sep" />
+
+  <div class="row"><span>Subtotal:</span><span>₡ ${fmtMoney(total)}</span></div>
+<div class="row"><span>Desc. humedad:</span><span>-₡ 250.00</span></div>
+<div class="row"><span>Desc. broca:</span><span>-₡ 100.00</span></div>
+<div class="row"><span>Bonificación:</span><span>+₡ 500.00</span></div>
 
   <div class="row total"><span>TOTAL:</span><span>₡ ${fmtMoney(total)}</span></div>
 

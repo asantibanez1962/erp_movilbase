@@ -1,20 +1,192 @@
 import { useEffect, useState } from "react";
 import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider } from "react-native-safe-area-context";
+import { GestureHandlerRootView } from "react-native-gesture-handler";
+import {
+  NavigationContainer,
+  DefaultTheme,
+  Theme,
+} from "@react-navigation/native";
+import { createNativeStackNavigator } from "@react-navigation/native-stack";
+import { createBottomTabNavigator } from "@react-navigation/bottom-tabs";
+import {
+  createDrawerNavigator,
+  DrawerContentComponentProps,
+  DrawerContentScrollView,
+  DrawerItem,
+} from "@react-navigation/drawer";
 import { useAuthStore } from "@erp/shared-api";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { ProductoresScreen } from "./src/screens/ProductoresScreen";
 import { RecibosListScreen } from "./src/screens/RecibosListScreen";
 import { NewReciboScreen } from "./src/screens/NewReciboScreen";
 import { bootstrapApi } from "./src/lib/api";
+import { syncNow } from "./src/lib/sync";
 
-type Screen = "productores" | "recibos" | "new-recibo";
+// ─────────────────────────────────────────────────────────────
+// Theme dark consistente con el resto del app
+// ─────────────────────────────────────────────────────────────
+const navTheme: Theme = {
+  ...DefaultTheme,
+  dark: true,
+  colors: {
+    ...DefaultTheme.colors,
+    background: "#f8fafc",
+    card: "#0f172a",
+    text: "#f1f5f9",
+    primary: "#3b82f6",
+    border: "#1e293b",
+    notification: "#3b82f6",
+  },
+  fonts: DefaultTheme.fonts,
+};
 
+// ─────────────────────────────────────────────────────────────
+// Stack para Recibos (lista → form nuevo)
+// El Stack maneja el back automático; los screens no necesitan
+// onBack callbacks.
+// ─────────────────────────────────────────────────────────────
+const RecibosStack = createNativeStackNavigator();
+function RecibosStackScreens() {
+  return (
+    <RecibosStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#0f172a" },
+        headerTintColor: "#f1f5f9",
+      }}
+    >
+      <RecibosStack.Screen
+        name="RecibosList"
+        component={RecibosListScreen}
+        options={{ title: "Recibos" }}
+      />
+      <RecibosStack.Screen
+        name="NewRecibo"
+        component={NewReciboScreen}
+        options={{ title: "Nuevo recibo", presentation: "modal" }}
+      />
+    </RecibosStack.Navigator>
+  );
+}
+
+// Stack para Productores (lista por ahora; mañana sumamos ProductorDetail)
+const ProductoresStack = createNativeStackNavigator();
+function ProductoresStackScreens() {
+  return (
+    <ProductoresStack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: "#0f172a" },
+        headerTintColor: "#f1f5f9",
+      }}
+    >
+      <ProductoresStack.Screen
+        name="ProductoresList"
+        component={ProductoresScreen}
+        options={{ title: "Productores" }}
+      />
+    </ProductoresStack.Navigator>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Bottom Tabs — las 2 áreas operativas del POC.
+// Cuando sumemos Bitácoras / Reportes va otro <Tab.Screen> acá.
+// ─────────────────────────────────────────────────────────────
+const Tabs = createBottomTabNavigator();
+function MainTabs() {
+  return (
+    <Tabs.Navigator
+      screenOptions={{
+        headerShown: false,
+        tabBarStyle: { backgroundColor: "#0f172a", borderTopColor: "#1e293b" },
+        tabBarActiveTintColor: "#3b82f6",
+        tabBarInactiveTintColor: "#94a3b8",
+      }}
+    >
+      <Tabs.Screen
+        name="ProductoresTab"
+        component={ProductoresStackScreens}
+        options={{ title: "Productores", tabBarLabel: "Productores" }}
+      />
+      <Tabs.Screen
+        name="RecibosTab"
+        component={RecibosStackScreens}
+        options={{ title: "Recibos", tabBarLabel: "Recibos" }}
+      />
+    </Tabs.Navigator>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Drawer custom — items para acciones globales (sync, logout)
+// que no son screens. Se abre con swipe desde el borde izquierdo
+// o tap en la hamburguesa del header.
+// ─────────────────────────────────────────────────────────────
+function CustomDrawer(props: DrawerContentComponentProps) {
+  const logout = useAuthStore((s) => s.logout);
+  const user = useAuthStore((s) => s.user);
+  const [syncing, setSyncing] = useState(false);
+
+  const handleSync = async () => {
+    if (syncing) return;
+    setSyncing(true);
+    try {
+      await syncNow();
+    } catch (e) {
+      console.warn("sync failed", (e as Error)?.message);
+    } finally {
+      setSyncing(false);
+    }
+  };
+
+  return (
+    <DrawerContentScrollView {...props} contentContainerStyle={styles.drawerContent}>
+      <View style={styles.drawerHeader}>
+        <Text style={styles.drawerTitle}>Recibos CR</Text>
+        {user && <Text style={styles.drawerUser}>{user.usuario}</Text>}
+      </View>
+
+      <DrawerItem
+        label={syncing ? "Sincronizando..." : "Sincronizar todo"}
+        onPress={handleSync}
+        labelStyle={styles.drawerLabel}
+      />
+      <DrawerItem
+        label="Cerrar sesión"
+        onPress={logout}
+        labelStyle={styles.drawerLabel}
+      />
+    </DrawerContentScrollView>
+  );
+}
+
+const Drawer = createDrawerNavigator();
+function AuthenticatedNav() {
+  return (
+    <Drawer.Navigator
+      drawerContent={(props) => <CustomDrawer {...props} />}
+      screenOptions={{
+        headerStyle: { backgroundColor: "#0f172a" },
+        headerTintColor: "#f1f5f9",
+        drawerStyle: { backgroundColor: "#0f172a" },
+      }}
+    >
+      <Drawer.Screen
+        name="Main"
+        component={MainTabs}
+        options={{ title: "Operación" }}
+      />
+    </Drawer.Navigator>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
+// Root App
+// ─────────────────────────────────────────────────────────────
 export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [bootDone, setBootDone] = useState(false);
-  const [screen, setScreen] = useState<Screen>("productores");
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isInitializing = useAuthStore((s) => s.isInitializing);
 
@@ -27,53 +199,63 @@ export default function App() {
       });
   }, []);
 
-  // Reset screen al logout para que el próximo login arranque en productores
-  useEffect(() => {
-    if (!isAuthenticated) setScreen("productores");
-  }, [isAuthenticated]);
-
-  let body: React.ReactNode;
-  if (!bootDone || isInitializing) {
-    body = (
-      <View style={styles.center}>
-        <ActivityIndicator size="large" color="#3b82f6" />
-        <Text style={styles.loadingText}>Iniciando...</Text>
-      </View>
-    );
-  } else if (bootError) {
-    body = (
-      <View style={styles.center}>
-        <Text style={styles.errorText}>⚠ {bootError}</Text>
-      </View>
-    );
-  } else if (!isAuthenticated) {
-    body = <LoginScreen />;
-  } else if (screen === "productores") {
-    body = <ProductoresScreen onGoRecibos={() => setScreen("recibos")} />;
-  } else if (screen === "recibos") {
-    body = (
-      <RecibosListScreen
-        onNew={() => setScreen("new-recibo")}
-        onBack={() => setScreen("productores")}
-      />
-    );
-  } else {
-    body = <NewReciboScreen onDone={() => setScreen("recibos")} />;
-  }
-
   return (
-    <SafeAreaProvider>
-      <StatusBar style="light" />
-      <SafeAreaView style={styles.root} edges={["top", "left", "right"]}>
-        {body}
-      </SafeAreaView>
-    </SafeAreaProvider>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <SafeAreaProvider>
+        <StatusBar style="light" />
+        <NavigationContainer theme={navTheme}>
+          {(() => {
+            if (!bootDone || isInitializing) {
+              return (
+                <View style={styles.center}>
+                  <ActivityIndicator size="large" color="#3b82f6" />
+                  <Text style={styles.loadingText}>Iniciando...</Text>
+                </View>
+              );
+            }
+            if (bootError) {
+              return (
+                <View style={styles.center}>
+                  <Text style={styles.errorText}>⚠ {bootError}</Text>
+                </View>
+              );
+            }
+            if (isAuthenticated) return <AuthenticatedNav />;
+            return <LoginScreen />;
+          })()}
+        </NavigationContainer>
+      </SafeAreaProvider>
+    </GestureHandlerRootView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: "#0f172a" },
-  center: { flex: 1, justifyContent: "center", alignItems: "center", padding: 24 },
+  center: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
+    padding: 24,
+    backgroundColor: "#0f172a",
+  },
   loadingText: { color: "#94a3b8", marginTop: 12 },
   errorText: { color: "#fca5a5", fontSize: 14, textAlign: "center" },
+  drawerContent: { paddingTop: 24 },
+  drawerHeader: {
+    paddingHorizontal: 16,
+    paddingBottom: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: "#1e293b",
+    marginBottom: 12,
+  },
+  drawerTitle: {
+    color: "#f1f5f9",
+    fontSize: 20,
+    fontWeight: "700",
+  },
+  drawerUser: {
+    color: "#94a3b8",
+    fontSize: 13,
+    marginTop: 4,
+  },
+  drawerLabel: { color: "#e2e8f0" },
 });
