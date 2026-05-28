@@ -16,16 +16,19 @@ import type { PushResponse } from "@erp/shared-types";
  *   - WMDB espera que la response de pull tenga TODAS las tablas del
  *     schema, aunque vengan vacías — normalize las rellena.
  *
- * Post-push cleanup (importante):
- *   El BE asigna su propio bigint ID a cada created row (IDENTITY). El
- *   row local en WMDB sigue con su local id (UUID-like). Si dejamos el
- *   row local, el próximo pull traería la versión del server como "nueva"
- *   y nos quedaríamos con duplicados.
+ * Post-push cleanup:
+ *   Colecciones push-only (ej. recibos): los rows aceptados NO se borran
+ *   localmente — se marcan push_status='synced' + syncUpdatedAt = server
+ *   timestamp. La UI los muestra en la vista "Enviados" para que el user
+ *   tenga histórico/reimpresión sin red. Purga silenciosa de >30 días
+ *   corre al boot del app (apps/<x>/src/lib/db.ts).
  *
- *   Solución POC: después del synchronize, eliminamos los local rows
- *   que el BE aceptó. El próximo pull los trae con server id. Los
- *   rejected se marcan con sync_status="rejected" + sync_error para
- *   que la UI los muestre al user.
+ *   Como el BE NO pullea los recibos de vuelta (sync_policy=push-only),
+ *   no hay duplicados — el local row queda como única fuente local con
+ *   el server_id guardado por trazabilidad.
+ *
+ *   Rejected → push_status='rejected' + push_error con motivo para que
+ *   la UI los flaggee.
  */
 
 export interface SyncOptions {
@@ -115,11 +118,10 @@ export async function runSync(
     sendCreatedAsUpdated: true,
   });
 
-  // Post-sync cleanup. WMDB ya marcó los rows como _status='synced'
-  // internamente, pero nuestros local rows tienen id local distinto al
-  // server id. Para evitar duplicados en el próximo pull:
-  //   - accepted → destroyPermanently (server tiene la versión canonical)
-  //   - rejected → mark sync_status='rejected' para que UI los muestre
+  // Post-sync cleanup para colecciones push-only (recibos):
+  //   - accepted → push_status='synced' + syncUpdatedAt = server.updated_at.
+  //     Queda local para "Enviados"; purge silencioso al boot maneja TTL.
+  //   - rejected → push_status='rejected' + push_error para que UI flaggee.
   await db.write(async () => {
     for (const [collName, resp] of Object.entries(pushResponses)) {
       const accepted = resp.accepted?.[collName] ?? [];
@@ -127,7 +129,19 @@ export async function runSync(
 
       for (const acc of accepted) {
         const row = await safeFind(db, collName, acc.local_id);
-        if (row) await row.destroyPermanently();
+        if (row) {
+          await row.update((rec: Model & {
+            pushStatus?: string | null;
+            pushError?: string | null;
+            syncUpdatedAt?: number;
+          }) => {
+            rec.pushStatus = "synced";
+            rec.pushError = null;
+            // server.updated_at viene en ms; si por algún motivo el BE no
+            // lo mandó, fallback a Date.now() local (suficiente para purge).
+            rec.syncUpdatedAt = acc.updated_at ?? Date.now();
+          });
+        }
       }
 
       for (const rej of rejected) {

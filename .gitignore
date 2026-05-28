@@ -13,17 +13,20 @@ build/
 expo-env.d.ts
 web-build/
 
-# Android native
-**/android/build/
-**/android/app/build/
-**/android/.gradle/
-**/android/local.properties
-**/android/app/google-services.json
-**/android/app/release/
+# Android native — la carpeta entera es generada por `expo prebuild`.
+# Con expo-build-properties + plugins en app.json, EAS Build re-genera
+# en cada build. Nunca commitear. Si necesitás builds locales (WSL2/Mac),
+# corré `npx expo prebuild --platform android` en tu dev box.
+**/android/
 
-# iOS native (futuro)
-**/ios/Pods/
-**/ios/build/
+# iOS native — idem android. EAS Build hace prebuild en cada build cloud.
+**/ios/
+
+# Keystores en caso queden sueltos en android/ (defense in depth — la
+# carpeta android/ ya está ignorada arriba pero por si alguien la commitea).
+**/*.keystore
+**/*.jks
+**/keystore.properties
 
 # Keystores (DO NOT COMMIT — backup separately!)
 *.keystore

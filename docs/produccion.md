@@ -14,6 +14,17 @@ Decisiones aplazadas durante el POC, retomar en futuras iteraciones cuando apare
 - **Phase D push notifications FCM** (~2-3 días) — server push al phone cuando cambian precios del día. Defer hasta primer caso real donde el cliente lo pide.
 - **Otras apps** (Fincas, ERP-facturas, CTRM-recibos) — roadmap propio. Reusan los packages compartidos, cada una con sus screens en `apps/<nombre>/`.
 
+- **Soporte iOS** (deferred, defer hasta primer caso real). El código actual (Expo + RN + WMDB + Navigation + expo-print) es 95% cross-platform — el mismo monorepo + screens funcionan en iOS sin reescribir. Pero la infra de build/distribución difiere y agrega costos:
+  - **Build**: solo via EAS cloud (Windows no puede buildear iOS local). Mac con Xcode requerido si querés build local — el usuario tiene Mac en desuso disponible si se activa esta vía.
+  - **Apple Developer account**: $99 USD/año (mandatorio para firmar + distribuir).
+  - **Distribución**: no hay side-loading como Android — opciones son TestFlight (más burocrático pero práctico, hasta 10k testers, link de invite), Ad-hoc (registrar UDIDs, hasta 100 devices/año), o App Store (review ~1-3 días). Enterprise Distribution ($299/año) requiere DUNS empresarial.
+  - **BT printing**: **showstopper para Recibos CR + CTRM** — ESCprint Service es Android-only, y la 3nstar PPT305BT no soporta AirPrint. Para iOS habría que: (a) implementar BT SPP raw + ESC/POS bytes en JS con `react-native-bluetooth-classic` (~2-3 días + Apple es estricto con BT Classic), o (b) cambiar a impresora con AirPrint nativo. Mientras tanto, Recibos CR queda **Android-only por defecto**.
+  - **Aplicabilidad por app**:
+    - Recibos CR / CTRM Recibos — **Android-only** (por BT print)
+    - Fincas (visitas + fotos + GPS) — Android + iOS OK
+    - ERP móvil (oficina, online) — Android + iOS OK (usuarios oficina suelen tener iPhone)
+  - **Setup primera vez si se activa**: ~$99 + 1-2 días para configurar `eas credentials` + TestFlight + buildear/distribuir el primer .ipa. Después es mismo flow que Android (EAS build con perfil `ios`).
+
 ---
 
 ## 1. Personalización del print de recibos
@@ -142,6 +153,28 @@ Recomendación de archivos: PNG transparente o blanco, ~600×200px max para que 
 - **Cero dependencia de Expo cloud/account**, pero más config inicial
 
 Mi voto: arrancá con EAS Build cloud. Si crece (necesitás builds reproducibles en CI propio o el cliente exige no-cloud), migrá a EAS local o prebuild. El código es el MISMO — solo cambia el pipeline.
+
+### 2.1.1 ⚠ Local build en Windows + pnpm monorepo: NO funciona
+
+Validado (2026-05-27 después de varios intentos): tanto `eas build --local` (no soportado en Windows) como `npx expo prebuild + gradlew assembleRelease + assembleDebug + bundling manual con expo export:embed` fallan con:
+
+```
+Error: Unable to resolve module ./index.ts from E:\soft\mobile-erp/.
+```
+
+**Causa raíz**: Expo CLI durante el bundling no detecta correctamente el projectRoot en monorepo pnpm con `node-linker=hoisted`. Walks up looking for package.json y encuentra el del workspace root antes que el de la app. Tratamientos probados sin éxito:
+- Setear `react.root = file(projectRoot)` en `android/app/build.gradle`
+- Setear `EXPO_PROJECT_ROOT` env var
+- Pasar `--entry-file` con path absoluto al `expo export:embed`
+
+El bug es reproducible y conocido en la comunidad RN/Expo para esta combinación específica.
+
+**Caminos viables en Windows**:
+1. **EAS Build cloud** (recomendado) — funciona perfecto, free tier 30 builds/mes. Es lo que usamos para todos los builds del POC.
+2. **WSL2** (no probado) — instalar Ubuntu vía WSL, ahí sí `eas build --local` funciona. Agrega complejidad de instalar Node + JDK + Android SDK adentro de WSL.
+3. **Pasar a otro Mac/Linux dev box** para builds locales — el usuario tiene Mac disponible si justifica activarlo.
+
+**Recomendación**: usar EAS cloud para todos los builds estándares (dev client + preview + production). El local-build en Windows queda descartado mientras no haya fix upstream de Expo CLI.
 
 ### 2.2 Updates después del primer install
 

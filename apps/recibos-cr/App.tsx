@@ -23,6 +23,7 @@ import { RecibosListScreen } from "./src/screens/RecibosListScreen";
 import { NewReciboScreen } from "./src/screens/NewReciboScreen";
 import { bootstrapApi } from "./src/lib/api";
 import { syncNow } from "./src/lib/sync";
+import { purgeOldSyncedRecibos } from "./src/lib/db";
 
 // ─────────────────────────────────────────────────────────────
 // Theme dark consistente con el resto del app
@@ -99,7 +100,18 @@ function MainTabs() {
     <Tabs.Navigator
       screenOptions={{
         headerShown: false,
-        tabBarStyle: { backgroundColor: "#0f172a", borderTopColor: "#1e293b" },
+        // tabBarStyle.height y tabBarLabelStyle.fontSize bumpeados para
+        // legibilidad en usuarios mayores. Default RN ~10pt / 49pt alto —
+        // sentíamos chico en operación de campo. Padding inferior extra
+        // compensa el alto adicional sin pegarse al safe-area.
+        tabBarStyle: {
+          backgroundColor: "#0f172a",
+          borderTopColor: "#1e293b",
+          height: 64,
+          paddingBottom: 8,
+          paddingTop: 6,
+        },
+        tabBarLabelStyle: { fontSize: 14, fontWeight: "600" },
         tabBarActiveTintColor: "#3b82f6",
         tabBarInactiveTintColor: "#94a3b8",
       }}
@@ -192,7 +204,12 @@ export default function App() {
 
   useEffect(() => {
     bootstrapApi()
-      .then(() => setBootDone(true))
+      .then(() => {
+        // Purga silenciosa de recibos enviados > 30 días. No bloquea boot —
+        // si falla, el app sigue funcionando (el cache crece pero no rompe).
+        void purgeOldSyncedRecibos();
+        setBootDone(true);
+      })
       .catch((e) => {
         setBootError(e?.message ?? "Error inicializando el app");
         setBootDone(true);
