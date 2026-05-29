@@ -1,11 +1,12 @@
 import { useEffect, useState } from "react";
-import { ActivityIndicator, StyleSheet, Text, View } from "react-native";
+import { ActivityIndicator, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import {
   NavigationContainer,
   DefaultTheme,
+  DrawerActions,
   Theme,
 } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
@@ -44,9 +45,29 @@ const navTheme: Theme = {
 };
 
 // ─────────────────────────────────────────────────────────────
+// DrawerMenuButton — botón hamburguesa que abre el drawer. Se usa como
+// headerLeft de cada Stack interno cuando estamos en la pantalla raíz del
+// stack (en pantallas profundas, RN Stack pone el back arrow automático).
+// Carácter unicode "≡" para evitar dependencia extra de @expo/vector-icons.
+// ─────────────────────────────────────────────────────────────
+function DrawerMenuButton({ navigation }: Readonly<{ navigation: any }>) {
+  return (
+    <TouchableOpacity
+      onPress={() => navigation.dispatch(DrawerActions.openDrawer())}
+      style={{ paddingHorizontal: 12, paddingVertical: 4 }}
+      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+    >
+      <Text style={{ color: "#f1f5f9", fontSize: 26, lineHeight: 28 }}>≡</Text>
+    </TouchableOpacity>
+  );
+}
+
+// ─────────────────────────────────────────────────────────────
 // Stack para Recibos (lista → form nuevo)
 // El Stack maneja el back automático; los screens no necesitan
-// onBack callbacks.
+// onBack callbacks. El headerLeft de la screen raíz es el hamburguesa
+// que abre el drawer (sumado acá porque escondimos el header propio del
+// drawer en AuthenticatedNav para no apilar 2 headers).
 // ─────────────────────────────────────────────────────────────
 const RecibosStack = createNativeStackNavigator();
 function RecibosStackScreens() {
@@ -60,7 +81,10 @@ function RecibosStackScreens() {
       <RecibosStack.Screen
         name="RecibosList"
         component={RecibosListScreen}
-        options={{ title: "Recibos" }}
+        options={({ navigation }) => ({
+          title: "Recibos",
+          headerLeft: () => <DrawerMenuButton navigation={navigation} />,
+        })}
       />
       <RecibosStack.Screen
         name="NewRecibo"
@@ -84,7 +108,10 @@ function ProductoresStackScreens() {
       <ProductoresStack.Screen
         name="ProductoresList"
         component={ProductoresScreen}
-        options={{ title: "Productores" }}
+        options={({ navigation }) => ({
+          title: "Productores",
+          headerLeft: () => <DrawerMenuButton navigation={navigation} />,
+        })}
       />
     </ProductoresStack.Navigator>
   );
@@ -96,19 +123,23 @@ function ProductoresStackScreens() {
 // ─────────────────────────────────────────────────────────────
 const Tabs = createBottomTabNavigator();
 function MainTabs() {
+  // Inset.bottom = alto de la barra de gesture/nav del SO (Android: ~24px
+  // gesture pill, hardware-buttons device: ~48px; iOS: 34px en notch devices).
+  // Sumamos al alto base del tab bar + al paddingBottom para que las labels
+  // queden visibles sobre la barra del SO en CUALQUIER dispositivo, no solo
+  // en el que probamos. Sin esto, los labels se solapan o se ocultan en
+  // tablets/teléfonos con gesture nav.
+  const insets = useSafeAreaInsets();
+  const TAB_BAR_CONTENT_HEIGHT = 56; // alto util sin contar el inset
   return (
     <Tabs.Navigator
       screenOptions={{
         headerShown: false,
-        // tabBarStyle.height y tabBarLabelStyle.fontSize bumpeados para
-        // legibilidad en usuarios mayores. Default RN ~10pt / 49pt alto —
-        // sentíamos chico en operación de campo. Padding inferior extra
-        // compensa el alto adicional sin pegarse al safe-area.
         tabBarStyle: {
           backgroundColor: "#0f172a",
           borderTopColor: "#1e293b",
-          height: 64,
-          paddingBottom: 8,
+          height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
+          paddingBottom: insets.bottom + 6,
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: 14, fontWeight: "600" },
@@ -179,6 +210,12 @@ function AuthenticatedNav() {
     <Drawer.Navigator
       drawerContent={(props) => <CustomDrawer {...props} />}
       screenOptions={{
+        // headerShown=false: el drawer NO rendera su propio header. El header
+        // visible viene del Stack interno de cada Tab (Recibos / Productores).
+        // Antes teníamos 2 headers apilados (drawer "Operación" + stack
+        // "Recibos") y se perdía espacio vertical útil. El botón hamburguesa
+        // que abre el drawer ahora vive en cada Stack header como headerLeft.
+        headerShown: false,
         headerStyle: { backgroundColor: "#0f172a" },
         headerTintColor: "#f1f5f9",
         drawerStyle: { backgroundColor: "#0f172a" },

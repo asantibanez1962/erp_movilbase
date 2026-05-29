@@ -93,15 +93,22 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
     }
   };
 
+  // Detecta si un row está sincronizado mirando el _status interno de WMDB
+  // (expuesto como Model.syncStatus). Ese flag es seteado automáticamente
+  // por WMDB post-pushChanges cuando el push resuelve sin error. Usar este
+  // y NO un campo custom evita el bug clásico: cualquier write desde código
+  // de app flippea _status a 'updated' → re-push en próxima sincronización →
+  // duplicado del lado del BE.
+  const isSyncedRow = (r: Recibo): boolean => r.syncStatus === "synced";
+
   // Counters globales (sobre todo el cache, no el filter activo) para
-  // mostrar el badge en cada chip. El user ve "Pendientes 3 / Enviados 12"
-  // sin tener que tappear cada filtro.
+  // mostrar el badge en cada chip.
   const counts = useMemo(() => {
     let pendientes = 0;
     let enviados = 0;
     for (const r of recibos) {
-      if (r.pushStatus === "synced") enviados++;
-      else pendientes++; // null + 'rejected' caen acá (ambos son "abiertos")
+      if (isSyncedRow(r)) enviados++;
+      else pendientes++; // 'created' + 'updated' + rejected caen acá (abiertos)
     }
     return { pendientes, enviados, todos: recibos.length };
   }, [recibos]);
@@ -110,9 +117,9 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
   const visible = useMemo(() => {
     switch (filter) {
       case "pendientes":
-        return recibos.filter((r) => r.pushStatus !== "synced");
+        return recibos.filter((r) => !isSyncedRow(r));
       case "enviados":
-        return recibos.filter((r) => r.pushStatus === "synced");
+        return recibos.filter(isSyncedRow);
       case "todos":
       default:
         return recibos;
@@ -156,7 +163,7 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
         renderItem={({ item }) => {
           const productorName = productorById.get(item.socioId) ?? `Socio ${item.socioId}`;
           const isRejected = item.pushStatus === "rejected";
-          const isSynced = item.pushStatus === "synced";
+          const isSynced = isSyncedRow(item);
           return (
             <View
               style={[

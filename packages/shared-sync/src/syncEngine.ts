@@ -17,18 +17,20 @@ import type { PushResponse } from "@erp/shared-types";
  *     schema, aunque vengan vacías — normalize las rellena.
  *
  * Post-push cleanup:
- *   Colecciones push-only (ej. recibos): los rows aceptados NO se borran
- *   localmente — se marcan push_status='synced' + syncUpdatedAt = server
- *   timestamp. La UI los muestra en la vista "Enviados" para que el user
- *   tenga histórico/reimpresión sin red. Purga silenciosa de >30 días
- *   corre al boot del app (apps/<x>/src/lib/db.ts).
+ *   Colecciones push-only (ej. recibos):
  *
- *   Como el BE NO pullea los recibos de vuelta (sync_policy=push-only),
- *   no hay duplicados — el local row queda como única fuente local con
- *   el server_id guardado por trazabilidad.
+ *   ACEPTADOS: NO se mutan localmente. Por qué: cualquier write desde código
+ *   de app (incluido row.update({ pushStatus: 'synced' })) le indica a WMDB
+ *   "cambio local pendiente" → flippea _status de 'synced' → 'updated'. En
+ *   el próximo sync, WMDB lo re-pushea pensando que tiene cambios — el BE no
+ *   tiene idempotency key por local_id y crea fila duplicada. Solución:
+ *   dejar al WMDB manejar su propio _status='synced' que ya sale automático
+ *   post-pushChanges. La UI distingue "Enviados" usando r.syncStatus directo
+ *   (no necesitamos un campo custom paralelo).
  *
- *   Rejected → push_status='rejected' + push_error con motivo para que
- *   la UI los flaggee.
+ *   RECHAZADOS: push_status='rejected' + push_error con motivo. Esto sí
+ *   flippea _status a 'updated' — DESEADO: queremos que WMDB lo reintente
+ *   en el próximo sync (no hay row en BE → no hay duplicado).
  */
 
 export interface SyncOptions {
@@ -118,32 +120,16 @@ export async function runSync(
     sendCreatedAsUpdated: true,
   });
 
-  // Post-sync cleanup para colecciones push-only (recibos):
-  //   - accepted → push_status='synced' + syncUpdatedAt = server.updated_at.
-  //     Queda local para "Enviados"; purge silencioso al boot maneja TTL.
-  //   - rejected → push_status='rejected' + push_error para que UI flaggee.
+  // Post-sync cleanup para colecciones push-only:
+  //   - ACCEPTED: nada. WMDB ya marcó _status='synced' automáticamente al
+  //     resolver pushChanges sin error. NO escribimos a campos custom porque
+  //     eso flipparía _status → 'updated' → loop de re-push + duplicados.
+  //   - REJECTED: marcamos push_status='rejected' + push_error. El flip a
+  //     _status='updated' es deseado (queremos retry en próximo sync; no
+  //     hay row en BE → no hay duplicado).
   await db.write(async () => {
     for (const [collName, resp] of Object.entries(pushResponses)) {
-      const accepted = resp.accepted?.[collName] ?? [];
       const rejected = resp.rejected?.[collName] ?? [];
-
-      for (const acc of accepted) {
-        const row = await safeFind(db, collName, acc.local_id);
-        if (row) {
-          await row.update((rec: Model & {
-            pushStatus?: string | null;
-            pushError?: string | null;
-            syncUpdatedAt?: number;
-          }) => {
-            rec.pushStatus = "synced";
-            rec.pushError = null;
-            // server.updated_at viene en ms; si por algún motivo el BE no
-            // lo mandó, fallback a Date.now() local (suficiente para purge).
-            rec.syncUpdatedAt = acc.updated_at ?? Date.now();
-          });
-        }
-      }
-
       for (const rej of rejected) {
         const row = await safeFind(db, collName, rej.local_id);
         if (row) {
