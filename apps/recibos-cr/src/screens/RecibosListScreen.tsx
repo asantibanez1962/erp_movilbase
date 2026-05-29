@@ -34,6 +34,13 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
   const [productorById, setProductorById] = useState<Map<number, string>>(new Map());
   const [syncing, setSyncing] = useState(false);
   const [filter, setFilter] = useState<FilterMode>("pendientes");
+  // Tick que se bumpea al completarse un sync. Forza al useMemo de counts y al
+  // FlatList a re-evaluar leyendo el r.syncStatus actual. Sin esto, el cambio
+  // interno de _status que hace WMDB al confirmar el push (created → synced) no
+  // siempre dispara observe() emission (mutación in-place sobre la misma
+  // instancia + mismo array reference), y los contadores y badges visuales
+  // quedan stale hasta el próximo evento real (otro insert, navegación, etc).
+  const [syncTick, setSyncTick] = useState(0);
 
   // Observamos TODA la collection — filtrar en JS es más simple que armar
   // queries por mode + observe múltiples. Volumen esperado <500 rows, no
@@ -67,6 +74,8 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
     setSyncing(true);
     try {
       await syncNow();
+      // Tick post-sync — ver comentario del state `syncTick` arriba.
+      setSyncTick((t) => t + 1);
     } catch (e: any) {
       console.warn("sync failed", e?.message);
     } finally {
@@ -102,7 +111,9 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
   const isSyncedRow = (r: Recibo): boolean => r.syncStatus === "synced";
 
   // Counters globales (sobre todo el cache, no el filter activo) para
-  // mostrar el badge en cada chip.
+  // mostrar el badge en cada chip. syncTick está en deps para que post-sync
+  // se re-evalue leyendo el syncStatus actual de cada Recibo (las instancias
+  // fueron mutadas in-place por WMDB sin disparar observe()).
   const counts = useMemo(() => {
     let pendientes = 0;
     let enviados = 0;
@@ -111,9 +122,11 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
       else pendientes++; // 'created' + 'updated' + rejected caen acá (abiertos)
     }
     return { pendientes, enviados, todos: recibos.length };
-  }, [recibos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recibos, syncTick]);
 
-  // Filter aplicado a la lista visible.
+  // Filter aplicado a la lista visible. Idem syncTick para que los rows
+  // se re-clasifiquen post-sync.
   const visible = useMemo(() => {
     switch (filter) {
       case "pendientes":
@@ -124,7 +137,8 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
       default:
         return recibos;
     }
-  }, [recibos, filter]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recibos, filter, syncTick]);
 
   // Rejected solo se cuenta dentro de pendientes para hint en el summary.
   const rejectedInPendientes = useMemo(
@@ -146,6 +160,7 @@ export function RecibosListScreen({ navigation }: { navigation: any }) {
 
       <FlatList
         data={visible}
+        extraData={syncTick}
         keyExtractor={(item) => item.id}
         contentContainerStyle={{ paddingBottom: 100 }}
         refreshControl={
