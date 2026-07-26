@@ -10,7 +10,6 @@ import {
   View,
 } from "react-native";
 import { useAuthStore, AuthError } from "@erp/shared-api";
-import { syncNow } from "../lib/sync";
 
 export function LoginScreen() {
   const [usuario, setUsuario] = useState("");
@@ -24,12 +23,10 @@ export function LoginScreen() {
     setLoading(true);
     try {
       await login(usuario.trim(), password);
-      // Primer sync apenas entra: el promotor suele loguearse en la oficina con
-      // WiFi y salir a campo sin señal. Si falla no bloqueamos el login — ya
-      // está autenticado y puede reintentar desde el drawer.
-      syncNow().catch((e) =>
-        console.warn("sync inicial falló", (e as Error)?.message)
-      );
+      // NO se sincroniza acá: el pull está scopeado por empresa y cosecha, y en
+      // este punto el usuario todavía no las eligió. Antes se llamaba a syncNow()
+      // y el BE respondía 400 MISSING_COMPANY. El primer sync lo dispara
+      // ContextoScreen cuando ya hay sesión de trabajo.
     } catch (e) {
       if (e instanceof AuthError) {
         setError(translateAuthError(e.code, e.message));
@@ -73,7 +70,7 @@ export function LoginScreen() {
           placeholderTextColor="#94a3b8"
         />
 
-        {error && <Text style={styles.error}>{error}</Text>}
+        {error ? <Text style={styles.error}>{error}</Text> : null}
 
         <TouchableOpacity
           style={[styles.button, loading && styles.buttonDisabled]}

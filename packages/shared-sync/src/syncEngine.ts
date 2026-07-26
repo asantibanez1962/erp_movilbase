@@ -118,12 +118,34 @@ export async function runSync(
       // podía viajar primero y volver como UNRESOLVED_PARENT — se recuperaba en el
       // sync siguiente, pero mostrándole al usuario un rechazo que no existía.
       //
-      // Las colecciones que WMDB reporte y no estén declaradas van al final, para
-      // no perder cambios si el schema local se adelanta a la config.
+      // SÓLO se pushea lo declarado en opts.collections.
+      //
+      // WMDB reporta cambios de TODAS las tablas del schema local, y una app puede
+      // tener tablas que a propósito no se sincronizan (acá `pending_uploads`, la
+      // cola de fotos, y `server_ids`, el mapeo localId→serverId). Una versión
+      // anterior empujaba también las no declaradas "para no perder cambios si el
+      // schema se adelanta a la config": el resultado fue un POST a
+      // /api/sync/server_ids/push que devolvía 404 COLLECTION_NOT_FOUND y hacía
+      // fallar el sync entero.
+      //
+      // Una tabla que no está en opts.collections no es sincronizable por
+      // definición. Si falta una que debería estar, el warning lo deja ver sin
+      // romper el sync.
       const declared = opts.collections.filter((c) => c in buckets);
-      const extra = Object.keys(buckets).filter((c) => !opts.collections.includes(c));
+      const noDeclaradas = Object.keys(buckets).filter(
+        (c) =>
+          !opts.collections.includes(c) &&
+          (buckets[c]!.created.length > 0 ||
+            buckets[c]!.updated.length > 0 ||
+            buckets[c]!.deleted.length > 0)
+      );
+      if (noDeclaradas.length > 0) {
+        console.info(
+          `[sync] tablas locales con cambios que NO se pushean: ${noDeclaradas.join(", ")}`
+        );
+      }
 
-      for (const collName of [...declared, ...extra]) {
+      for (const collName of declared) {
         const bucket = buckets[collName];
         // Sólo por el índice tipado: ambas listas salen de claves que existen.
         if (!bucket) continue;

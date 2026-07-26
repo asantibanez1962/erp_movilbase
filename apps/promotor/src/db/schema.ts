@@ -41,6 +41,9 @@ export const SCHEMA_VERSION = 1;
  */
 export const COLLECTIONS = [
   "tipos_visita",
+  "zonas",
+  "recibidores",
+  "tipos_desembolso",
   "productores",
   "fincas",
   "solicitudes",
@@ -65,6 +68,49 @@ export const schema = appSchema({
         { name: "sync_updated_at", type: "number", isIndexed: true },
       ],
     }),
+    // Recibidores: destino de las visitas de tipo 0. Se bajan TODOS (119) sin
+    // filtrar por zona aunque la tengan — un promotor puede necesitar registrar
+    // una visita a un recibidor fuera de su zona.
+    tableSchema({
+      name: "recibidores",
+      columns: [
+        { name: "codigo", type: "string", isIndexed: true },
+        { name: "nombre", type: "string", isOptional: true },
+        { name: "zona", type: "string", isOptional: true },
+        { name: "ubicacion", type: "string", isOptional: true },
+        { name: "compania", type: "number", isOptional: true },
+        { name: "sync_updated_at", type: "number", isIndexed: true },
+      ],
+    }),
+    // Zonas: traduce el código que viaja en los datos ('5') al nombre que el
+    // promotor reconoce ('MIRAMAR'). /api/mobile/contexto ya trae los nombres de
+    // SUS zonas, pero eso no alcanza para etiquetar la zona de una fila cualquiera
+    // ni para el admin, que no tiene zonas específicas listadas.
+    tableSchema({
+      name: "zonas",
+      columns: [
+        { name: "codigo", type: "string", isIndexed: true },
+        { name: "nombre", type: "string", isOptional: true },
+        { name: "id_region", type: "number", isOptional: true },
+        { name: "compania", type: "number", isOptional: true },
+        { name: "sync_updated_at", type: "number", isIndexed: true },
+      ],
+    }),
+    // Tipos de desembolso (Efectivo / Insumos / Carga Saldos / Insumos Feria).
+    // Es el lookup de `solicitudes.tipo_credito`: de 937 solicitudes reales, 923
+    // usan tipo+total y sólo 1 usa los rubros sueltos.
+    tableSchema({
+      name: "tipos_desembolso",
+      columns: [
+        { name: "id_tipo_desembolso", type: "number" },
+        { name: "nombre", type: "string", isOptional: true },
+        { name: "requiere_insumo", type: "number", isOptional: true },
+        { name: "requiere_banco", type: "number", isOptional: true },
+        { name: "requiere_fe", type: "number", isOptional: true },
+        { name: "compania", type: "number", isOptional: true },
+        { name: "sync_updated_at", type: "number", isIndexed: true },
+      ],
+    }),
     tableSchema({
       name: "productores",
       columns: [
@@ -73,9 +119,14 @@ export const schema = appSchema({
         // mismo que `codigo`: son columnas distintas de ge_Socio y difieren en
         // cientos de socios. Ver v1.53/RC/06.
         { name: "rc_codigo", type: "string", isOptional: true },
+        // `nombre` es el COMPUESTO (apellido1 + apellido2 + nombrep); `nombrep` es
+        // sólo el nombre de pila. Ver la nota en models.ts.
         { name: "nombre", type: "string", isOptional: true },
+        { name: "nombrep", type: "string", isOptional: true },
         { name: "apellido1", type: "string", isOptional: true },
         { name: "apellido2", type: "string", isOptional: true },
+        // La solicitud hereda la zona del productor en vez de pedirla.
+        { name: "rc_zona", type: "string", isOptional: true, isIndexed: true },
         { name: "nombrecomercial", type: "string", isOptional: true },
         { name: "identificacion", type: "string", isOptional: true },
         { name: "telefonos", type: "string", isOptional: true },
@@ -107,7 +158,11 @@ export const schema = appSchema({
         { name: "fecha", type: "number", isOptional: true },
         { name: "cosecha", type: "string", isOptional: true },
         { name: "zona", type: "string", isOptional: true },
-        // Rubros
+        // Variante vigente: un tipo de desembolso + el total. FK a
+        // tipos_desembolso.id_tipo_desembolso.
+        { name: "tipo_credito", type: "number", isOptional: true },
+        // Rubros — la otra variante del master. Se siguen bajando para que las
+        // solicitudes históricas se vean, pero el móvil ya no las captura.
         { name: "efectivo", type: "number", isOptional: true },
         { name: "insumos", type: "number", isOptional: true },
         { name: "almacigo", type: "number", isOptional: true },
@@ -161,6 +216,8 @@ export const schema = appSchema({
         { name: "id_socio", type: "number", isIndexed: true, isOptional: true },
         { name: "cosecha", type: "string", isOptional: true },
         { name: "id_finca", type: "number", isOptional: true },
+        // Código del recibidor visitado. Sólo para tipos con destino 'recibidor'.
+        { name: "recibidor", type: "string", isOptional: true },
         { name: "id_usuario_promotor", type: "number", isOptional: true },
         // Mismo criterio que entregadores.id_solicitud.
         { name: "id_solicitud", type: "string", isOptional: true, isIndexed: true },
@@ -178,6 +235,26 @@ export const schema = appSchema({
       ],
     }),
 
+    // ─── Mapeo local id → id de servidor (NO se sincroniza) ─────────────
+    // Necesario para trabajo que depende del id del servidor DESPUÉS de que la
+    // fila ya se sincronizó — hoy, subir fotos a /attachments/Visita/{serverId}.
+    //
+    // Por qué una tabla aparte y no una columna en `visitas`: escribir en una fila
+    // ya sincronizada la marca 'updated' y WMDB la re-pushea (ver syncEngine). Y
+    // por qué persistido y no sólo la response del push: la foto se saca DESPUÉS
+    // de sincronizar la visita, así que en el sync siguiente esa visita ya no
+    // aparece en accepted[] — la primera versión sólo miraba ahí y la foto no
+    // subía nunca.
+    tableSchema({
+      name: "server_ids",
+      columns: [
+        { name: "coleccion", type: "string", isIndexed: true },
+        { name: "local_id", type: "string", isIndexed: true },
+        { name: "server_id", type: "string" },
+        { name: "created_at", type: "number" },
+      ],
+    }),
+
     // ─── Cola local de fotos (NO se sincroniza) ─────────────────────────
     // No está en COLLECTIONS ni en mt.MobileCollections: las fotos no viajan
     // por el sync (es JSON), suben aparte a POST /attachments/Visita/{serverId}
@@ -187,9 +264,14 @@ export const schema = appSchema({
       columns: [
         { name: "visita_local_id", type: "string", isIndexed: true },
         { name: "file_uri", type: "string" },
-        { name: "status", type: "string", isIndexed: true }, // 'pending' | 'error'
+        // 'pending' → falta subir | 'subida' → ya está en el servidor, la copia
+        // local se conserva para verla sin señal | 'error' → falló, reintenta
+        { name: "status", type: "string", isIndexed: true },
         { name: "error", type: "string", isOptional: true },
         { name: "created_at", type: "number" },
+        // Cuándo se subió. Lo usa la purga para saber qué copias locales ya
+        // cumplieron su plazo de retención.
+        { name: "subida_at", type: "number", isOptional: true },
       ],
     }),
   ],

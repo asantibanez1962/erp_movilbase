@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Q } from "@nozbe/watermelondb";
-import { Finca, Productor, Solicitud, TipoVisita } from "../../db/models";
+import { Finca, Productor, Recibidor, Solicitud, TipoVisita } from "../../db/models";
 import { database } from "../../lib/db";
 import type { OpcionPicker } from "./Picker";
 import { fmtFecha, fmtMoneda } from "../estilos";
@@ -49,11 +49,21 @@ export function useOpcionesTipoVisita(): { opciones: OpcionPicker[]; tipos: Map<
       .observe()
       .subscribe((rows) => {
         setOpciones(
-          rows.map((t) => ({
-            valor: t.id,
-            titulo: t.nombre ?? `Tipo ${t.id}`,
-            subtitulo: t.exigeSolicitud ? "Requiere solicitud de crédito" : undefined,
-          }))
+          // El subtítulo dice a QUÉ se visita, para que el promotor sepa qué le
+          // va a pedir el form antes de elegir.
+          rows.map((t) => {
+            const partes = [
+              t.destino === "recibidor" ? "recibidor" : undefined,
+              t.destino === "productor" ? "productor" : undefined,
+              t.destino === "finca" ? "productor y finca" : undefined,
+              t.exigeSolicitud ? "solicitud de crédito" : undefined,
+            ].filter(Boolean);
+            return {
+              valor: t.id,
+              titulo: t.nombre ?? `Tipo ${t.id}`,
+              subtitulo: partes.length > 0 ? partes.join(" · ") : undefined,
+            };
+          })
         );
         setTipos(new Map(rows.map((t) => [t.id, t])));
       });
@@ -61,6 +71,35 @@ export function useOpcionesTipoVisita(): { opciones: OpcionPicker[]; tipos: Map<
   }, []);
 
   return { opciones, tipos };
+}
+
+/**
+ * Recibidores, TODOS. No se filtran por zona aunque la tengan: un promotor puede
+ * necesitar registrar una visita a un recibidor fuera de su zona, y esconderlos lo
+ * dejaría sin poder capturarla.
+ */
+export function useOpcionesRecibidor(): OpcionPicker[] {
+  const [opciones, setOpciones] = useState<OpcionPicker[]>([]);
+
+  useEffect(() => {
+    const sub = database
+      .get<Recibidor>("recibidores")
+      .query(Q.sortBy("codigo", Q.asc))
+      .observe()
+      .subscribe((rows) => {
+        setOpciones(
+          rows.map((r) => ({
+            valor: r.codigo,
+            titulo: r.displayName,
+            subtitulo: r.codigo,
+            busqueda: `${r.codigo} ${r.nombre ?? ""}`.toLowerCase(),
+          }))
+        );
+      });
+    return () => sub.unsubscribe();
+  }, []);
+
+  return opciones;
 }
 
 /** Fincas del productor elegido. Vacío mientras no haya productor. */

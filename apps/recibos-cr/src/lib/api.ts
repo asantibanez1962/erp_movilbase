@@ -37,7 +37,10 @@ export async function bootstrapApi(): Promise<void> {
     getDeviceId: getOrCreateDeviceId,
   });
 
-  syncClient = new SyncApi(httpClient, config.companyId);
+  // SyncApi ahora toma el contexto como getter (empresa + cosecha), porque en la
+  // app promotor el usuario las elige después del login. Acá la empresa sigue
+  // siendo la de config y no hay cosecha, así que el getter es constante.
+  syncClient = new SyncApi(httpClient, () => ({ companyId: config.companyId }));
 }
 
 export function getSyncClient(): SyncApi {

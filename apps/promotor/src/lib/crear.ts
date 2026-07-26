@@ -1,6 +1,6 @@
 import type { Model } from "@nozbe/watermelondb";
 import { database } from "./db";
-import { config } from "./config";
+import { useSesion } from "./sesion";
 import { randomUUID } from "./deviceId";
 import { Entregador, Solicitud, Visita } from "../db/models";
 
@@ -24,6 +24,20 @@ import { Entregador, Solicitud, Visita } from "../db/models";
  * fila duplicada. De ahí que valga la pena el helper.
  */
 
+/**
+ * Empresa y cosecha de la sesión. Se leen acá y no de config para que lo que se
+ * crea quede en la misma empresa/cosecha que el promotor está viendo — el BE
+ * igual pisa `compania` con el header, pero la fila local tiene que coincidir o
+ * la lista filtrada no la muestra después de guardarla.
+ */
+function sesion(): { companyId: number; cosecha: string | null } {
+  const s = useSesion.getState();
+  if (s.companyId == null) {
+    throw new Error("No hay empresa seleccionada en la sesión.");
+  }
+  return { companyId: s.companyId, cosecha: s.cosecha };
+}
+
 async function crearConUuid<T extends Model>(
   tabla: string,
   aplicar: (rec: T, uuid: string) => void
@@ -41,14 +55,13 @@ async function crearConUuid<T extends Model>(
 export interface NuevaSolicitudInput {
   idSocio: number;
   codigo?: string | null;
-  cosecha?: string | null;
+  // cosecha NO va acá: sale de la sesión (ver sesion()).
+  /** Zona del productor. Se hereda del productor elegido, no se pide. */
   zona?: string | null;
   fecha?: Date;
-  efectivo?: number;
-  insumos?: number;
-  almacigo?: number;
-  formalizacion?: number;
-  otros?: number;
+  /** rc_tipodesembolso.idtipodesembolso. La variante vigente es tipo + total. */
+  tipoCredito: number;
+  total: number;
   planInversion?: string | null;
   motivo?: string | null;
   entregaEstimada?: number | null;
@@ -58,34 +71,85 @@ export interface NuevaSolicitudInput {
 export async function crearSolicitud(
   input: NuevaSolicitudInput
 ): Promise<Solicitud> {
-  const rubros =
-    (input.efectivo ?? 0) +
-    (input.insumos ?? 0) +
-    (input.almacigo ?? 0) +
-    (input.formalizacion ?? 0) +
-    (input.otros ?? 0);
+  const { companyId, cosecha } = sesion();
 
   return crearConUuid<Solicitud>("solicitudes", (rec, uuid) => {
     rec.clientUuid = uuid;
     rec.idSocio = input.idSocio;
     rec.codigo = input.codigo ?? null;
-    rec.cosecha = input.cosecha ?? null;
+    // La cosecha viene de la sesión, no de un campo tipeado: los códigos válidos
+    // son los de rc_cosechas ("2026-2027") y a mano se escriben mal.
+    rec.cosecha = cosecha;
+    // Heredada del productor: el promotor no la elige.
     rec.zona = input.zona ?? null;
     rec.fecha = (input.fecha ?? new Date()).getTime();
-    rec.efectivo = input.efectivo ?? null;
-    rec.insumos = input.insumos ?? null;
-    rec.almacigo = input.almacigo ?? null;
-    rec.formalizacion = input.formalizacion ?? null;
-    rec.otros = input.otros ?? null;
-    rec.total = rubros;
+    rec.tipoCredito = input.tipoCredito;
+    rec.total = input.total;
+    // Los rubros quedan en null: el móvil usa la variante tipo + total. Las
+    // solicitudes históricas que sí los tienen se siguen bajando y mostrando.
     rec.planInversion = input.planInversion ?? null;
     rec.motivo = input.motivo ?? null;
     rec.entregaEstimada = input.entregaEstimada ?? null;
     rec.prodEstimada = input.prodEstimada ?? null;
     rec.estado = 0; // pendiente de aprobación — la web la resuelve
-    rec.compania = config.companyId;
+    rec.compania = companyId;
     rec.pushStatus = null;
     rec.pushError = null;
+  });
+}
+
+/**
+ * Edita una solicitud que TODAVÍA no subió.
+ *
+ * Sólo se permite mientras `esLocal` (WatermelonDB la mantiene en estado
+ * 'created'): editar así es puramente local y el push la sube completa cuando
+ * toque. Una solicitud ya sincronizada NO se puede editar desde el móvil — el
+ * push del BE rechaza `updated` con NOT_SUPPORTED, y habilitarlo requiere además
+ * política de conflictos con la web. Esa pieza está pendiente aparte.
+ *
+ * No se tocan cosecha, zona ni compania: son contexto heredado, no campos del form.
+ */
+export async function actualizarSolicitud(
+  solicitud: Solicitud,
+  input: Omit<NuevaSolicitudInput, "idSocio" | "codigo" | "zona" | "fecha">
+): Promise<void> {
+  if (!solicitud.esLocal) {
+    throw new Error(
+      "Esta solicitud ya se sincronizó; los cambios se hacen desde el ERP web."
+    );
+  }
+
+  await database.write(async () => {
+    await solicitud.update((rec) => {
+      rec.tipoCredito = input.tipoCredito;
+      rec.total = input.total;
+      rec.planInversion = input.planInversion ?? null;
+      rec.motivo = input.motivo ?? null;
+      rec.entregaEstimada = input.entregaEstimada ?? null;
+      rec.prodEstimada = input.prodEstimada ?? null;
+      // Un intento anterior pudo haber quedado marcado como rechazado; al editar
+      // se limpia para que el badge no siga mostrando un error ya corregido.
+      rec.pushStatus = null;
+      rec.pushError = null;
+    });
+  });
+}
+
+/**
+ * Quita un entregador que todavía no subió.
+ *
+ * `destroyPermanently` y no `markAsDeleted`: la fila nunca existió en el servidor,
+ * así que no hay nada que borrar allá. Un `markAsDeleted` la pondría en la cola de
+ * push como delete y el BE la rechazaría con NOT_SUPPORTED.
+ */
+export async function eliminarEntregador(entregador: Entregador): Promise<void> {
+  if (entregador.syncStatus !== "created") {
+    throw new Error(
+      "Este entregador ya se sincronizó; se quita desde el ERP web."
+    );
+  }
+  await database.write(async () => {
+    await entregador.destroyPermanently();
   });
 }
 
@@ -115,8 +179,11 @@ export async function crearEntregador(
 
 export interface NuevaVisitaInput {
   idTipoVisita: number;
-  idSocio: number;
-  cosecha?: string | null;
+  /** Null en visitas con destino 'recibidor', que no van contra un productor. */
+  idSocio: number | null;
+  /** Código del recibidor. Sólo en destino 'recibidor'. */
+  recibidor?: string | null;
+  // cosecha NO va acá: sale de la sesión.
   idFinca?: number | null;
   /** Id local de la solicitud — sólo para tipos con requiere_solicitud. */
   idSolicitudLocal?: string | null;
@@ -128,11 +195,13 @@ export interface NuevaVisitaInput {
 }
 
 export async function crearVisita(input: NuevaVisitaInput): Promise<Visita> {
+  const { companyId, cosecha } = sesion();
   return crearConUuid<Visita>("visitas", (rec, uuid) => {
     rec.clientUuid = uuid;
     rec.idTipoVisita = input.idTipoVisita;
     rec.idSocio = input.idSocio;
-    rec.cosecha = input.cosecha ?? null;
+    rec.recibidor = input.recibidor ?? null;
+    rec.cosecha = cosecha;   // de la sesión, igual que en la solicitud
     rec.idFinca = input.idFinca ?? null;
     rec.idSolicitud = input.idSolicitudLocal ?? null;
     rec.observaciones = input.observaciones ?? null;
@@ -141,7 +210,7 @@ export async function crearVisita(input: NuevaVisitaInput): Promise<Visita> {
     rec.gpsLng = input.gpsLng ?? null;
     rec.fecha = (input.fecha ?? new Date()).getTime();
     rec.estado = 0;
-    rec.compania = config.companyId;
+    rec.compania = companyId;
     rec.pushStatus = null;
     rec.pushError = null;
   });

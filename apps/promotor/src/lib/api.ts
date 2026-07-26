@@ -7,6 +7,7 @@ import {
 } from "@erp/shared-api";
 import { config } from "./config";
 import { getOrCreateDeviceId } from "./deviceId";
+import { contextoActual } from "./sesion";
 
 /**
  * Wiring entre los packages compartidos y el runtime del app.
@@ -37,7 +38,9 @@ export async function bootstrapApi(): Promise<void> {
     getDeviceId: getOrCreateDeviceId,
   });
 
-  syncClient = new SyncApi(httpClient, config.companyId);
+  // Contexto como getter: empresa y cosecha las elige el usuario después del
+  // login y puede cambiarlas sin reconstruir el cliente.
+  syncClient = new SyncApi(httpClient, contextoActual);
 }
 
 export function getSyncClient(): SyncApi {

@@ -137,6 +137,147 @@ arregla `v1.53/RC/05_Register_ClientUuid_Fields.sql`.
 
 ---
 
+## 3.ter Alcance de los datos: zona (autorización) y cosecha (contexto)
+
+Apareció al probar en el teléfono con un usuario real, y es la pieza que más cambió
+el diseño. Con `admin` no se ve nada de esto: tiene el wildcard `*.*.*` y una fila
+con `ZonaCodigo NULL`, así que todos los filtros lo saltean.
+
+**El agujero.** `SyncService` arma su propio SQL desde `ColumnsJson` + `FixedFilterSql`
+y **nunca pasa por `DynamicQueryService`**, que es donde vive el filtrado por
+`rc_usuario_zona`. El teléfono de un promotor se bajaba las solicitudes y fincas de
+todas las zonas, incluidas las que no tiene autorizadas. No es sólo volumen: es
+exposición de datos en un dispositivo que sale de la oficina.
+
+**Dos filtros de naturaleza distinta, y la distinción es lo importante:**
+
+| | Zona | Cosecha |
+|---|---|---|
+| Qué es | **autorización** | **contexto de trabajo** |
+| De dónde sale | del usuario del JWT, contra `rc_usuario_zona` | la elige el promotor al entrar |
+| Puede el cliente pisarla | **no** | sí, es su decisión |
+| Config | `ZonaFilterSql` con token `{zonas}` | `CosechaFilterSql` con `@cosecha` |
+| Viaja en | nada (se deriva en el servidor) | header `X-Cosecha` |
+
+`{zonas}` se expande a un parámetro por zona (`@z0, @z1, …`), nunca a interpolación
+de strings.
+
+**Tri-estado de las zonas**, que es la semántica que documenta `SysUserZonaRc`:
+
+- fila con `ZonaCodigo NULL`, o admin → sin filtro (todas)
+- filas con códigos → sólo esas
+- **sin filas para (user, empresa) → ninguna**, con un `AND 1 = 0` explícito
+
+⚠ **Divergencia deliberada con la web**: `DynamicQueryService` trata "sin filas" como
+"sin filtro", o sea que un usuario no-admin sin zonas asignadas ve **todas** en los
+grids. Eso es más permisivo de lo que documenta el modelo. En el móvil negamos. La
+web tendría que corregirse igual — son dos lugares y sólo se tocó el del móvil.
+
+**Por qué la config cuelga de la colección y no de `mt.Entities`**: la entity
+`Productor` tiene `FilterByUserZonas=0` (el grid web muestra el padrón completo, a
+propósito), pero en el móvil sí se recorta. Móvil y web scopean distinto acá, y
+colgarlo de la colección lo deja explícito fila por fila.
+
+**El login pide empresa**, no sólo cosecha: las zonas son por user × empresa, así que
+sin empresa no hay alcance que resolver. `GET /api/mobile/contexto` devuelve empresas,
+zonas, catálogo de cosechas y defaults de Mis Preferencias en una request — no puede
+ser una colección del sync porque el pull ya está scopeado por empresa y cosecha.
+
+**Una sola cosecha a la vez.** Cambiarla invalida el delta de WatermelonDB: el pull
+incremental pide "cambios desde `lastPulledAt`" asumiendo filtro estable, así que no
+borraría las filas de la cosecha anterior ni traería las viejas de la nueva. El único
+camino correcto es subir lo pendiente → `unsafeResetDatabase()` → pull completo. Si
+queda algo sin sincronizar, se aborta en vez de perderlo (`HayPendientesError`).
+
+**Efecto medido** (usuario `andrea`, rol Promotor, zona 5, cosecha 2026-2027):
+
+| Colección | Sin scoping | Con scoping |
+|---|---|---|
+| productores | 12 825 | **323** |
+| fincas | 832 | **222** |
+| solicitudes | 3 804 | **40** |
+| entregadores | 71 | **4** |
+
+De ~17 500 filas a menos de 600.
+
+### 3.ter.1 Dos trampas que costaron encontrar
+
+**Colisión de nombres de colección entre apps.** Había dos `productores` —de
+`recibos-cr` y de `promotor`— y la URL `/api/sync/{collection}/pull` no lleva la app.
+`ResolveAsync` buscaba por nombre entre todas y devolvía la primera, así que
+`promotor` sincronizaba con la spec de `recibos-cr`: otras columnas, otro permiso y
+**sin filtro de zona**. Todo el scoping quedaba sin efecto en la colección más
+grande. Se resolvió por dos lados: la fila de `recibos-cr` desactivada
+(v1.53/RC/10) y `ResolveAsync` discriminando por header `X-App-Id`. Los dos, porque
+el próximo choque de nombres va a pasar igual con la tercera app.
+
+**Permiso equivocado en la config.** `productores` pedía `ge.productor.list`, pero la
+entity vive en el módulo RC y el rol Promotor trae `rc.productor.list`. Un promotor
+real recibía 403 en la colección principal (v1.53/RC/09).
+
+### 3.ter.2 Dato operativo
+
+`mt.MobileCollections` **se cachea al arrancar el backend**. Cambiar una fila no tiene
+efecto hasta reiniciar. Cuesta un buen rato darse cuenta si no se sabe.
+
+---
+
+## 3.quater Lo que cambió al probar en campo
+
+Todo lo de abajo salió de usar la app en un teléfono real, no de diseñarla. Vale
+la pena tenerlo junto porque varias cosas eran invisibles desde el escritorio.
+
+**La solicitud usa `tipocredito` + `total`, no los rubros.** El master soporta las
+dos variantes; los datos deciden cuál: de 937 solicitudes de las últimas dos
+cosechas, **923 usan tipo y 1 usa rubros**. El form arrancó con los 5 rubros
+(efectivo/insumos/almácigo/formalización/otros), que era la variante equivocada.
+Los rubros se siguen bajando para que las solicitudes históricas se vean, pero no
+se capturan.
+
+**Nada que el servidor pueda derivar se captura en el móvil.** Tasa, mora, inicio
+de interés y plazo salen de `rc_cosechas` y `rc_tipodesembolso` (con
+`modifica_intereses` decidiendo cuál gana). Si los mandara el teléfono, una cosecha
+cacheada vieja escribiría una tasa incorrecta en una solicitud de crédito. Abono y
+tipo de abono tampoco: 1 de 937 los usa, los pone la oficina.
+
+**Zona y cosecha se heredan, no se piden.** La zona del productor elegido, la
+cosecha de la sesión. Antes ambas eran texto libre — y `cosecha` con placeholder
+`2526` cuando los códigos válidos son `2026-2027`, o sea que el promotor habría
+tipeado cosechas inválidas.
+
+**Las zonas se muestran por nombre.** `5` no le dice nada a nadie; `MIRAMAR` sí.
+El código sigue siendo lo que viaja en los datos.
+
+**`ge_Socio.nombre` YA es el compuesto** (`apellido1 + apellido2 + nombrep`).
+Concatenarlo otra vez con los apellidos mostraba
+"ALVARADO ARIAS EULALIO ALVARADO ARIAS".
+
+**Sin sync automático al guardar.** Esta es la más interesante, porque fue una
+contradicción de diseño propia: una solicitud sólo se puede editar mientras no
+subió, y a la vez se sincronizaba apenas se guardaba. Con señal, la solicitud
+quedaba de solo lectura en segundos, antes de que el promotor pudiera agregarle
+los entregadores. Ahora sincroniza él desde el drawer, que además muestra el
+pendiente en ámbar (`Sincronizar (3 sin enviar)`) para que no se vaya del campo
+con trabajo sin subir. El sync automático se conserva sólo al entrar.
+
+**Editar sólo lo no sincronizado.** WatermelonDB lo mantiene en `created`, así que
+editar o quitar entregadores es puramente local. Editar algo ya sincronizado
+requiere soportar `updated`/`deleted` en el push —hoy `NOT_SUPPORTED`— más política
+de conflictos con la web. Queda pendiente aparte.
+
+### 3.quater.1 Trampas que costaron encontrar
+
+| Síntoma | Causa |
+|---|---|
+| La visita de "Validación de Crédito" no pedía la solicitud y el hook nunca disparaba | `RequiereSolicitud` es `BIT` → llegaba como `true` booleano, y el modelo comparaba `=== 1`. Los otros flags del mismo catálogo son `TINYINT`. Corregido con `CONVERT(TINYINT, ...)` + `esVerdadero()` |
+| El promotor recibía 403 en `productores` | La colección pedía `ge.productor.list`, pero la entity es del módulo RC y el rol trae `rc.productor.list` |
+| El scoping por zona no se aplicaba a `productores` | Dos colecciones homónimas (`recibos-cr` y `promotor`) y la URL no lleva la app: `ResolveAsync` devolvía la primera por nombre |
+| Sync fallaba con 404 tras crear algo | El `syncEngine` empujaba también las tablas locales (`server_ids`, `pending_uploads`), que no existen como colección |
+| Contraseña equivocada decía "Error de conexión" | El BE responde 401 y axios lanza `AxiosError`; sólo se construía `AuthError` ante `success:false` con 2xx |
+| La foto nunca subía | El flush sólo miraba el `accepted[]` de ese sync, pero la foto se saca DESPUÉS de sincronizar la visita |
+
+---
+
 ## 4. Fotos
 
 `rc_Visita` documenta las fotos como `mt.Attachments` con `recordKey = IdVisita`. El
@@ -150,15 +291,28 @@ POST /attachments/Visita/{serverId}   multipart: file, notes
 El `recordKey` tiene que ser el id del servidor, que no existe hasta que el push de la
 visita fue aceptado. De ahí el diseño:
 
-1. La foto se guarda en el filesystem del teléfono al tomarla, y se encola una fila en
-   una tabla local `pending_uploads` (`visita_local_id`, `file_uri`, `status`).
-2. Terminado el sync, para cada visita aceptada se resuelve `localId → serverId` y se
-   suben sus fotos pendientes.
-3. Subida OK → se borra la fila y el archivo local. Falla → queda encolada para el
-   próximo sync.
+1. La foto se redimensiona (1280px, JPEG 0.7 → ~190 KB) y se encola en la tabla
+   local `pending_uploads`.
+2. El id del servidor se resuelve contra `server_ids`, un mapeo **persistido** de
+   `localId → serverId` que se llena con los `accepted[]` de cada push. Persistirlo
+   es lo que hace que funcione el caso normal: la foto se saca DESPUÉS de
+   sincronizar la visita, y para entonces esa visita ya no vuelve a aparecer en
+   `accepted[]`. La primera versión sólo miraba ahí y la foto no subía nunca.
+3. Subida OK → la fila pasa a `subida` y **la copia local se conserva**, para poder
+   ver la foto sin señal al reentrar a la visita.
+4. La purga borra las copias locales vencidas al final de cada sync. El plazo lo
+   define el servidor (`Mobile:RetencionFotosLocalesDias` en appsettings, viaja en
+   `/api/mobile/contexto`), así que se ajusta por instalación sin republicar el APK.
+5. Purgada la copia, si el promotor abre la visita con señal las fotos se leen de
+   `GET /attachments/Visita/{serverId}`.
 
-`pending_uploads` es una tabla WMDB local que **no está en ninguna colección de sync** —
-nunca se pushea, es puramente cola local.
+**La purga es local y no puede ser del BE**: las copias viven en el filesystem del
+teléfono. Lo que sí es del servidor es la *política*. Y no hay purga en el servidor:
+los adjuntos son parte del expediente de crédito.
+
+`pending_uploads` y `server_ids` son tablas WMDB locales que **no están en
+COLLECTIONS** — nunca se pushean. El `syncEngine` sólo empuja lo declarado
+justamente por esto: empujarlas daba 404 `COLLECTION_NOT_FOUND`.
 
 ---
 
@@ -234,4 +388,5 @@ Cada fase es independientemente verificable.
 | `rc_solicitudes_entregadores` sin `compania` | Se scopea por la solicitud padre vía `FixedFilterSql` (§3) |
 | Solicitud creada offline sin `numero`/secuencia | Igual que recibos-cr: lo asigna el servidor al crear (identity). No hay campo manual. |
 | Crear una fila escribible sin pasar por `crear.ts` reintroduce el duplicado del §3.bis | El helper es el único camino; conviene un lint rule si el equipo crece |
-| Una foto cuyo upload falla queda encolada hasta que su visita vuelva a aparecer en un `accepted[]` — o sea, nunca | Pendiente: reintentar leyendo el server id de un mapeo local persistido, no sólo de la response del push |
+| ~~Una foto cuyo upload falla queda encolada hasta que su visita vuelva a aparecer en un `accepted[]` — o sea, nunca~~ | **Resuelto.** Era peor de lo anotado: en el flujo normal (sacar la foto DESPUÉS de sincronizar la visita) no subía nunca, porque en el sync siguiente esa visita ya no está en `accepted[]`. Ahora el mapeo localId→serverId se persiste en la tabla local `server_ids` y `flushPendingUploads` recorre la cola completa resolviendo contra ella |
+| Un flag `BIT` del servidor llega como booleano y no como número | `CONVERT(TINYINT, ...)` en la proyección + `esVerdadero()` en el modelo. Pasó con `requiere_solicitud`: la app no pedía la solicitud en la visita de crédito y el hook nunca disparaba, sin ningún error |

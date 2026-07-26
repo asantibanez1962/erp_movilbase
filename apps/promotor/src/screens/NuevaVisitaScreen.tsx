@@ -9,13 +9,14 @@ import {
   View,
 } from "react-native";
 import { crearVisita } from "../lib/crear";
-import { syncNow } from "../lib/sync";
 import { obtenerPunto, type Punto } from "../lib/gps";
+import { useSesion } from "../lib/sesion";
 import { colores, estilos } from "./estilos";
 import { PickerModal } from "./componentes/Picker";
 import {
   useOpcionesFinca,
   useOpcionesProductor,
+  useOpcionesRecibidor,
   useOpcionesSolicitud,
   useOpcionesTipoVisita,
 } from "./componentes/opciones";
@@ -27,7 +28,13 @@ import {
   CampoTexto,
 } from "./componentes/Campos";
 
-type PickerAbierto = "tipo" | "productor" | "finca" | "solicitud" | null;
+type PickerAbierto =
+  | "tipo"
+  | "productor"
+  | "finca"
+  | "solicitud"
+  | "recibidor"
+  | null;
 
 /**
  * Alta de visita de campo.
@@ -43,13 +50,15 @@ type PickerAbierto = "tipo" | "productor" | "finca" | "solicitud" | null;
  */
 export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>) {
   const productores = useOpcionesProductor();
+  const recibidores = useOpcionesRecibidor();
   const { opciones: tiposOpciones, tipos } = useOpcionesTipoVisita();
 
   const [tipoId, setTipoId] = useState<string | null>(null);
   const [productorId, setProductorId] = useState<string | null>(null);
+  const [recibidorCodigo, setRecibidorCodigo] = useState<string | null>(null);
   const [fincaId, setFincaId] = useState<string | null>(null);
   const [solicitudId, setSolicitudId] = useState<string | null>(null);
-  const [cosecha, setCosecha] = useState("");
+  const cosechaSesion = useSesion((s) => s.cosecha);
   const [observaciones, setObservaciones] = useState("");
   const [prodEstimada, setProdEstimada] = useState("");
   const [abierto, setAbierto] = useState<PickerAbierto>(null);
@@ -77,7 +86,11 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
   const solicitudes = useOpcionesSolicitud(Number.isNaN(idSocio) ? null : idSocio);
 
   const tipo = tipoId ? tipos.get(tipoId) : undefined;
+  // El destino sale de `requierefinca`, que pese al nombre tiene tres valores:
+  // 0 recibidor, 1 finca, 2 productor (ver TipoVisita.destino).
+  const exigeProductor = tipo?.exigeProductor ?? false;
   const exigeFinca = tipo?.exigeFinca ?? false;
+  const exigeRecibidor = tipo?.exigeRecibidor ?? false;
   const exigeSolicitud = tipo?.exigeSolicitud ?? false;
 
   // Cambiar de productor invalida finca y solicitud: pertenecen al anterior.
@@ -86,9 +99,21 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
     setSolicitudId(null);
   }, [productorId]);
 
+  // Cambiar de tipo puede cambiar el destino: lo elegido para el destino viejo
+  // ya no aplica y arrastrarlo guardaría, por ejemplo, un recibidor en una
+  // visita a finca.
+  useEffect(() => {
+    if (!exigeProductor) setProductorId(null);
+    if (!exigeRecibidor) setRecibidorCodigo(null);
+    if (!exigeFinca) setFincaId(null);
+    if (!exigeSolicitud) setSolicitudId(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tipoId]);
+
   const puedeGuardar =
     tipoId != null &&
-    productorId != null &&
+    (!exigeProductor || productorId != null) &&
+    (!exigeRecibidor || recibidorCodigo != null) &&
     (!exigeFinca || fincaId != null) &&
     (!exigeSolicitud || solicitudId != null) &&
     !guardando;
@@ -97,16 +122,19 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
     if (!puedeGuardar) return;
     setGuardando(true);
     try {
-      const socio = Number(productorId);
       const tipoNum = Number(tipoId);
-      if (Number.isNaN(socio) || Number.isNaN(tipoNum)) {
-        throw new Error("Productor o tipo de visita inválidos.");
+      if (Number.isNaN(tipoNum)) throw new Error("Tipo de visita inválido.");
+
+      // En destino 'recibidor' no hay productor: la visita va contra el recibidor.
+      const socio = exigeProductor ? Number(productorId) : null;
+      if (socio != null && Number.isNaN(socio)) {
+        throw new Error("Productor inválido.");
       }
 
       await crearVisita({
         idTipoVisita: tipoNum,
         idSocio: socio,
-        cosecha: cosecha.trim() || null,
+        recibidor: exigeRecibidor ? recibidorCodigo : null,
         idFinca: fincaId != null ? Number(fincaId) : null,
         idSolicitudLocal: solicitudId,
         observaciones: observaciones.trim() || null,
@@ -115,10 +143,9 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
         gpsLng: punto?.lng ?? null,
       });
 
-      syncNow().catch((e) =>
-        console.warn("sync tras crear visita", (e as Error)?.message)
-      );
-
+      // Sin sync automático, igual que en solicitudes: el promotor todavía tiene
+      // que sacarle las fotos a esta visita. Sincroniza desde el drawer al
+      // terminar la captura.
       navigation.goBack();
     } catch (e) {
       Alert.alert("No se pudo guardar", (e as Error)?.message ?? "Error desconocido");
@@ -146,13 +173,35 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
           valorMostrado={tipo?.nombre ?? null}
           onAbrir={() => setAbierto("tipo")}
         />
-        <CampoSeleccion
-          etiqueta="Productor"
-          requerido
-          valorMostrado={productores.find((p) => p.valor === productorId)?.titulo ?? null}
-          onAbrir={() => setAbierto("productor")}
-        />
-        <CampoTexto etiqueta="Cosecha" valor={cosecha} onCambiar={setCosecha} placeholder="2526" />
+        {/* Qué se pide depende del destino del tipo, igual que en el legacy:
+            recibidor → combo recibidor; productor → sólo productor;
+            finca → productor + finca. */}
+        {exigeProductor ? (
+          <CampoSeleccion
+            etiqueta="Productor"
+            requerido
+            valorMostrado={
+              productores.find((p) => p.valor === productorId)?.titulo ?? null
+            }
+            onAbrir={() => setAbierto("productor")}
+          />
+        ) : null}
+
+        {exigeRecibidor ? (
+          <CampoSeleccion
+            etiqueta="Recibidor"
+            requerido
+            valorMostrado={
+              recibidores.find((r) => r.valor === recibidorCodigo)?.titulo ?? null
+            }
+            onAbrir={() => setAbierto("recibidor")}
+          />
+        ) : null}
+        {/* Heredada de la sesión, igual que en la solicitud. */}
+        <View style={estilos.detalleFila}>
+          <Text style={estilos.detalleEtiqueta}>Cosecha</Text>
+          <Text style={estilos.detalleValor}>{cosechaSesion ?? "—"}</Text>
+        </View>
 
         {exigeFinca && (
           <CampoSeleccion
@@ -243,6 +292,13 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
         titulo="Elegir productor"
         opciones={productores}
         onSeleccionar={setProductorId}
+        onCerrar={() => setAbierto(null)}
+      />
+      <PickerModal
+        visible={abierto === "recibidor"}
+        titulo="Elegir recibidor"
+        opciones={recibidores}
+        onSeleccionar={setRecibidorCodigo}
         onCerrar={() => setAbierto(null)}
       />
       <PickerModal

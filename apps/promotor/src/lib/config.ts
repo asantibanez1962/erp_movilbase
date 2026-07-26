@@ -17,13 +17,10 @@ export const config = {
     process.env.EXPO_PUBLIC_API_URL ??
     (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
     "http://10.0.2.2:5249",
-  // POC hardcoded; al meter selector de empresa se mueve a state (ver "Selector
-  // de empresa" en docs/produccion.md).
-  //
-  // 1, no 8: en sci_altura_2026 hay UNA sola empresa (ge_companias.Id = 1) y todos
-  // los datos de RC cuelgan de ella. recibos-cr usa 8 porque se desarrolló contra
-  // otra base — no copiar ese valor.
-  companyId: 1,
+  // NO hay companyId acá a propósito. La empresa la elige el usuario al entrar y
+  // vive en el store de sesión (lib/sesion.ts): las zonas autorizadas son por
+  // user × empresa, así que hardcodearla haría que el alcance del sync no
+  // corresponda al usuario. Leerla de dos lugares es cómo se desincronizan.
   // Tiene que matchear el AppId de mt.MobileCollections — es lo que el manifest
   // usa para saber qué colecciones le tocan a esta app.
   appId: "promotor",

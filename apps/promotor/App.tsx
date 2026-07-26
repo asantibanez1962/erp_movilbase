@@ -23,8 +23,15 @@ import {
   DrawerContentScrollView,
   DrawerItem,
 } from "@react-navigation/drawer";
+import { Alert } from "react-native";
 import { useAuthStore } from "@erp/shared-api";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { ContextoScreen } from "./src/screens/ContextoScreen";
+import { useSesion } from "./src/lib/sesion";
+import { cambiarCosecha, contarPendientes, HayPendientesError } from "./src/lib/sync";
+import { cargarContexto } from "./src/lib/contexto";
+import { PickerModal } from "./src/screens/componentes/Picker";
+import { usePendientes } from "./src/screens/usePendientes";
 import { ProductoresScreen } from "./src/screens/ProductoresScreen";
 import { ProductorDetailScreen } from "./src/screens/ProductorDetailScreen";
 import { SolicitudesScreen } from "./src/screens/SolicitudesScreen";
@@ -214,11 +221,74 @@ function MainTabs() {
 
 // ─── Drawer ──────────────────────────────────────────────────────────
 
+/** Zonas por nombre ("MIRAMAR"), con el código como respaldo si falta el nombre. */
+function descripcionZonas(
+  todas: boolean,
+  codigos: string[],
+  nombres: string[]
+): string {
+  if (todas) return "todas las zonas";
+  const etiquetas = nombres.length > 0 ? nombres : codigos;
+  return etiquetas.length > 0 ? `zona(s) ${etiquetas.join(", ")}` : "sin zonas";
+}
+
 function CustomDrawer(props: DrawerContentComponentProps) {
   const logout = useAuthStore((s) => s.logout);
   const user = useAuthStore((s) => s.user);
+  const cosecha = useSesion((s) => s.cosecha);
+  const zonas = useSesion((s) => s.zonas);
+  const zonasNombres = useSesion((s) => s.zonasNombres);
+  const todasLasZonas = useSesion((s) => s.todasLasZonas);
+  const companyId = useSesion((s) => s.companyId);
+  const pendientes = usePendientes();
   const [syncing, setSyncing] = useState(false);
   const [ultimoError, setUltimoError] = useState<string | null>(null);
+  const [cosechas, setCosechas] = useState<string[]>([]);
+  const [pickerCosecha, setPickerCosecha] = useState(false);
+  const [cambiando, setCambiando] = useState(false);
+
+  /**
+   * Cambiar de cosecha rebaja los datos (ver cambiarCosecha), así que se avisa
+   * antes y se bloquea si hay trabajo sin sincronizar en vez de perderlo.
+   */
+  const abrirCambioCosecha = async () => {
+    setUltimoError(null);
+    const pendientes = await contarPendientes();
+    if (pendientes > 0) {
+      Alert.alert(
+        "Hay trabajo sin sincronizar",
+        `Tenés ${pendientes} registro(s) que todavía no subieron. Sincronizá primero: al cambiar de cosecha se vuelven a bajar los datos y se perderían.`
+      );
+      return;
+    }
+    try {
+      const { empresas } = await cargarContexto();
+      const actual = empresas.find((e) => e.id === companyId);
+      setCosechas((actual?.cosechas ?? []).map((c) => c.codigo));
+      setPickerCosecha(true);
+    } catch {
+      setUltimoError(
+        "No se pudo traer el catálogo de cosechas; se necesita conexión para cambiarla."
+      );
+    }
+  };
+
+  const aplicarCosecha = async (nueva: string) => {
+    if (nueva === cosecha) return;
+    setCambiando(true);
+    setUltimoError(null);
+    try {
+      await cambiarCosecha(nueva);
+    } catch (e) {
+      setUltimoError(
+        e instanceof HayPendientesError
+          ? e.message
+          : ((e as Error)?.message ?? "No se pudo cambiar la cosecha")
+      );
+    } finally {
+      setCambiando(false);
+    }
+  };
 
   const handleSync = async () => {
     if (syncing) return;
@@ -240,11 +310,30 @@ function CustomDrawer(props: DrawerContentComponentProps) {
       <View style={styles.drawerHeader}>
         <Text style={styles.drawerTitle}>Promotor</Text>
         {user && <Text style={styles.drawerUser}>{user.usuario}</Text>}
+        {/* Contexto siempre visible: sin esto el promotor no sabe por qué no ve
+            un productor o una solicitud que espera. */}
+        <Text style={styles.drawerUser}>
+          Cosecha {cosecha ?? "—"} · {descripcionZonas(todasLasZonas, zonas, zonasNombres)}
+        </Text>
       </View>
 
       <DrawerItem
-        label={syncing ? "Sincronizando..." : "Sincronizar todo"}
+        label={
+          syncing
+            ? "Sincronizando..."
+            : pendientes > 0
+              ? `Sincronizar (${pendientes} sin enviar)`
+              : "Sincronizar todo"
+        }
         onPress={handleSync}
+        labelStyle={[
+          styles.drawerLabel,
+          pendientes > 0 ? { color: "#fbbf24", fontWeight: "700" } : null,
+        ]}
+      />
+      <DrawerItem
+        label={cambiando ? "Cambiando cosecha..." : "Cambiar cosecha"}
+        onPress={abrirCambioCosecha}
         labelStyle={styles.drawerLabel}
       />
       {ultimoError ? <Text style={styles.drawerError}>⚠ {ultimoError}</Text> : null}
@@ -253,6 +342,14 @@ function CustomDrawer(props: DrawerContentComponentProps) {
         label="Cerrar sesión"
         onPress={logout}
         labelStyle={styles.drawerLabel}
+      />
+
+      <PickerModal
+        visible={pickerCosecha}
+        titulo="Cambiar cosecha"
+        opciones={cosechas.map((c) => ({ valor: c, titulo: c }))}
+        onSeleccionar={aplicarCosecha}
+        onCerrar={() => setPickerCosecha(false)}
       />
     </DrawerContentScrollView>
   );
@@ -282,14 +379,20 @@ export default function App() {
   const [bootDone, setBootDone] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isInitializing = useAuthStore((s) => s.isInitializing);
+  const sesionCompanyId = useSesion((s) => s.companyId);
+  const sesionCosecha = useSesion((s) => s.cosecha);
+  const hidratandoSesion = useSesion((s) => s.hidratando);
+  const hidratarSesion = useSesion((s) => s.hidratar);
 
   useEffect(() => {
     bootstrapApi()
+      .then(() => hidratarSesion())
       .then(() => setBootDone(true))
       .catch((e) => {
         setBootError(e?.message ?? "Error inicializando el app");
         setBootDone(true);
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
@@ -298,7 +401,7 @@ export default function App() {
         <StatusBar style="light" />
         <NavigationContainer theme={navTheme}>
           {(() => {
-            if (!bootDone || isInitializing) {
+            if (!bootDone || isInitializing || hidratandoSesion) {
               return (
                 <View style={styles.center}>
                   <ActivityIndicator size="large" color="#3b82f6" />
@@ -313,8 +416,11 @@ export default function App() {
                 </View>
               );
             }
-            if (isAuthenticated) return <AuthenticatedNav />;
-            return <LoginScreen />;
+            if (!isAuthenticated) return <LoginScreen />;
+            // Autenticado pero sin contexto de trabajo: el sync está scopeado por
+            // empresa y cosecha, así que entrar sin elegirlas no traería nada.
+            if (sesionCompanyId == null || !sesionCosecha) return <ContextoScreen />;
+            return <AuthenticatedNav />;
           })()}
         </NavigationContainer>
       </SafeAreaProvider>

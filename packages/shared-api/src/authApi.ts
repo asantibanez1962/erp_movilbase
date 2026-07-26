@@ -19,29 +19,54 @@ export class AuthApi {
   constructor(private readonly baseURL: string) {}
 
   async login(req: LoginRequest): Promise<LoginResponse> {
-    const resp = await axios.post<AuthEnvelope<LoginResponse>>(
-      `${this.baseURL}/api/auth/login`,
-      req,
-      {
-        timeout: 15_000,
-        headers: { "X-Client-Kind": "mobile", "Content-Type": "application/json" },
-      }
-    );
-    if (!resp.data.success || !resp.data.data) {
-      throw new AuthError(resp.data.code, resp.data.message);
-    }
-    return resp.data.data;
+    return this.postAuth("/api/auth/login", req);
   }
 
   async refresh(req: RefreshRequest): Promise<LoginResponse> {
-    const resp = await axios.post<AuthEnvelope<LoginResponse>>(
-      `${this.baseURL}/api/auth/refresh`,
-      req,
-      {
-        timeout: 15_000,
-        headers: { "X-Client-Kind": "mobile", "Content-Type": "application/json" },
+    return this.postAuth("/api/auth/refresh", req);
+  }
+
+  /**
+   * POST a un endpoint de auth, distinguiendo "el servidor dijo que no" de "no
+   * pude hablar con el servidor".
+   *
+   * Importa más de lo que parece: el BE responde 401 ante credenciales inválidas y
+   * axios lanza por su cuenta ante cualquier no-2xx. Antes sólo se construía un
+   * AuthError cuando venía `success:false` DENTRO de un 2xx, así que un 401 salía
+   * como AxiosError y la pantalla de login lo mostraba como "Error de conexión.
+   * Verificá la red" — mandando al usuario a revisar el WiFi cuando en realidad
+   * había tecleado mal la contraseña.
+   *
+   * Con respuesta del servidor → AuthError con su code (INVALID_CREDENTIALS,
+   * ACCOUNT_LOCKED, ...). Sin respuesta (timeout, DNS, socket) → se propaga tal
+   * cual, que ahí sí es un problema de red.
+   */
+  private async postAuth(
+    ruta: string,
+    req: LoginRequest | RefreshRequest
+  ): Promise<LoginResponse> {
+    let resp;
+    try {
+      resp = await axios.post<AuthEnvelope<LoginResponse>>(
+        `${this.baseURL}${ruta}`,
+        req,
+        {
+          timeout: 15_000,
+          headers: { "X-Client-Kind": "mobile", "Content-Type": "application/json" },
+        }
+      );
+    } catch (e) {
+      const cuerpo = (e as { response?: { data?: AuthEnvelope<LoginResponse> } })
+        ?.response?.data;
+      if (cuerpo?.code) throw new AuthError(cuerpo.code, cuerpo.message);
+      // Hubo respuesta del servidor pero sin envelope reconocible: sigue siendo un
+      // rechazo, no un problema de red.
+      if ((e as { response?: unknown })?.response) {
+        throw new AuthError("AUTH_FAILED", "El servidor rechazó el ingreso.");
       }
-    );
+      throw e; // sin response = red de verdad
+    }
+
     if (!resp.data.success || !resp.data.data) {
       throw new AuthError(resp.data.code, resp.data.message);
     }

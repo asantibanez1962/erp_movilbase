@@ -11,6 +11,21 @@ import { field, readonly } from "@nozbe/watermelondb/decorators";
  * una colección que el BE rechaza por pull-only.
  */
 
+/**
+ * Flag del servidor a booleano, tolerando número y booleano.
+ *
+ * Hace falta porque el wire mezcla los dos: una columna TINYINT llega como 1, una
+ * BIT como `true`. Un `=== 1` sobre un BIT da false y el síntoma es silencioso —
+ * pasó con `requiere_solicitud` de tipos_visita: la app no pedía la solicitud en la
+ * visita de validación de crédito y el hook del BE nunca disparaba. La proyección
+ * ahora convierte los BIT a TINYINT (v1.53/RC/12), pero esto queda como red de
+ * seguridad para el próximo flag que aparezca sin convertir.
+ */
+function esVerdadero(v: number | boolean | null | undefined): boolean {
+  if (typeof v === "boolean") return v;
+  return (v ?? 0) !== 0;
+}
+
 // ─── Catálogos (pull-only) ────────────────────────────────────────────
 
 export class TipoVisita extends Model {
@@ -18,31 +33,53 @@ export class TipoVisita extends Model {
 
   @readonly @field("nombre") nombre!: string | null;
   @readonly @field("tipos_visita") tiposVisita!: number | null;
-  @readonly @field("requiere_finca") requiereFinca!: number | null;
-  @readonly @field("requiere_solicitud") requiereSolicitud!: number | null;
+  // number | boolean: ver esVerdadero(). requierefinca es TINYINT y
+  // RequiereSolicitud era BIT, así que históricamente llegaron con tipos distintos.
+  @readonly @field("requiere_finca") requiereFinca!: number | boolean | null;
+  @readonly @field("requiere_solicitud") requiereSolicitud!: number | boolean | null;
   @readonly @field("compania") compania!: number | null;
   @readonly @field("sync_updated_at") syncUpdatedAt!: number;
 
   /**
-   * El form obliga a elegir finca cuando el tipo lo pide.
+   * A QUÉ se visita. El nombre de la columna engaña: `requierefinca` no es un
+   * booleano "pide finca" sino el DESTINO, con tres valores. Sale del código
+   * legacy WinDev, que muestra u oculta los combos según su valor:
    *
-   * OJO: `requierefinca` es TINYINT, no BIT, y en sci_altura_2026 hay tipos con
-   * valor 2 ("Visita Productor" = 2, "Visita Recibidores" = 0). El valor viene
-   * heredado del legacy re_tiposvisita y NINGÚN código de la web ni del BE lo
-   * consume, así que qué significa el 2 no está definido en ningún lado.
+   *   0 → recibidor  (combo recibidor; sin productor ni finca)
+   *   1 → finca      (productor + finca)
+   *   2 → productor  (sólo productor)
    *
-   * Tomamos "distinto de cero" = exige finca, que es lo conservador: un `=== 1`
-   * dejaría sin picker de finca a "Visita Productor", donde casi seguro hace
-   * falta. Confirmar con negocio y ajustar si el 2 quiere decir otra cosa
-   * (¿opcional? ¿varias fincas?).
+   * Es ortogonal a `requiereSolicitud`: un tipo puede tener cualquier destino y
+   * además ligarse a una solicitud de crédito.
    */
-  get exigeFinca(): boolean {
-    return (this.requiereFinca ?? 0) !== 0;
+  get destino(): "recibidor" | "finca" | "productor" {
+    let v: number;
+    if (typeof this.requiereFinca === "boolean") {
+      v = this.requiereFinca ? 1 : 0;
+    } else {
+      // Default 1 (finca) cuando falta: es el destino de 8 de los 11 tipos.
+      v = this.requiereFinca ?? 1;
+    }
+    if (v === 0) return "recibidor";
+    if (v === 2) return "productor";
+    return "finca";
   }
 
-  /** El tipo "Validación de Crédito": la visita se liga a una solicitud. */
+  get exigeProductor(): boolean {
+    return this.destino !== "recibidor";
+  }
+
+  get exigeFinca(): boolean {
+    return this.destino === "finca";
+  }
+
+  get exigeRecibidor(): boolean {
+    return this.destino === "recibidor";
+  }
+
+  /** Liga la visita a una solicitud y habilita la producción estimada. */
   get exigeSolicitud(): boolean {
-    return this.requiereSolicitud === 1;
+    return esVerdadero(this.requiereSolicitud);
   }
 }
 
@@ -52,9 +89,18 @@ export class Productor extends Model {
   @readonly @field("codigo") codigo!: string | null;
   /** El código que usa la relación entregador→solicitud. Ver nota en schema.ts. */
   @readonly @field("rc_codigo") rcCodigo!: string | null;
+  /**
+   * OJO: `nombre` en ge_Socio ya es el COMPUESTO —
+   * apellido1 + apellido2 + nombrep ("ALVARADO ARIAS EULALIO")—, no el nombre de
+   * pila. Concatenarlo con los apellidos los duplica.
+   */
   @readonly @field("nombre") nombre!: string | null;
+  /** Sólo el nombre de pila ("EULALIO"). */
+  @readonly @field("nombrep") nombrep!: string | null;
   @readonly @field("apellido1") apellido1!: string | null;
   @readonly @field("apellido2") apellido2!: string | null;
+  /** Zona del productor. La solicitud la hereda de acá en vez de pedirla. */
+  @readonly @field("rc_zona") rcZona!: string | null;
   @readonly @field("nombrecomercial") nombrecomercial!: string | null;
   @readonly @field("identificacion") identificacion!: string | null;
   @readonly @field("telefonos") telefonos!: string | null;
@@ -62,11 +108,21 @@ export class Productor extends Model {
   @readonly @field("compania") compania!: number;
   @readonly @field("sync_updated_at") syncUpdatedAt!: number;
 
+  /**
+   * `nombre` tal cual: ya viene compuesto desde ge_Socio. Antes esto concatenaba
+   * nombre + apellido1 + apellido2 y mostraba "ALVARADO ARIAS EULALIO ALVARADO
+   * ARIAS". Fallback a las partes sueltas por si `nombre` viniera vacío.
+   */
   get displayName(): string {
-    const parts = [this.nombre, this.apellido1, this.apellido2].filter(Boolean);
-    return parts.length > 0
-      ? parts.join(" ")
-      : (this.nombrecomercial ?? "(sin nombre)");
+    const compuesto = this.nombre?.trim();
+    if (compuesto) return compuesto;
+
+    const partes = [this.apellido1, this.apellido2, this.nombrep]
+      .map((p) => p?.trim())
+      .filter(Boolean);
+    if (partes.length > 0) return partes.join(" ");
+
+    return this.nombrecomercial?.trim() || "(sin nombre)";
   }
 
   /** Texto contra el que filtra el buscador de la lista. */
@@ -76,6 +132,47 @@ export class Productor extends Model {
       .join(" ")
       .toLowerCase();
   }
+}
+
+export class Recibidor extends Model {
+  static readonly table = "recibidores";
+
+  @readonly @field("codigo") codigo!: string;
+  @readonly @field("nombre") nombre!: string | null;
+  @readonly @field("zona") zona!: string | null;
+  @readonly @field("ubicacion") ubicacion!: string | null;
+  @readonly @field("compania") compania!: number | null;
+  @readonly @field("sync_updated_at") syncUpdatedAt!: number;
+
+  get displayName(): string {
+    return this.nombre?.trim() || this.codigo;
+  }
+}
+
+export class Zona extends Model {
+  static readonly table = "zonas";
+
+  @readonly @field("codigo") codigo!: string;
+  @readonly @field("nombre") nombre!: string | null;
+  @readonly @field("id_region") idRegion!: number | null;
+  @readonly @field("compania") compania!: number | null;
+  @readonly @field("sync_updated_at") syncUpdatedAt!: number;
+
+  get displayName(): string {
+    return this.nombre?.trim() || this.codigo;
+  }
+}
+
+export class TipoDesembolso extends Model {
+  static readonly table = "tipos_desembolso";
+
+  @readonly @field("id_tipo_desembolso") idTipoDesembolso!: number;
+  @readonly @field("nombre") nombre!: string | null;
+  @readonly @field("requiere_insumo") requiereInsumo!: number | null;
+  @readonly @field("requiere_banco") requiereBanco!: number | null;
+  @readonly @field("requiere_fe") requiereFe!: number | null;
+  @readonly @field("compania") compania!: number | null;
+  @readonly @field("sync_updated_at") syncUpdatedAt!: number;
 }
 
 export class Finca extends Model {
@@ -105,7 +202,11 @@ export class Solicitud extends Model {
   @field("fecha") fecha!: number | null;
   @field("cosecha") cosecha!: string | null;
   @field("zona") zona!: string | null;
+  /** Tipo de desembolso. Es la variante vigente: tipo + total. */
+  @field("tipo_credito") tipoCredito!: number | null;
 
+  // Rubros: la otra variante del master. Se muestran si vienen del servidor, pero
+  // el móvil no los captura.
   @field("efectivo") efectivo!: number | null;
   @field("insumos") insumos!: number | null;
   @field("almacigo") almacigo!: number | null;
@@ -172,6 +273,8 @@ export class Visita extends Model {
   @field("id_socio") idSocio!: number | null;
   @field("cosecha") cosecha!: string | null;
   @field("id_finca") idFinca!: number | null;
+  /** Código del recibidor. Sólo en tipos con destino 'recibidor'. */
+  @field("recibidor") recibidor!: string | null;
   @field("id_usuario_promotor") idUsuarioPromotor!: number | null;
   /** Mismo criterio que Entregador.idSolicitud. */
   @field("id_solicitud") idSolicitud!: string | null;
@@ -194,23 +297,46 @@ export class Visita extends Model {
 
 // ─── Cola local de fotos (nunca se sincroniza) ────────────────────────
 
+/**
+ * Traducción local id → id de servidor de una fila que ya subió. Ver la nota en
+ * schema.ts sobre por qué no vive como columna de la fila misma.
+ */
+export class ServerId extends Model {
+  static readonly table = "server_ids";
+
+  @field("coleccion") coleccion!: string;
+  @field("local_id") localId!: string;
+  @field("server_id") serverId!: string;
+  @field("created_at") createdAt!: number;
+}
+
 export class PendingUpload extends Model {
   static readonly table = "pending_uploads";
 
   @field("visita_local_id") visitaLocalId!: string;
   @field("file_uri") fileUri!: string;
-  @field("status") status!: string; // 'pending' | 'error'
+  /** 'pending' | 'subida' | 'error' */
+  @field("status") status!: string;
   @field("error") error!: string | null;
   @field("created_at") createdAt!: number;
+  @field("subida_at") subidaAt!: number | null;
+
+  get yaSubio(): boolean {
+    return this.status === "subida";
+  }
 }
 
 /** Lo que espera createDatabase. El orden no importa. */
 export const MODEL_CLASSES = [
   TipoVisita,
+  Recibidor,
+  Zona,
+  TipoDesembolso,
   Productor,
   Finca,
   Solicitud,
   Entregador,
   Visita,
+  ServerId,
   PendingUpload,
 ];
