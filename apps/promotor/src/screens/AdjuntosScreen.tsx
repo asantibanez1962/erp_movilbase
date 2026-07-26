@@ -9,75 +9,55 @@ import {
 } from "react-native";
 import { CameraView, useCameraPermissions } from "expo-camera";
 import {
-  encolarFoto,
-  flushPendingUploads,
-  fotosDelServidor,
-  fotosLocalesDe,
-  type FotoServidor,
-} from "../lib/fotos";
+  adjuntosDelServidor,
+  adjuntosLocalesDe,
+  encolarAdjunto,
+  flushAdjuntos,
+  type AdjuntoServidor,
+} from "../lib/adjuntos";
 import { PendingUpload } from "../db/models";
 import { colores, estilos } from "./estilos";
 
 /**
- * Cámara para adjuntar fotos a una visita.
+ * Cámara para adjuntar imágenes a cualquier registro: fotos de una visita, cédula
+ * y respaldos de una solicitud.
  *
- * Las fotos NO se suben acá: se comprimen y se encolan en `pending_uploads`, y
- * viajan a /attachments/Visita/{serverId} después del sync, cuando la visita ya
- * tiene id de servidor. En campo casi nunca hay red al momento de la foto, así
- * que intentar subir en el acto sólo produciría errores y esperas.
+ * Los adjuntos NO se suben acá: se comprimen y se encolan, y viajan a
+ * /attachments/{Entity}/{serverId} cuando el registro dueño ya tiene id de
+ * servidor. En campo casi nunca hay red al momento de capturar, así que intentar
+ * subir en el acto sólo produciría errores y esperas.
+ *
+ * Genérica por (coleccion, registroLocalId) — arrancó atada a visitas, pero es el
+ * mismo mecanismo y el platform ya guarda los adjuntos por (entidad, registro).
  */
-function estadoTexto(status: string): string {
-  if (status === "subida") return "enviada";
-  if (status === "error") return "error";
-  return "en cola";
-}
-
-function estadoColor(status: string): string {
-  if (status === "subida") return colores.exito;
-  if (status === "error") return colores.error;
-  return colores.advertencia;
-}
-
-/**
- * Resumen de arriba. Menciona aparte las que están en el servidor sin copia
- * local: son fotos que existen en el ERP pero que acá no se pueden mostrar —
- * porque las subió otro dispositivo o porque la purga ya liberó el archivo— y sin
- * decirlo el promotor creería que se perdieron.
- */
-function resumen(locales: PendingUpload[], soloEnServidor: number): string {
-  const enCola = locales.filter((f) => !f.yaSubio).length;
-  const enviadas = locales.length - enCola;
-
-  const partes: string[] = [];
-  if (enviadas > 0) partes.push(`${enviadas} enviada(s)`);
-  if (enCola > 0) partes.push(`${enCola} en cola`);
-  if (soloEnServidor > 0) partes.push(`${soloEnServidor} en el servidor`);
-
-  return partes.length === 0 ? "Sin fotos todavía" : partes.join(" · ");
-}
-
-export function FotosVisitaScreen({ route }: Readonly<{ route: any }>) {
-  const { visitaLocalId } = route.params as { visitaLocalId: string };
+export function AdjuntosScreen({ route }: Readonly<{ route: any }>) {
+  const { coleccion, registroLocalId, titulo } = route.params as {
+    coleccion: string;
+    registroLocalId: string;
+    titulo?: string;
+  };
 
   const [permiso, pedirPermiso] = useCameraPermissions();
   const [locales, setLocales] = useState<PendingUpload[]>([]);
-  const [enServidor, setEnServidor] = useState<FotoServidor[]>([]);
+  const [enServidor, setEnServidor] = useState<AdjuntoServidor[]>([]);
   const [capturando, setCapturando] = useState(false);
   const camara = useRef<CameraView>(null);
 
-  const refrescar = async () => setLocales(await fotosLocalesDe(visitaLocalId));
+  const refrescar = async () =>
+    setLocales(await adjuntosLocalesDe(coleccion, registroLocalId));
 
   useEffect(() => {
     void refrescar();
-    // Las del servidor son las que subió otro dispositivo, o las propias cuya
-    // copia local ya purgó por antigüedad. Sin señal devuelve vacío y se muestran
-    // sólo las locales.
-    fotosDelServidor(visitaLocalId).then(setEnServidor).catch(() => undefined);
+    // Los del servidor son los que subió otro dispositivo, o los propios cuya
+    // copia local ya purgó. Sin señal devuelve vacío y se muestran sólo los locales.
+    adjuntosDelServidor(coleccion, registroLocalId)
+      .then(setEnServidor)
+      .catch(() => undefined);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [visitaLocalId]);
+  }, [coleccion, registroLocalId]);
 
-  // Cuántas del servidor no tienen copia local: son las que el promotor no puede
-  // ver acá pero sí existen en el ERP.
+  // Cuántos del servidor no tienen copia local: existen en el ERP pero acá no se
+  // pueden mostrar. Sin decirlo, uno creería que se perdieron.
   const soloEnServidor = Math.max(
     enServidor.length - locales.filter((f) => f.yaSubio).length,
     0
@@ -95,7 +75,7 @@ export function FotosVisitaScreen({ route }: Readonly<{ route: any }>) {
     return (
       <View style={[estilos.root, estilos.center]}>
         <Text style={[estilos.vacioTexto, { marginBottom: 20 }]}>
-          Necesitamos permiso de cámara para adjuntar fotos a la visita.
+          Necesitamos permiso de cámara para adjuntar imágenes.
         </Text>
         <TouchableOpacity
           onPress={pedirPermiso}
@@ -122,12 +102,12 @@ export function FotosVisitaScreen({ route }: Readonly<{ route: any }>) {
     try {
       const foto = await camara.current?.takePictureAsync({ quality: 1 });
       if (foto?.uri) {
-        await encolarFoto(visitaLocalId, foto.uri);
+        await encolarAdjunto(coleccion, registroLocalId, foto.uri);
         await refrescar();
-        // Si hay señal y la visita ya subió, la foto se va ahora mismo en vez de
-        // esperar al próximo sync. Si no, queda en la cola: por eso no se await
-        // ni se muestra el error.
-        flushPendingUploads()
+        // Si hay señal y el registro ya subió, el adjunto se va ahora mismo en vez
+        // de esperar al próximo sync. Si no, queda en la cola: por eso no se
+        // await ni se muestra el error.
+        flushAdjuntos()
           .then(refrescar)
           .catch((e) => console.warn("upload inmediato falló", (e as Error)?.message));
       }
@@ -156,7 +136,7 @@ export function FotosVisitaScreen({ route }: Readonly<{ route: any }>) {
           }}
         >
           <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-            {capturando ? "Guardando..." : "📷 Tomar foto"}
+            {capturando ? "Guardando..." : `📷 ${titulo ?? "Adjuntar"}`}
           </Text>
         </TouchableOpacity>
 
@@ -184,14 +164,10 @@ export function FotosVisitaScreen({ route }: Readonly<{ route: any }>) {
                   borderColor: colores.error,
                 }}
               />
-              {/* Estado explícito: si no, el promotor no distingue una foto
-                  guardada de una ya enviada, y vuelve a sacarla por las dudas. */}
+              {/* Estado explícito: si no, no se distingue un adjunto guardado de
+                  uno ya enviado, y se vuelve a capturar por las dudas. */}
               <Text
-                style={{
-                  fontSize: 11,
-                  marginTop: 3,
-                  color: estadoColor(item.status),
-                }}
+                style={{ fontSize: 11, marginTop: 3, color: estadoColor(item.status) }}
               >
                 {estadoTexto(item.status)}
               </Text>
@@ -201,4 +177,33 @@ export function FotosVisitaScreen({ route }: Readonly<{ route: any }>) {
       ) : null}
     </View>
   );
+}
+
+function estadoTexto(status: string): string {
+  if (status === "subida") return "enviado";
+  if (status === "error") return "error";
+  return "en cola";
+}
+
+function estadoColor(status: string): string {
+  if (status === "subida") return colores.exito;
+  if (status === "error") return colores.error;
+  return colores.advertencia;
+}
+
+/**
+ * Menciona aparte los que están en el servidor sin copia local: existen en el ERP
+ * pero acá no se pueden mostrar —los subió otro dispositivo, o la purga ya liberó
+ * el archivo— y sin decirlo uno creería que se perdieron.
+ */
+function resumen(locales: PendingUpload[], soloEnServidor: number): string {
+  const enCola = locales.filter((f) => !f.yaSubio).length;
+  const enviados = locales.length - enCola;
+
+  const partes: string[] = [];
+  if (enviados > 0) partes.push(`${enviados} enviado(s)`);
+  if (enCola > 0) partes.push(`${enCola} en cola`);
+  if (soloEnServidor > 0) partes.push(`${soloEnServidor} en el servidor`);
+
+  return partes.length === 0 ? "Sin adjuntos todavía" : partes.join(" · ");
 }

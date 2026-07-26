@@ -1,26 +1,55 @@
 import { useEffect, useState } from "react";
 import { Q } from "@nozbe/watermelondb";
 import { database } from "../lib/db";
+import { useSesion } from "../lib/sesion";
+import { politicaDe } from "../lib/politicas";
 
 /**
- * Cuántas filas creadas en el teléfono todavía no subieron, en vivo.
+ * Trabajo del teléfono que todavía no llegó al servidor, separado en dos.
  *
- * Existe porque se sacó el sync automático al guardar: una solicitud sólo se
- * puede editar mientras no subió, y sincronizar apenas se guardaba la volvía de
- * solo lectura en segundos. Ahora sincroniza el promotor cuando termina de
- * capturar — pero entonces hace falta que vea qué le queda pendiente, o se va del
- * cafetal con trabajo sin enviar.
+ * La distinción importa: si se muestra un solo número, el usuario sincroniza,
+ * el contador no baja a cero y no entiende por qué. Son dos situaciones muy
+ * distintas:
+ *
+ *   porEnviar  → depende de él: sincroniza y se va.
+ *   retenidas  → NO puede hacer nada sincronizando. La fila espera un evento de
+ *                negocio (política hasta-evento: un recibo sin imprimir). Hay que
+ *                cerrarla primero.
+ *
+ * Existe además porque se sacó el sync automático al guardar: sin un indicador
+ * visible, el promotor se va del campo con trabajo sin enviar.
  */
 const TABLAS = ["solicitudes", "entregadores", "visitas"] as const;
 
-export function usePendientes(): number {
-  const [total, setTotal] = useState(0);
+export interface Pendientes {
+  porEnviar: number;
+  retenidas: number;
+  total: number;
+}
+
+export function usePendientes(): Pendientes {
+  const politicas = useSesion((s) => s.politicas);
+  const [pend, setPend] = useState<Pendientes>({
+    porEnviar: 0,
+    retenidas: 0,
+    total: 0,
+  });
 
   useEffect(() => {
-    const contadores = new Map<string, number>();
+    const sinSync = new Map<string, number>();
+    const retenidas = new Map<string, number>();
 
-    const actualizar = () =>
-      setTotal([...contadores.values()].reduce((a, b) => a + b, 0));
+    const actualizar = () => {
+      const sumar = (m: Map<string, number>) =>
+        [...m.values()].reduce((a, b) => a + b, 0);
+      const totalSinSync = sumar(sinSync);
+      const totalRetenidas = sumar(retenidas);
+      setPend({
+        porEnviar: Math.max(totalSinSync - totalRetenidas, 0),
+        retenidas: totalRetenidas,
+        total: totalSinSync,
+      });
+    };
 
     const subs = TABLAS.map((tabla) =>
       database
@@ -28,26 +57,46 @@ export function usePendientes(): number {
         .query(Q.where("_status", Q.notEq("synced")))
         .observeCount()
         .subscribe((n) => {
-          contadores.set(tabla, n);
+          sinSync.set(tabla, n);
           actualizar();
         })
     );
 
-    // Las fotos en cola también cuentan: viven en una tabla local que el reset
-    // por cambio de cosecha borra, y sin subir se pierden con sus archivos.
+    // Retenidas: sólo aplica a colecciones con política hasta-evento, que hoy no
+    // hay ninguna. El loop queda listo para cuando entren los recibos.
+    for (const tabla of TABLAS) {
+      const { politica, campoCierre } = politicaDe(politicas, tabla);
+      if (politica !== "hasta-evento" || !campoCierre) {
+        retenidas.set(tabla, 0);
+        continue;
+      }
+      subs.push(
+        database
+          .get(tabla)
+          .query(Q.where("_status", Q.notEq("synced")), Q.where(campoCierre, null))
+          .observeCount()
+          .subscribe((n) => {
+            retenidas.set(tabla, n);
+            actualizar();
+          })
+      );
+    }
+
+    // Las fotos en cola cuentan como por enviar: viven en una tabla local que el
+    // reset por cambio de cosecha borra, y sin subir se pierden con sus archivos.
     subs.push(
       database
         .get("pending_uploads")
-        .query()
+        .query(Q.where("status", Q.notEq("subida")))
         .observeCount()
         .subscribe((n) => {
-          contadores.set("pending_uploads", n);
+          sinSync.set("pending_uploads", n);
           actualizar();
         })
     );
 
     return () => subs.forEach((s) => s.unsubscribe());
-  }, []);
+  }, [politicas]);
 
-  return total;
+  return pend;
 }

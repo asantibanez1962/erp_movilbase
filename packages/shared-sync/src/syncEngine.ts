@@ -28,15 +28,33 @@ import type { PushResponse } from "@erp/shared-types";
  *   post-pushChanges. La UI distingue "Enviados" usando r.syncStatus directo
  *   (no necesitamos un campo custom paralelo).
  *
- *   RECHAZADOS: push_status='rejected' + push_error con motivo. Esto sí
- *   flippea _status a 'updated' — DESEADO: queremos que WMDB lo reintente
- *   en el próximo sync (no hay row en BE → no hay duplicado).
+ *   RECHAZADOS: se devuelven en experimentalRejectedIds para que WMDB NO los
+ *   marque como sincronizados, y además se les escribe push_status/push_error
+ *   para que la UI muestre el motivo.
+ *
+ *   Antes se confiaba sólo en ese write: al escribirle a una fila ya marcada
+ *   como synced, _status volteaba a 'updated' y WMDB la reintentaba. Pero
+ *   entonces viajaba en changes.updated, que el BE rechaza con NOT_SUPPORTED —
+ *   la fila quedaba reintentándose para siempre sin poder crearse nunca. Con
+ *   experimentalRejectedIds se queda en 'created' y se reintenta como corresponde.
  */
 
 export interface SyncOptions {
   collections: string[];
   api: SyncApi;
   schemaVersion: number;
+  /**
+   * Retención por colección: decide si una fila creada localmente ya puede
+   * enviarse. Devolver false la deja en el teléfono para el próximo intento.
+   *
+   * Existe por las colecciones con política `hasta-evento`: un recibo de café se
+   * puede corregir mientras no se imprime, y recién al imprimirse queda firme y
+   * puede subir. WatermelonDB no sabe de eso — empuja todo lo que tenga
+   * _status != 'synced' — así que la retención tiene que hacerse acá.
+   *
+   * Sin la función, se envía todo (comportamiento de `automatica` y `hasta-sync`).
+   */
+  puedeEnviar?: (coleccion: string, fila: Record<string, unknown>) => boolean;
 }
 
 type ChangeBucket = {
@@ -111,6 +129,25 @@ export async function runSync(
     pushChanges: async ({ changes, lastPulledAt }) => {
       const buckets = changes as unknown as Record<string, ChangeBucket>;
 
+      /**
+       * Ids que WMDB NO debe marcar como sincronizados. Dos motivos:
+       *
+       *  - RETENIDAS: filas que todavía no pueden salir (política hasta-evento,
+       *    ej. recibo sin imprimir). Nunca se enviaron.
+       *  - RECHAZADAS: el BE las devolvió en rejected[]. No existen en el servidor.
+       *
+       * Sin esto WMDB marca como synced TODO lo que pasó por pushChanges, y las
+       * retenidas se perderían para siempre. Antes los rechazos se manejaban
+       * escribiéndoles push_status, lo que volteaba la fila de 'created' a
+       * 'updated' — y como el BE rechaza 'updated' con NOT_SUPPORTED, esa fila
+       * quedaba reintentándose eternamente sin poder crearse. Con
+       * experimentalRejectedIds se quedan en 'created' y se reintentan bien.
+       */
+      const noMarcarComoSincronizadas: Record<string, string[]> = {};
+      const retener = (coleccion: string, id: string) => {
+        (noMarcarComoSincronizadas[coleccion] ??= []).push(id);
+      };
+
       // Orden de push = orden de opts.collections, NO el de Object.entries.
       // Importa cuando una colección es hija de otra (entregadores → solicitudes):
       // el BE resuelve la FK del hijo contra mt.MobileIdMap, que sólo tiene la
@@ -131,6 +168,15 @@ export async function runSync(
       // Una tabla que no está en opts.collections no es sincronizable por
       // definición. Si falta una que debería estar, el warning lo deja ver sin
       // romper el sync.
+      // Qué trae WMDB para pushear. Si esto sale vacío, el problema está antes del
+      // push: no hay cambios locales pendientes que WMDB reconozca.
+      const conCambios = Object.entries(buckets)
+        .filter(([, b]) => b.created.length + b.updated.length + b.deleted.length > 0)
+        .map(([c, b]) => `${c}(${b.created.length}c/${b.updated.length}u/${b.deleted.length}d)`);
+      console.info(
+        `[sync] cambios locales: ${conCambios.length > 0 ? conCambios.join(" ") : "ninguno"}`
+      );
+
       const declared = opts.collections.filter((c) => c in buckets);
       const noDeclaradas = Object.keys(buckets).filter(
         (c) =>
@@ -146,9 +192,27 @@ export async function runSync(
       }
 
       for (const collName of declared) {
-        const bucket = buckets[collName];
-        // Sólo por el índice tipado: ambas listas salen de claves que existen.
-        if (!bucket) continue;
+        const bucketCrudo = buckets[collName];
+        // Sólo por el índice tipado: la lista sale de claves que existen.
+        if (!bucketCrudo) continue;
+
+        // Retención: las filas que todavía no pueden enviarse se quedan. No es un
+        // error ni un rechazo — simplemente no les llegó el momento (ej. un recibo
+        // sin imprimir). Vuelven a evaluarse en cada sync.
+        let bucket = bucketCrudo;
+        if (opts.puedeEnviar) {
+          const pasa = (f: Record<string, unknown>) => {
+            const ok = opts.puedeEnviar!(collName, f);
+            if (!ok) retener(collName, String(f.id));
+            return ok;
+          };
+          bucket = {
+            created: bucketCrudo.created.filter(pasa),
+            updated: bucketCrudo.updated.filter(pasa),
+            deleted: bucketCrudo.deleted,
+          };
+        }
+
         const isEmpty =
           bucket.created.length === 0 &&
           bucket.updated.length === 0 &&
@@ -160,7 +224,35 @@ export async function runSync(
           last_pulled_at: lastPulledAt,
         });
         pushResponses[collName] = resp;
+
+        // Lo que el BE rechazó tampoco se marca como sincronizado: no existe allá.
+        const rechazadas = resp.rejected?.[collName] ?? [];
+        for (const rej of rechazadas) {
+          retener(collName, rej.local_id);
+        }
+
+        // El push era una caja negra: no había forma de saber desde afuera si una
+        // fila salió, si volvió aceptada o si quedó retenida. Diagnosticar sin
+        // esto obligaba a adivinar.
+        const aceptadas = resp.accepted?.[collName]?.length ?? 0;
+        console.info(
+          `[sync] push ${collName}: enviadas=${bucket.created.length}+${bucket.updated.length} ` +
+            `aceptadas=${aceptadas} rechazadas=${rechazadas.length}`
+        );
+        for (const rej of rechazadas) {
+          console.info(`[sync]   rechazo ${collName}: ${rej.reason} — ${rej.message}`);
+        }
       }
+
+      const retenidasTotal = Object.values(noMarcarComoSincronizadas).flat().length;
+      if (retenidasTotal > 0) {
+        console.info(
+          `[sync] ${retenidasTotal} fila(s) NO se marcan como sincronizadas ` +
+            `(retenidas o rechazadas)`
+        );
+      }
+
+      return { experimentalRejectedIds: noMarcarComoSincronizadas };
     },
 
     sendCreatedAsUpdated: true,

@@ -38,8 +38,9 @@ import { SolicitudesScreen } from "./src/screens/SolicitudesScreen";
 import { SolicitudDetailScreen } from "./src/screens/SolicitudDetailScreen";
 import { NuevaSolicitudScreen } from "./src/screens/NuevaSolicitudScreen";
 import { VisitasScreen } from "./src/screens/VisitasScreen";
+import { VisitaDetailScreen } from "./src/screens/VisitaDetailScreen";
 import { NuevaVisitaScreen } from "./src/screens/NuevaVisitaScreen";
-import { FotosVisitaScreen } from "./src/screens/FotosVisitaScreen";
+import { AdjuntosScreen } from "./src/screens/AdjuntosScreen";
 import { bootstrapApi } from "./src/lib/api";
 import { syncNow } from "./src/lib/sync";
 
@@ -140,7 +141,18 @@ function SolicitudesStackScreens() {
       <SolicitudesStack.Screen
         name="NuevaSolicitud"
         component={NuevaSolicitudScreen}
-        options={{ title: "Nueva solicitud" }}
+        options={({ route }) => ({
+          title: (route.params as { solicitudId?: string })?.solicitudId
+            ? "Editar solicitud"
+            : "Nueva solicitud",
+        })}
+      />
+      {/* La misma pantalla de adjuntos que en visitas: acá para la cédula y los
+          respaldos de la solicitud. */}
+      <SolicitudesStack.Screen
+        name="Adjuntos"
+        component={AdjuntosScreen}
+        options={{ title: "Adjuntos de la solicitud" }}
       />
     </SolicitudesStack.Navigator>
   );
@@ -162,13 +174,24 @@ function VisitasStackScreens() {
         })}
       />
       <VisitasStack.Screen
-        name="NuevaVisita"
-        component={NuevaVisitaScreen}
-        options={{ title: "Nueva visita" }}
+        name="VisitaDetail"
+        component={VisitaDetailScreen}
+        options={{ title: "Visita" }}
       />
       <VisitasStack.Screen
-        name="FotosVisita"
-        component={FotosVisitaScreen}
+        name="NuevaVisita"
+        component={NuevaVisitaScreen}
+        // El título depende de si viene con visitaId: la misma pantalla sirve
+        // para crear y para editar.
+        options={({ route }) => ({
+          title: (route.params as { visitaId?: string })?.visitaId
+            ? "Editar visita"
+            : "Nueva visita",
+        })}
+      />
+      <VisitasStack.Screen
+        name="Adjuntos"
+        component={AdjuntosScreen}
         options={{ title: "Fotos de la visita" }}
       />
     </VisitasStack.Navigator>
@@ -220,6 +243,22 @@ function MainTabs() {
 }
 
 // ─── Drawer ──────────────────────────────────────────────────────────
+
+/**
+ * Etiqueta del botón de sincronizar.
+ *
+ * Separa "sin enviar" de "sin cerrar" porque son dos situaciones distintas para el
+ * usuario: lo primero se resuelve sincronizando, lo segundo no —esa fila espera un
+ * evento de negocio, como imprimir un recibo—. Con un solo número, sincroniza, el
+ * contador no baja a cero y no se entiende por qué.
+ */
+function etiquetaSync(p: { porEnviar: number; retenidas: number; total: number }): string {
+  if (p.total === 0) return "Sincronizar todo";
+  const partes: string[] = [];
+  if (p.porEnviar > 0) partes.push(`${p.porEnviar} sin enviar`);
+  if (p.retenidas > 0) partes.push(`${p.retenidas} sin cerrar`);
+  return `Sincronizar (${partes.join(" · ")})`;
+}
 
 /** Zonas por nombre ("MIRAMAR"), con el código como respaldo si falta el nombre. */
 function descripcionZonas(
@@ -318,17 +357,11 @@ function CustomDrawer(props: DrawerContentComponentProps) {
       </View>
 
       <DrawerItem
-        label={
-          syncing
-            ? "Sincronizando..."
-            : pendientes > 0
-              ? `Sincronizar (${pendientes} sin enviar)`
-              : "Sincronizar todo"
-        }
+        label={syncing ? "Sincronizando..." : etiquetaSync(pendientes)}
         onPress={handleSync}
         labelStyle={[
           styles.drawerLabel,
-          pendientes > 0 ? { color: "#fbbf24", fontWeight: "700" } : null,
+          pendientes.total > 0 ? { color: "#fbbf24", fontWeight: "700" } : null,
         ]}
       />
       <DrawerItem

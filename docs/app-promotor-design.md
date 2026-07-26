@@ -278,15 +278,65 @@ de conflictos con la web. Queda pendiente aparte.
 
 ---
 
-## 4. Fotos
+## 3.quinquies Política de edición: el ciclo de vida de la fila
 
-`rc_Visita` documenta las fotos como `mt.Attachments` con `recordKey = IdVisita`. El
-contrato de sync es JSON y no transporta binarios, así que las fotos **no viajan por el
-sync** — van por el endpoint que ya existe:
+`SyncPolicy` dice la **dirección** (pull / push / bidireccional). `PoliticaEdicion`
+dice el **ciclo de vida** en el teléfono: hasta cuándo se edita y cuándo se envía.
+Son ejes ortogonales, y hasta ahora el segundo estaba hardcodeado en el código de
+la app.
+
+| política | editable | se envía | ejemplos |
+|---|---|---|---|
+| `automatica` | no | apenas se guarda | productores, catálogos |
+| `hasta-sync` | mientras no subió | cuando el usuario sincroniza | solicitudes, visitas |
+| `hasta-evento` | hasta que se cierra | al cerrarse | recibos de café (al imprimir) |
+
+**Regla que atraviesa todo: ya sincronizado ⇒ read-only en el móvil.** Corregir algo
+que ya subió es trabajo de la web. Por eso el BE no valida ediciones — nunca le
+llegan.
+
+`CampoCierre` nombra la columna que marca la fila como firme en `hasta-evento`. Es
+una columna **real que viaja al servidor**, no un estado local: para un documento
+importa saber cuándo se cerró.
+
+### Las dos consecuencias no obvias
+
+**1. Retener en el push no es filtrar.** WatermelonDB marca como sincronizado TODO
+lo que pasó por `pushChanges`, se haya enviado o no. Filtrar el bucket a secas
+habría hecho que las filas retenidas se marcaran synced **y nunca se enviaran**.
+La salida es devolver `{ experimentalRejectedIds }`, que le dice a WMDB qué ids no
+marcar.
+
+Eso además destapó un bug que estaba desde antes: los **rechazos del servidor** se
+manejaban escribiéndole `push_status` a la fila ya marcada como synced, lo que la
+volteaba de `created` a `updated`. Y como el BE rechaza `updated` con
+`NOT_SUPPORTED`, una fila rechazada habría quedado reintentándose para siempre sin
+poder crearse nunca. No se vio porque en las pruebas el orden padre→hijo siempre
+funcionó a la primera. Ahora los rechazos también van por `experimentalRejectedIds`
+y se reintentan como `created`.
+
+**2. "No sincronicé" y "no puedo sincronizar" son cosas distintas.** Una fila
+retenida no se resuelve sincronizando: espera un evento de negocio. Con un solo
+contador el usuario sincroniza, el número no baja a cero y no entiende por qué. De
+ahí que el drawer muestre `Sincronizar (3 sin enviar · 1 sin cerrar)`.
+
+---
+
+## 4. Adjuntos
+
+El contrato de sync es JSON y no transporta binarios, así que los adjuntos **no
+viajan por el sync** — van por el endpoint genérico que ya existe:
 
 ```
-POST /attachments/Visita/{serverId}   multipart: file, notes
+POST /attachments/{EntityName}/{serverId}   multipart: file, notes
 ```
+
+**Genéricos por (colección, registro), no atados a visitas.** Arrancó como "fotos de
+visita" y esa fue una limitación autoimpuesta: el platform ya guarda los adjuntos por
+`(EntityId, RecordKey)`, así que el mismo mecanismo sirve para la cédula y los
+respaldos de una solicitud. La cola local es `(coleccion, registro_local_id)` y el
+`EntityName` sale del **manifest** — no de un mapa colección→entidad en la app, que
+se desincronizaría.
 
 El `recordKey` tiene que ser el id del servidor, que no existe hasta que el push de la
 visita fue aceptado. De ahí el diseño:
@@ -371,6 +421,31 @@ Cada fase es independientemente verificable.
 - GPS: [`gps.ts`](../apps/promotor/src/lib/gps.ts). Se pide al abrir el form, no al guardar — el fix bajo sombra de cafetal tarda. `Accuracy.Balanced` alcanza para ubicar una finca. Si no engancha, la visita se guarda igual sin coordenadas.
 - Fotos: [`FotosVisitaScreen`](../apps/promotor/src/screens/FotosVisitaScreen.tsx) captura y encola; [`fotos.ts`](../apps/promotor/src/lib/fotos.ts) redimensiona a 1280px/JPEG 0.7 y sube post-sync.
 - **Pendiente**: dev client build nuevo — `expo-camera`, `expo-location` y `expo-image-manipulator` son native modules y no corren en el binario actual.
+
+---
+
+## 6.bis Pendiente: auditoría de sync en la LogDB
+
+**Ya está diseñada y sin implementar.** `Modules/Mobile/Sql/01_MobileSyncSchema.sql`
+la tiene comentada al final: tabla `dbo.MobileSyncLog` en la **LogDB** (no en la app
+DB) con `OccurredAt, UserId, DeviceId, AppId, AppVersion, Direction, Collection,
+RowsCount, RejectedCount, DurationMs, Status, ErrorMessage`.
+
+Existe la infraestructura para hacerlo sin inventar nada: `Logging/LogDbContext.cs`,
+`Logging/LogService.cs` y el patrón de las tablas hermanas (`FEEnvioLog`,
+`BccrFetchLog`, `PollingRunLog`, `ReportRunLog`).
+
+**Por qué vale la pena y no es opcional a futuro**: en la sesión donde salió el bug
+del case de los uuid, el sync era una caja negra. Desde el servidor no había forma de
+distinguir "el teléfono no mandó nada", "mandó y rechacé" y "mandó, acepté y el
+cliente no se enteró" — los tres se veían igual. Hubo que instrumentar el cliente con
+`console.info` y leer logcat por USB, algo imposible con un promotor en el campo.
+
+Con la tabla, un rechazo o una fila que no se marca quedan registrados del lado del
+servidor, consultables sin tener el teléfono a mano.
+
+Los logs de cliente (`[sync] push …`, `[adjuntos] …`) se dejan puestos: son
+complementarios, no un reemplazo.
 
 ---
 

@@ -4,8 +4,9 @@ import { database } from "./db";
 import { getSyncClient } from "./api";
 import { config } from "./config";
 import { COLLECTIONS } from "../db/schema";
-import { flushPendingUploads, purgarFotosLocales, registrarServerIds } from "./fotos";
+import { flushAdjuntos, purgarAdjuntosLocales, registrarServerIds } from "./adjuntos";
 import { useSesion } from "./sesion";
+import { cargarPoliticas, puedeEnviarse } from "./politicas";
 
 /** Colecciones que el teléfono origina y por lo tanto pueden tener pendientes. */
 const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas"] as const;
@@ -26,10 +27,23 @@ const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas"] as const;
 export async function syncNow(): Promise<void> {
   const api = getSyncClient();
 
+  // Las políticas se refrescan en cada sync: son config del servidor y pueden
+  // cambiar sin republicar la app. Si el manifest falla se sigue con lo que haya
+  // en sesión (o el default conservador) — no vale abortar el sync por esto.
+  try {
+    useSesion.getState().setPoliticas(await cargarPoliticas());
+  } catch (err) {
+    console.info("no se pudo refrescar el manifest de políticas", err);
+  }
+  const politicas = useSesion.getState().politicas;
+
   const pushResponses = await runSync(database, {
     api,
     collections: [...COLLECTIONS],
     schemaVersion: config.schemaVersion,
+    // Retención: una fila con política hasta-evento no sale hasta que su campo
+    // de cierre tiene valor (ej. recibo impreso).
+    puedeEnviar: (coleccion, fila) => puedeEnviarse(politicas, coleccion, fila),
   });
 
   // Guardar los localId → serverId de lo que se acaba de aceptar, ANTES de
@@ -44,9 +58,9 @@ export async function syncNow(): Promise<void> {
   // No propagamos — el sync de datos ya fue exitoso y el usuario no puede
   // hacer nada distinto con el error.
   try {
-    await flushPendingUploads();
+    await flushAdjuntos();
   } catch (err) {
-    console.warn("flushPendingUploads falló; las fotos siguen encoladas", err);
+    console.warn("flushAdjuntos falló; los adjuntos siguen encolados", err);
   }
 
   // Purga de copias locales vencidas. Acá y no en un job aparte porque no hay
@@ -55,7 +69,7 @@ export async function syncNow(): Promise<void> {
   // activa y conectada. Best-effort — que falle no invalida el sync.
   try {
     const dias = useSesion.getState().retencionFotosDias;
-    const borradas = await purgarFotosLocales(dias);
+    const borradas = await purgarAdjuntosLocales(dias);
     if (borradas > 0) {
       console.info(`[fotos] ${borradas} copia(s) local(es) purgada(s) tras ${dias} días`);
     }

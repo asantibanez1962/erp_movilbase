@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   Alert,
   KeyboardAvoidingView,
@@ -8,7 +8,9 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { crearVisita } from "../lib/crear";
+import { actualizarVisita, crearVisita } from "../lib/crear";
+import { Visita } from "../db/models";
+import { database } from "../lib/db";
 import { obtenerPunto, type Punto } from "../lib/gps";
 import { useSesion } from "../lib/sesion";
 import { colores, estilos } from "./estilos";
@@ -48,7 +50,14 @@ type PickerAbierto =
  * sombra de cafetal tarda, y arrancarlo temprano hace que casi siempre esté
  * listo cuando el promotor termina de escribir.
  */
-export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>) {
+export function NuevaVisitaScreen({
+  navigation,
+  route,
+}: Readonly<{ navigation: any; route?: any }>) {
+  // Con visitaId el form entra en modo edición. Se reusa la misma pantalla para
+  // no mantener dos listas de campos que se desincronizan.
+  const visitaId: string | undefined = route?.params?.visitaId;
+  const [editando, setEditando] = useState<Visita | null>(null);
   const productores = useOpcionesProductor();
   const recibidores = useOpcionesRecibidor();
   const { opciones: tiposOpciones, tipos } = useOpcionesTipoVisita();
@@ -81,6 +90,32 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
     };
   }, []);
 
+  // Modo edición: precargar la visita existente.
+  useEffect(() => {
+    if (!visitaId) return;
+    let cancelado = false;
+    database
+      .get<Visita>("visitas")
+      .find(visitaId)
+      .then((v) => {
+        if (cancelado) return;
+        setEditando(v);
+        setTipoId(String(v.idTipoVisita));
+        setProductorId(v.idSocio != null ? String(v.idSocio) : null);
+        setRecibidorCodigo(v.recibidor?.trim() ?? null);
+        setFincaId(v.idFinca != null ? String(v.idFinca) : null);
+        setSolicitudId(v.idSolicitud ?? null);
+        setObservaciones(v.observaciones ?? "");
+        setProdEstimada(
+          v.prodEstimadaPromotor != null ? String(v.prodEstimadaPromotor) : ""
+        );
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelado = true;
+    };
+  }, [visitaId]);
+
   const idSocio = productorId != null ? Number(productorId) : null;
   const fincas = useOpcionesFinca(Number.isNaN(idSocio) ? null : idSocio);
   const solicitudes = useOpcionesSolicitud(Number.isNaN(idSocio) ? null : idSocio);
@@ -93,8 +128,21 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
   const exigeRecibidor = tipo?.exigeRecibidor ?? false;
   const exigeSolicitud = tipo?.exigeSolicitud ?? false;
 
+  // Los dos efectos de limpieza reaccionan sólo a cambios HECHOS POR EL USUARIO.
+  // Sin los refs se disparaban también en el primer render y al precargar en modo
+  // edición, borrando justo lo que se acababa de cargar — y peor: al precargar, el
+  // catálogo de tipos puede no haber bajado aún, así que `tipo` era undefined,
+  // todos los exige* daban false y se limpiaba todo.
+  const productorAnterior = useRef<string | null | undefined>(undefined);
+  const tipoAnterior = useRef<string | null | undefined>(undefined);
+
   // Cambiar de productor invalida finca y solicitud: pertenecen al anterior.
   useEffect(() => {
+    const cambioReal =
+      productorAnterior.current !== undefined &&
+      productorAnterior.current !== productorId;
+    productorAnterior.current = productorId;
+    if (!cambioReal) return;
     setFincaId(null);
     setSolicitudId(null);
   }, [productorId]);
@@ -103,6 +151,10 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
   // ya no aplica y arrastrarlo guardaría, por ejemplo, un recibidor en una
   // visita a finca.
   useEffect(() => {
+    const cambioReal =
+      tipoAnterior.current !== undefined && tipoAnterior.current !== tipoId;
+    tipoAnterior.current = tipoId;
+    if (!cambioReal) return;
     if (!exigeProductor) setProductorId(null);
     if (!exigeRecibidor) setRecibidorCodigo(null);
     if (!exigeFinca) setFincaId(null);
@@ -131,17 +183,25 @@ export function NuevaVisitaScreen({ navigation }: Readonly<{ navigation: any }>)
         throw new Error("Productor inválido.");
       }
 
-      await crearVisita({
+      const datos = {
         idTipoVisita: tipoNum,
         idSocio: socio,
         recibidor: exigeRecibidor ? recibidorCodigo : null,
-        idFinca: fincaId != null ? Number(fincaId) : null,
-        idSolicitudLocal: solicitudId,
+        idFinca: exigeFinca && fincaId != null ? Number(fincaId) : null,
+        idSolicitudLocal: exigeSolicitud ? solicitudId : null,
         observaciones: observaciones.trim() || null,
         prodEstimadaPromotor: aNumero(prodEstimada),
         gpsLat: punto?.lat ?? null,
         gpsLng: punto?.lng ?? null,
-      });
+      };
+
+      if (editando) {
+        await actualizarVisita(editando, datos);
+        navigation.goBack();
+        return;
+      }
+
+      await crearVisita(datos);
 
       // Sin sync automático, igual que en solicitudes: el promotor todavía tiene
       // que sacarle las fotos a esta visita. Sincroniza desde el drawer al

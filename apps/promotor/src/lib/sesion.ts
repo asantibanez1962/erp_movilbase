@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import * as SecureStore from "expo-secure-store";
 import { config } from "./config";
+import type { MapaPoliticas } from "./politicas";
 
 /**
  * Sesión de trabajo del promotor: empresa + cosecha.
@@ -32,6 +33,12 @@ export interface SesionState {
   todasLasZonas: boolean;
   /** Días que se conserva la copia local de una foto subida. Viene del servidor. */
   retencionFotosDias: number;
+  /**
+   * Política de edición/envío por colección, del manifest. Gobierna si la app
+   * ofrece editar una fila y si retiene su envío. Vacío hasta el primer manifest;
+   * politicaDe() cae a un default conservador.
+   */
+  politicas: MapaPoliticas;
   hidratando: boolean;
 
   hidratar: () => Promise<void>;
@@ -43,6 +50,7 @@ export interface SesionState {
     todasLasZonas: boolean;
     retencionFotosDias?: number;
   }) => Promise<void>;
+  setPoliticas: (p: MapaPoliticas) => void;
   limpiar: () => Promise<void>;
 }
 
@@ -53,6 +61,7 @@ export const useSesion = create<SesionState>((set) => ({
   zonasNombres: [],
   todasLasZonas: false,
   retencionFotosDias: 30,
+  politicas: {},
   hidratando: true,
 
   hidratar: async () => {
@@ -97,6 +106,8 @@ export const useSesion = create<SesionState>((set) => ({
     });
   },
 
+  setPoliticas: (politicas) => set({ politicas }),
+
   limpiar: async () => {
     await Promise.all([
       SecureStore.deleteItemAsync(K_EMPRESA),
@@ -108,6 +119,7 @@ export const useSesion = create<SesionState>((set) => ({
       zonas: [],
       zonasNombres: [],
       todasLasZonas: false,
+      politicas: {},
     });
   },
 }));

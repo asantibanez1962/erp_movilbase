@@ -8,9 +8,17 @@ import {
   View,
 } from "react-native";
 import { Q } from "@nozbe/watermelondb";
-import { Entregador, Productor, Solicitud, TipoDesembolso } from "../db/models";
+import {
+  Entregador,
+  PendingUpload,
+  Productor,
+  Solicitud,
+  TipoDesembolso,
+} from "../db/models";
 import { database } from "../lib/db";
 import { crearEntregador, eliminarEntregador } from "../lib/crear";
+import { useSesion } from "../lib/sesion";
+import { esEditable } from "../lib/politicas";
 import { colores, estilos, fmtFecha, fmtMoneda } from "./estilos";
 import { useNombresProductor } from "./useNombresProductor";
 import { EstadoPush } from "./EstadoPush";
@@ -41,11 +49,13 @@ export function SolicitudDetailScreen({
   const [solicitud, setSolicitud] = useState<Solicitud | null>(null);
   const [entregadores, setEntregadores] = useState<Entregador[]>([]);
   const [tipos, setTipos] = useState<TipoDesembolso[]>([]);
+  const [adjuntos, setAdjuntos] = useState<PendingUpload[]>([]);
   const [cargando, setCargando] = useState(true);
   const [pickerAbierto, setPickerAbierto] = useState(false);
   const [pestania, setPestania] = useState<Pestania>("datos");
   const nombres = useNombresProductor();
   const nombresZona = useNombresZona();
+  const politicas = useSesion((s) => s.politicas);
   const productores = useOpcionesProductor();
 
   useEffect(() => {
@@ -72,10 +82,20 @@ export function SolicitudDetailScreen({
       .observe()
       .subscribe(setTipos);
 
+    const subAdj = database
+      .get<PendingUpload>("pending_uploads")
+      .query(
+        Q.where("coleccion", "solicitudes"),
+        Q.where("registro_local_id", solicitudId)
+      )
+      .observe()
+      .subscribe(setAdjuntos);
+
     return () => {
       cancelado = true;
       subEnt.unsubscribe();
       subTipos.unsubscribe();
+      subAdj.unsubscribe();
     };
   }, [solicitudId]);
 
@@ -191,9 +211,10 @@ export function SolicitudDetailScreen({
         />
       </View>
 
-      {/* Editar sólo mientras no subió: una vez sincronizada, el push del BE
-          rechaza `updated` y la corrección va por la web. */}
-      {s.esLocal ? (
+      {/* Si se puede editar lo decide la POLÍTICA de la colección, no el código:
+          hoy `solicitudes` es hasta-sync (editable mientras no subió), pero eso
+          es configuración del servidor y puede cambiar sin tocar la app. */}
+      {esEditable(politicas, "solicitudes", s) ? (
         <TouchableOpacity
           style={{
             paddingVertical: 12,
@@ -211,6 +232,32 @@ export function SolicitudDetailScreen({
           </Text>
         </TouchableOpacity>
       ) : null}
+
+      {/* Adjuntos: cédula del productor y respaldos del crédito. Disponibles
+          siempre, sincronizada o no — suben contra el id de servidor de la
+          solicitud y no la modifican. */}
+      <TouchableOpacity
+        style={{
+          paddingVertical: 12,
+          alignItems: "center",
+          backgroundColor: colores.superficie,
+          borderBottomWidth: 1,
+          borderBottomColor: colores.borde,
+        }}
+        onPress={() =>
+          navigation.navigate("Adjuntos", {
+            coleccion: "solicitudes",
+            registroLocalId: s.id,
+            titulo: "Adjuntar documento",
+          })
+        }
+      >
+        <Text style={{ color: colores.primario, fontWeight: "700", fontSize: 15 }}>
+          {adjuntos.length === 0
+            ? "📎 Adjuntar cédula o respaldos"
+            : `📎 Adjuntos (${adjuntos.filter((a) => a.yaSubio).length} enviado(s), ${adjuntos.filter((a) => !a.yaSubio).length} en cola)`}
+        </Text>
+      </TouchableOpacity>
 
       {pestania === "datos" ? (
         <ScrollView>

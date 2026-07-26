@@ -95,9 +95,7 @@ export function VisitasScreen({ navigation }: Readonly<{ navigation: any }>) {
         renderItem={({ item }) => (
           <TouchableOpacity
             style={estilos.fila}
-            onPress={() =>
-              navigation.navigate("FotosVisita", { visitaLocalId: item.id })
-            }
+            onPress={() => navigation.navigate("VisitaDetail", { visitaId: item.id })}
           >
             <Text style={estilos.filaTitulo}>
               {item.idSocio != null

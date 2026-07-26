@@ -42,7 +42,11 @@ async function crearConUuid<T extends Model>(
   tabla: string,
   aplicar: (rec: T, uuid: string) => void
 ): Promise<T> {
-  const uuid = randomUUID();
+  // MINÚSCULAS, siempre. Es la forma canónica del texto UUID y la que devuelve la
+  // proyección del pull (v1.53/RC/51). SQL Server renderiza UNIQUEIDENTIFIER en
+  // MAYÚSCULAS, y como los ids de WatermelonDB son case-sensitive, una diferencia
+  // de case hace que la fila que vuelve del servidor se vea como OTRA y se duplique.
+  const uuid = randomUUID().toLowerCase();
   return database.write(async () =>
     database.get<T>(tabla).create((rec) => {
       // WMDB permite fijar el id sólo en el momento de la creación.
@@ -129,6 +133,42 @@ export async function actualizarSolicitud(
       rec.prodEstimada = input.prodEstimada ?? null;
       // Un intento anterior pudo haber quedado marcado como rechazado; al editar
       // se limpia para que el badge no siga mostrando un error ya corregido.
+      rec.pushStatus = null;
+      rec.pushError = null;
+    });
+  });
+}
+
+/**
+ * Edita una visita que todavía no subió. Mismo criterio que la solicitud: es
+ * puramente local mientras WatermelonDB la mantiene en 'created'.
+ *
+ * No se tocan cosecha ni compania (contexto heredado) ni el GPS: el punto se
+ * capturó donde y cuando ocurrió la visita, y reescribirlo desde otro lugar
+ * falsearía el dato. Si el GPS quedó vacío, se puede volver a intentar.
+ */
+export async function actualizarVisita(
+  visita: Visita,
+  input: Omit<NuevaVisitaInput, "fecha"> & { gpsLat?: number | null; gpsLng?: number | null }
+): Promise<void> {
+  if (visita.syncStatus !== "created") {
+    throw new Error(
+      "Esta visita ya se sincronizó; los cambios se hacen desde el ERP web."
+    );
+  }
+
+  await database.write(async () => {
+    await visita.update((rec) => {
+      rec.idTipoVisita = input.idTipoVisita;
+      rec.idSocio = input.idSocio;
+      rec.recibidor = input.recibidor ?? null;
+      rec.idFinca = input.idFinca ?? null;
+      rec.idSolicitud = input.idSolicitudLocal ?? null;
+      rec.observaciones = input.observaciones ?? null;
+      rec.prodEstimadaPromotor = input.prodEstimadaPromotor ?? null;
+      // Sólo se completa si faltaba; no se sobreescribe un punto ya tomado.
+      if (rec.gpsLat == null && input.gpsLat != null) rec.gpsLat = input.gpsLat;
+      if (rec.gpsLng == null && input.gpsLng != null) rec.gpsLng = input.gpsLng;
       rec.pushStatus = null;
       rec.pushError = null;
     });

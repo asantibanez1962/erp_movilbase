@@ -310,10 +310,18 @@ export class ServerId extends Model {
   @field("created_at") createdAt!: number;
 }
 
+/**
+ * Adjunto pendiente de subir (o ya subido, con su copia local conservada).
+ *
+ * Genérico por (coleccion, registroLocalId): sirve para las fotos de una visita y
+ * para la cédula y respaldos de una solicitud. El platform ya guarda los adjuntos
+ * por (EntityId, RecordKey), así que atarlo a visitas era una limitación nuestra.
+ */
 export class PendingUpload extends Model {
   static readonly table = "pending_uploads";
 
-  @field("visita_local_id") visitaLocalId!: string;
+  @field("coleccion") coleccion!: string;
+  @field("registro_local_id") registroLocalId!: string;
   @field("file_uri") fileUri!: string;
   /** 'pending' | 'subida' | 'error' */
   @field("status") status!: string;

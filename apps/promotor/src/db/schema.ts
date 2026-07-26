@@ -255,14 +255,22 @@ export const schema = appSchema({
       ],
     }),
 
-    // ─── Cola local de fotos (NO se sincroniza) ─────────────────────────
-    // No está en COLLECTIONS ni en mt.MobileCollections: las fotos no viajan
-    // por el sync (es JSON), suben aparte a POST /attachments/Visita/{serverId}
-    // una vez que la visita fue aceptada y tiene id del servidor.
+    // ─── Cola local de adjuntos (NO se sincroniza) ──────────────────────
+    // No está en COLLECTIONS ni en mt.MobileCollections: los binarios no viajan
+    // por el sync (el contrato es JSON), suben aparte a
+    // POST /attachments/{Entity}/{serverId} una vez que el registro dueño fue
+    // aceptado y tiene id del servidor.
+    //
+    // Genérico por (coleccion, registro): arrancó como cola de fotos de visita,
+    // pero es el mismo mecanismo que necesita una solicitud para su cédula y
+    // respaldos. El platform ya lo tiene genérico —mt.Attachments por
+    // (EntityId, RecordKey)— así que atarlo a una entidad era una limitación
+    // nuestra, no suya.
     tableSchema({
       name: "pending_uploads",
       columns: [
-        { name: "visita_local_id", type: "string", isIndexed: true },
+        { name: "coleccion", type: "string", isIndexed: true },
+        { name: "registro_local_id", type: "string", isIndexed: true },
         { name: "file_uri", type: "string" },
         // 'pending' → falta subir | 'subida' → ya está en el servidor, la copia
         // local se conserva para verla sin señal | 'error' → falló, reintenta
