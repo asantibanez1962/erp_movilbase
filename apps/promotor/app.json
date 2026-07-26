@@ -1,0 +1,55 @@
+{
+  "expo": {
+    "name": "Promotor",
+    "slug": "promotor",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "cr.confeldan.promotor",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "ACCESS_COARSE_LOCATION",
+        "ACCESS_FINE_LOCATION",
+        "CAMERA"
+      ]
+    },
+    "extra": {
+      "apiBaseUrl": "http://10.0.2.2:5249"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Promotor usa tu ubicación para registrar el punto GPS de la visita al productor."
+        }
+      ],
+      [
+        "expo-camera",
+        {
+          "cameraPermission": "Promotor usa la cámara para adjuntar fotos a la visita de campo."
+        }
+      ],
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "owner": "alfredosantibanez"
+  }
+}

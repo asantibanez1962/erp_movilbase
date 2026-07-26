@@ -1,11 +1,11 @@
-import { Database } from "@nozbe/watermelondb";
+import { AppSchema, Database, Model } from "@nozbe/watermelondb";
 import SQLiteAdapter from "@nozbe/watermelondb/adapters/sqlite";
-import { schema } from "./schema";
-import { Productor } from "./models/Productor";
-import { Recibo } from "./models/Recibo";
 
 /**
- * Factory de la WMDB Database. Cada app instancia la suya en el bootstrap.
+ * Factory de la WMDB Database. Cada app instancia la suya en el bootstrap
+ * pasando SU schema y SUS models — no hay default. Los tuvo mientras
+ * recibos-cr era la única app; con la segunda (promotor) un default silencioso
+ * significaría arrastrar tablas ajenas al SQLite equivocado.
  *
  * dbName: nombre del archivo SQLite local. Recomendado mismo que appId
  * para que múltiples apps en el mismo phone no compartan SQLite.
@@ -15,10 +15,14 @@ import { Recibo } from "./models/Recibo";
  * más lento que JSI por call pero invisible para nuestro volumen (1K rows).
  * Cuando WMDB actualice su Expo plugin para new arch, volvemos a jsi: true.
  */
-export function createDatabase(opts: { dbName: string }): Database {
+export function createDatabase(opts: {
+  dbName: string;
+  schema: AppSchema;
+  modelClasses: Array<typeof Model>;
+}): Database {
   const adapter = new SQLiteAdapter({
     dbName: opts.dbName,
-    schema,
+    schema: opts.schema,
     // migrations: [], // sumar cuando bumpeemos schema version
     jsi: false,
     onSetUpError: (error) => {
@@ -28,6 +32,6 @@ export function createDatabase(opts: { dbName: string }): Database {
 
   return new Database({
     adapter,
-    modelClasses: [Productor, Recibo],
+    modelClasses: opts.modelClasses,
   });
 }

@@ -45,10 +45,19 @@ type ChangeBucket = {
   deleted: string[];
 };
 
+/**
+ * Devuelve las responses del push por colección. Quien llame puede necesitar los
+ * `accepted[]` para trabajo que depende del id del servidor — hoy, subir las
+ * fotos de una visita a /attachments/Visita/{serverId}.
+ *
+ * Se devuelven en vez de escribir el server id en la fila local a propósito:
+ * cualquier write sobre una fila ya sincronizada la marca como 'updated' y WMDB
+ * la re-pushea en el sync siguiente (ver la nota larga arriba).
+ */
 export async function runSync(
   db: Database,
   opts: SyncOptions
-): Promise<void> {
+): Promise<Record<string, PushResponse>> {
   // Captura responses de pushChanges para procesar accepted/rejected
   // post-synchronize. WMDB no nos deja devolverlas directo (pushChanges
   // espera void), pero el closure las acumula sin problema.
@@ -102,7 +111,22 @@ export async function runSync(
     pushChanges: async ({ changes, lastPulledAt }) => {
       const buckets = changes as unknown as Record<string, ChangeBucket>;
 
-      for (const [collName, bucket] of Object.entries(buckets)) {
+      // Orden de push = orden de opts.collections, NO el de Object.entries.
+      // Importa cuando una colección es hija de otra (entregadores → solicitudes):
+      // el BE resuelve la FK del hijo contra mt.MobileIdMap, que sólo tiene la
+      // entrada del padre si el padre ya subió. Con el orden del objeto, un hijo
+      // podía viajar primero y volver como UNRESOLVED_PARENT — se recuperaba en el
+      // sync siguiente, pero mostrándole al usuario un rechazo que no existía.
+      //
+      // Las colecciones que WMDB reporte y no estén declaradas van al final, para
+      // no perder cambios si el schema local se adelanta a la config.
+      const declared = opts.collections.filter((c) => c in buckets);
+      const extra = Object.keys(buckets).filter((c) => !opts.collections.includes(c));
+
+      for (const collName of [...declared, ...extra]) {
+        const bucket = buckets[collName];
+        // Sólo por el índice tipado: ambas listas salen de claves que existen.
+        if (!bucket) continue;
         const isEmpty =
           bucket.created.length === 0 &&
           bucket.updated.length === 0 &&
@@ -141,6 +165,8 @@ export async function runSync(
       }
     }
   });
+
+  return pushResponses;
 }
 
 async function safeFind(

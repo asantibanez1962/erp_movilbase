@@ -1,10 +1,18 @@
-import { createDatabase } from "@erp/shared-sync";
+import { createDatabase, schema, Productor, Recibo } from "@erp/shared-sync";
 
 /**
  * Singleton de la WMDB Database del app. Llamado UNA vez al boot del app
  * (en bootstrapApi). Después se importa desde donde se necesite.
+ *
+ * schema + modelClasses son explícitos desde que hay más de una app en el
+ * monorepo (ver createDatabase). Los de recibos-cr todavía viven en
+ * shared-sync por historia; los de promotor viven en su propia app.
  */
-export const database = createDatabase({ dbName: "recibos-cr" });
+export const database = createDatabase({
+  dbName: "recibos-cr",
+  schema,
+  modelClasses: [Productor, Recibo],
+});
 
 /**
  * TTL para purga de recibos ya sincronizados. Los recibos enviados quedan
