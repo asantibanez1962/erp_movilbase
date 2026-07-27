@@ -12,6 +12,7 @@ import { actualizarVisita, crearVisita } from "../lib/crear";
 import { Visita } from "../db/models";
 import { database } from "../lib/db";
 import { obtenerPunto, type Punto } from "../lib/gps";
+import { abrirAjustesDeLaApp, permisoUbicacion } from "../lib/permisos";
 import { useSesion } from "../lib/sesion";
 import { colores, estilos } from "./estilos";
 import { PickerModal } from "./componentes/Picker";
@@ -74,16 +75,19 @@ export function NuevaVisitaScreen({
   const [guardando, setGuardando] = useState(false);
 
   const [punto, setPunto] = useState<Punto | null>(null);
-  const [gpsEstado, setGpsEstado] = useState<"buscando" | "listo" | "sin-senal">(
-    "buscando"
-  );
+  const [gpsEstado, setGpsEstado] = useState<
+    "buscando" | "listo" | "sin-senal" | "sin-permiso"
+  >("buscando");
 
   useEffect(() => {
     let cancelado = false;
-    obtenerPunto().then((p) => {
+    // Sin pedir permiso: acá el fix se busca solo, y un diálogo de sistema al abrir
+    // la pantalla interrumpe la captura. Si falta el permiso se dice en la fila del
+    // GPS y se pide cuando el promotor la toca.
+    obtenerPunto().then((r) => {
       if (cancelado) return;
-      setPunto(p);
-      setGpsEstado(p ? "listo" : "sin-senal");
+      setPunto(r.punto);
+      setGpsEstado(r.punto ? "listo" : (r.motivo ?? "sin-senal"));
     });
     return () => {
       cancelado = true;
@@ -213,11 +217,34 @@ export function NuevaVisitaScreen({
     }
   };
 
+  /**
+   * Reintento explícito. Acá SÍ se pide el permiso si falta: el promotor tocó la
+   * fila, así que el diálogo es la respuesta a algo que él pidió. Y si Android ya no
+   * lo va a mostrar (denegado dos veces, o auto-revocado), se lo manda a Ajustes en
+   * vez de dejarlo tocando un botón que no hace nada.
+   */
   const reintentarGps = async () => {
+    if (gpsEstado === "sin-permiso") {
+      const permiso = await permisoUbicacion(true);
+      if (!permiso.concedido) {
+        if (!permiso.puedeVolverAPreguntar) {
+          Alert.alert(
+            "Permiso de ubicación bloqueado",
+            "Android ya no va a preguntar por este permiso. Hay que activarlo a mano en Ajustes → Permisos → Ubicación, eligiendo \"Mientras usas la app\".",
+            [
+              { text: "Después", style: "cancel" },
+              { text: "Abrir ajustes", onPress: () => void abrirAjustesDeLaApp() },
+            ]
+          );
+        }
+        return;
+      }
+    }
+
     setGpsEstado("buscando");
-    const p = await obtenerPunto();
-    setPunto(p);
-    setGpsEstado(p ? "listo" : "sin-senal");
+    const r = await obtenerPunto(true);
+    setPunto(r.punto);
+    setGpsEstado(r.punto ? "listo" : (r.motivo ?? "sin-senal"));
   };
 
   return (
@@ -318,12 +345,7 @@ export function NuevaVisitaScreen({
               },
             ]}
           >
-            {gpsEstado === "listo" && punto
-              ? `📍 ${punto.lat.toFixed(5)}, ${punto.lng.toFixed(5)}` +
-                (punto.precisionM ? ` (±${Math.round(punto.precisionM)} m)` : "")
-              : gpsEstado === "buscando"
-                ? "Buscando señal..."
-                : "Sin señal — tocá para reintentar"}
+            {textoGps(gpsEstado, punto)}
           </Text>
         </TouchableOpacity>
 
@@ -332,11 +354,11 @@ export function NuevaVisitaScreen({
           onPress={guardar}
           deshabilitado={!puedeGuardar}
         />
-        {gpsEstado === "sin-senal" && (
+        {gpsEstado === "sin-senal" || gpsEstado === "sin-permiso" ? (
           <Text style={[estilos.vacioTexto, { paddingTop: 10 }]}>
             Se puede guardar sin GPS; la visita queda sin coordenadas.
           </Text>
-        )}
+        ) : null}
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -377,4 +399,21 @@ export function NuevaVisitaScreen({
       />
     </KeyboardAvoidingView>
   );
+}
+
+type EstadoGps = "buscando" | "listo" | "sin-senal" | "sin-permiso";
+
+/**
+ * "Sin permiso" y "sin señal" se dicen distinto porque se arreglan distinto:
+ * mostrarlos igual manda a caminar buscando señal a alguien que sólo tiene que
+ * tocar un botón.
+ */
+function textoGps(estado: EstadoGps, punto: Punto | null): string {
+  if (estado === "listo" && punto) {
+    const precision = punto.precisionM ? ` (±${Math.round(punto.precisionM)} m)` : "";
+    return `📍 ${punto.lat.toFixed(5)}, ${punto.lng.toFixed(5)}${precision}`;
+  }
+  if (estado === "buscando") return "Buscando señal...";
+  if (estado === "sin-permiso") return "Falta el permiso — tocá para darlo";
+  return "Sin señal — tocá para reintentar";
 }

@@ -424,28 +424,191 @@ Cada fase es independientemente verificable.
 
 ---
 
-## 6.bis Pendiente: auditoría de sync en la LogDB
+## 6.bis Auditoría del sync: las dos mitades — ✅ hecha
 
-**Ya está diseñada y sin implementar.** `Modules/Mobile/Sql/01_MobileSyncSchema.sql`
-la tiene comentada al final: tabla `dbo.MobileSyncLog` en la **LogDB** (no en la app
-DB) con `OccurredAt, UserId, DeviceId, AppId, AppVersion, Direction, Collection,
-RowsCount, RejectedCount, DurationMs, Status, ErrorMessage`.
+**El sync móvil es la parte del sistema que se opera a ciegas.** En la sesión del bug
+del case de los uuid, desde el servidor no había forma de distinguir "el teléfono no
+mandó nada", "mandó y rechacé" y "mandó, acepté y el cliente no se enteró": los tres
+se veían igual. Hubo que instrumentar el cliente con `console.info` y leer logcat por
+USB — algo imposible con un promotor en el campo.
 
-Existe la infraestructura para hacerlo sin inventar nada: `Logging/LogDbContext.cs`,
-`Logging/LogService.cs` y el patrón de las tablas hermanas (`FEEnvioLog`,
-`BccrFetchLog`, `PollingRunLog`, `ReportRunLog`).
+Se resolvió con **dos** registros, no uno, porque ninguno alcanza solo.
 
-**Por qué vale la pena y no es opcional a futuro**: en la sesión donde salió el bug
-del case de los uuid, el sync era una caja negra. Desde el servidor no había forma de
-distinguir "el teléfono no mandó nada", "mandó y rechacé" y "mandó, acepté y el
-cliente no se enteró" — los tres se veían igual. Hubo que instrumentar el cliente con
-`console.info` y leer logcat por USB, algo imposible con un promotor en el campo.
+### `dbo.MobileSyncLog` en la LogDB — lo que llegó al servidor
 
-Con la tabla, un rechazo o una fila que no se marca quedan registrados del lado del
-servidor, consultables sin tener el teléfono a mano.
+`Sql/LogDb/04_MobileSyncLog.sql` + `Logging/MobileSyncLog.cs` +
+`Modules/Mobile/Services/MobileSyncAuditService.cs`. Una fila por request (el pull y el
+push por separado, porque fallan por razones distintas): dispositivo, usuario, empresa,
+cosecha, `LastPulledAt`, filas movidas, aceptadas, rechazadas, duración, y el **motivo
+de cada rechazo** en el detalle — es lo que convierte "3 rechazadas" en algo accionable.
 
-Los logs de cliente (`[sync] push …`, `[adjuntos] …`) se dejan puestos: son
-complementarios, no un reemplazo.
+Tres decisiones que importan:
+
+- **`DeviceId` es la columna que hace útil a todas las demás.** Sin ella no se puede
+  separar "este teléfono tiene un problema" de "este usuario tiene un problema", que
+  son cosas distintas y se arreglan distinto.
+- **Un push con rechazos se marca `Ok = 0`** aunque la request haya funcionado: quien
+  revisa después filtra por ahí, y el éxito parcial honesto queda en el detalle.
+- **El servicio se traga todos sus errores.** Un log que hace fallar la operación que
+  audita es peor que no tener log: el promotor perdería el trabajo del día porque la
+  LogDB estaba llena.
+
+No se registra en `mt.Entities` (la LogDB no tiene metadata), así que verlo desde la
+web necesita un endpoint dedicado — igual que `PollingRunLog`. **No se purga**: con
+pocos promotores el volumen es chico, pero si la flota crece hay que sumar un job.
+
+**Cómo se ve desde la web:** `GET /api/logs/mobile-sync` (lista, con filtros por fecha,
+usuario, `deviceId`, `appId`, dirección y `onlyErrors`) y `/api/logs/mobile-sync/{id}`
+(detalle, con el JSON de rechazos). Van en `LogViewerController`, junto a los otros logs
+de la LogDB, y el FE los consume con el componente `LogViewer` genérico — **no** con el
+grid dinámico del platform, que trabaja contra `AppDbContext` y no puede ver la LogDB.
+
+**El log se ganó el sueldo en su primer uso.** La primera fila que escribió tenía
+`UserName` en blanco: `SyncController` resuelve el usuario con `User.Identity?.Name`, que
+en este BE devuelve vacío porque el JWT no mapea `unique_name` a `Name`. `LogService` sí
+trae el username porque usa `ICurrentUserContext`. El servicio de auditoría pasó a esa
+misma fuente. Queda una deuda anotada: esas tres líneas de `User.Identity?.Name` siguen
+alimentando el `userId` que recibe `SyncService` — hoy no rompe nada visible (el scoping
+por zona usa `_user.UserId`), pero es un string vacío viajando por tres firmas.
+
+### La bitácora local del móvil — lo que el teléfono intentó
+
+Tabla WMDB `bitacora` (`src/lib/bitacora.ts`, pantalla `BitacoraScreen` en el drawer).
+Cada sincronización y cada consulta ATV, con resumen legible, desglose y duración.
+
+**Por qué no es redundante:** lo que nunca llegó a la red no deja rastro del otro lado,
+por definición. Y en la práctica es lo que se puede leer por teléfono en treinta
+segundos cuando el promotor llama diciendo "no envió nada", sin cable ni computadora.
+
+Se purga **al mismo plazo que las copias locales de adjuntos** (`retencionFotosDias`,
+config del servidor): es diagnóstico reciente, no archivo. Lo permanente está en la
+LogDB.
+
+Los logs de consola (`[sync] push …`, `[adjuntos] …`) se dejan puestos: son la tercera
+capa, para cuando sí hay un cable.
+
+---
+
+## 6.ter Consulta ATV (Hacienda) desde el móvil
+
+El endpoint web es `POST /api/rc/solicitud/{id}/consultar-hacienda` y **necesita una
+solicitud que ya exista en el servidor**, porque escribe el veredicto en su fila. En el
+móvil la solicitud se levanta en el campo y se sincroniza horas después: en el momento
+de consultar no hay `{id}` que poner.
+
+`POST /api/mobile/hacienda/atv` invierte el sujeto: la consulta va contra el
+**productor** (`idSocio`), y el veredicto se devuelve. El teléfono lo guarda en su
+solicitud local y viaja con el push, en las mismas dos columnas
+(`resultadoatv`, `consultadoatv` — v1.53/RC/52 las agrega a la proyección y a los
+escribibles).
+
+**La regla vive en `AtvVeredictoService`**, no en cada controller. Ahora la consultan
+dos canales; duplicada, el día que cambie el código CIIU del café los dos empezarían a
+clasificar distinto al mismo productor, y el que se corrija primero taparía al otro.
+
+### El caso de la solicitud ya sincronizada
+
+El push sólo sube filas nuevas: no puede modificar una que ya subió. Así que si el
+promotor consulta después de sincronizar, el body lleva `solicitudId` (el id de
+servidor, resuelto contra `server_ids`) y el BE escribe el veredicto directo. La
+response trae `persistido` para que la app sepa cuál de los dos caminos ocurrió y lo
+diga en pantalla.
+
+Y **no se guarda local en ese caso**: cualquier escritura marcaría la fila `updated`, el
+push la reintentaría, el BE la rechazaría con `NOT_SUPPORTED` y quedaría contada como
+pendiente para siempre, sin nada que el promotor pueda hacer. El dato baja solo en el
+próximo pull.
+
+### "No editables" quiere decir por convención, no por control de acceso
+
+Ningún form —ni el web ni el móvil— toca esas dos columnas. Pero el motor de sync no
+distingue: el push acepta lo que el cliente manda en cualquier campo escribible. La
+garantía real es la auditoría — cada consulta queda en `LogEvent` con cédula, veredicto
+y outcome, y el evento es el mismo (`hacienda.actividades.lookup`) que la consulta web,
+con `origen: "movil"` en el JSON para distinguirlas. Conviene tenerlo escrito para no
+confundir las dos cosas.
+
+Permiso: `rc.solicitud.update`, el mismo que el endpoint web. **No** `mt.hacienda.consultar`
+—el del botón de SocioNegocio— porque el rol Promotor no lo tiene y dárselo le abriría
+la consulta de cualquier cédula, no sólo la del productor de una solicitud suya.
+
+---
+
+## 6.sexies Autoría de la fila: `UserColumn`
+
+Las 4 primeras visitas creadas desde el teléfono quedaron con
+`rc_Visita.IdUsuarioPromotor` **NULL**, sin ningún error.
+
+**Por qué no se notó antes:** en la web ese campo se llena solo, con el token
+`${user.id}` de `mt.Fields.DefaultValue`. Pero **ese token lo resuelve el FRONTEND** al
+armar el form de alta — el servidor sólo lo transporta como metadata, no lo interpreta.
+El móvil no pasa por ese form, así que no había nada que lo llenara; y como la columna es
+nullable, la visita se creaba igual.
+
+Es la tercera vez que el mismo patrón nos muerde: **un dato que el servidor acepta sin
+protestar y nadie llena** (`ClientUuid` fuera de `mt.Fields`, `idsocio` del entregador
+que ni la web poblaba, y ahora esto). El síntoma es siempre el mismo: funciona todo, el
+dato no está.
+
+La solución es `mt.MobileCollections.UserColumn` (v1.53/RC/53): el push estampa el id
+numérico del JWT en la columna que la colección declare. **No se le pide al cliente**, por
+la misma razón que `compania` sale del header y no del body — es un dato de autoría, y un
+teléfono no debería poder declarar que el trabajo lo hizo otra persona. Además la app no
+tiene por qué conocer su propio id numérico: hoy guarda el username, y el id vive en el
+claim `sub`.
+
+`solicitudes` no la lleva: `rc_solicitud` no tiene columna de promotor — el vínculo con
+quien la levantó es la visita de validación de crédito, no la solicitud.
+
+Las 4 visitas viejas se dejan en NULL: el push no guardaba quién las mandó, que es
+justamente lo que esto arregla, así que backfillearlas sería adivinar.
+
+---
+
+## 6.quater Migraciones del SQLite local — ✅ hechas (deuda pagada)
+
+`SCHEMA_VERSION` estuvo en 1 durante ~8 cambios de schema, sin migraciones. **Eso no se
+nota en desarrollo** —donde uno limpia los datos a mano igual— y se cobra el día de la
+primera actualización en campo: WMDB no encuentra cómo llevar la base de la versión
+vieja a la nueva y lo único que puede hacer es borrarla, con lo que el promotor haya
+capturado y no sincronizado adentro.
+
+`src/db/migrations.ts` arranca el camino en la versión 2 (las columnas ATV + la tabla
+`bitacora`). La regla, ahora explícita en el archivo y en `schema.ts`: **todo cambio de
+schema entra con su paso de migración y su bump de versión, en el mismo commit**. Las
+migraciones sólo agregan; nunca renombran ni borran — una columna sin uso se deja
+muerta, que es más barato que una migración destructiva fallando a mitad de camino en un
+teléfono ajeno.
+
+---
+
+## 6.quinquies Permisos de cámara y GPS
+
+El síntoma reportado era "pregunta el permiso cada vez". Un permiso concedido en Android
+es permanente, así que si vuelve a preguntar es por una de tres razones y **ninguna se
+arregla pidiéndolo de nuevo**:
+
+1. **"Solo esta vez"** — desde Android 11 es un permiso de una sesión, revocado cuando
+   la app pasa a segundo plano un rato. La opción permanente es "Mientras usas la app".
+2. **Auto-revocación** de permisos de apps sin usar por meses.
+3. **Denegado dos veces** → `canAskAgain: false`, el sistema no muestra el diálogo nunca
+   más y el único camino es Ajustes.
+
+Lo que sí estaba de nuestro lado (`src/lib/permisos.ts`):
+
+- **Consultar antes de pedir.** `requestXAsync` a secas es lo que dispara el diálogo.
+- **Pedir los dos juntos una vez, al entrar al contexto de trabajo.** No en medio de una
+  visita: ahí el diálogo interrumpe la captura y se toca "Solo esta vez" para salir del
+  paso, que es justo lo que causa la razón 1. Los dos en serie y no en paralelo —dos
+  diálogos simultáneos se apilan y algunos launchers descartan el segundo.
+- **Cuando el sistema ya no va a preguntar, mandar a Ajustes** en vez de repetir un botón
+  que no hace nada.
+- **Distinguir "sin permiso" de "sin señal"** en la fila del GPS: mostrarlos igual manda
+  a caminar buscando señal a alguien que sólo tiene que tocar un botón.
+
+El GPS **consulta sin pedir** durante la captura (si falta, la visita se guarda sin
+punto, que es el comportamiento correcto) y **sí pide** cuando el promotor toca la fila
+para reintentar — ahí el diálogo es la respuesta a algo que él pidió.
 
 ---
 
@@ -465,3 +628,11 @@ complementarios, no un reemplazo.
 | Crear una fila escribible sin pasar por `crear.ts` reintroduce el duplicado del §3.bis | El helper es el único camino; conviene un lint rule si el equipo crece |
 | ~~Una foto cuyo upload falla queda encolada hasta que su visita vuelva a aparecer en un `accepted[]` — o sea, nunca~~ | **Resuelto.** Era peor de lo anotado: en el flujo normal (sacar la foto DESPUÉS de sincronizar la visita) no subía nunca, porque en el sync siguiente esa visita ya no está en `accepted[]`. Ahora el mapeo localId→serverId se persiste en la tabla local `server_ids` y `flushPendingUploads` recorre la cola completa resolviendo contra ella |
 | Un flag `BIT` del servidor llega como booleano y no como número | `CONVERT(TINYINT, ...)` en la proyección + `esVerdadero()` en el modelo. Pasó con `requiere_solicitud`: la app no pedía la solicitud en la visita de crédito y el hook nunca disparaba, sin ningún error |
+| ~~`SCHEMA_VERSION` en 1 tras ~8 cambios de schema: la primera actualización del APK le borra la base local al promotor~~ | **Resuelto** en §6.quater: `db/migrations.ts` + versión 2. La regla queda escrita: cada cambio de schema con su paso de migración en el mismo commit |
+| ~~`contarPendientes` contaba TODOS los `pending_uploads`, incluidos los ya subidos que conservan su copia local~~ | **Resuelto.** El drawer decía 0 pendientes y "Cambiar cosecha" se negaba diciendo que había N. Ahora filtra `status != 'subida'`, igual que `usePendientes` |
+| Los campos ATV son "no editables" por convención, no por control de acceso: el push acepta lo que el cliente mande en cualquier campo escribible | La garantía es la auditoría (`hacienda.actividades.lookup` con cédula, veredicto y `origen`). Ver §6.ter |
+| Un adjunto en estado `error` mantiene el contador de pendientes arriba de cero y bloquea el cambio de cosecha | Es correcto que cuente (está pendiente de verdad), pero si el upload falla siempre no hay salida. Falta poder descartarlo desde la pantalla de adjuntos |
+| `dbo.MobileSyncLog` no se purga | Volumen chico con pocos promotores. Con una flota grande hace falta un job de retención |
+| ~~Las visitas del móvil quedaban sin `IdUsuarioPromotor`: el `${user.id}` de la web lo resuelve el FRONTEND, y el móvil no pasa por ese form~~ | **Resuelto** en §6.sexies: `mt.MobileCollections.UserColumn`, estampado server-side desde el JWT |
+| `SyncController` usa `User.Identity?.Name`, que en este BE devuelve **vacío** (el JWT no mapea `unique_name` a `Name`) | La auditoría pasó a `ICurrentUserContext`. Las tres líneas siguen alimentando el `userId` de `SyncService`, hoy sin consecuencia visible — limpiar en el próximo toque de ese archivo |
+| La migración 1→2 del SQLite no se ejercitó: con datos limpios WMDB crea el schema directo en v2 y no corre los pasos | Fresh install y upgrade son rutas distintas. El primer bump con datos adentro es la prueba real |

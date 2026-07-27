@@ -45,6 +45,12 @@ export function CampoTexto({
  * Numérico. Guarda el texto crudo mientras se escribe (no el número) para no
  * pelearse con el usuario a mitad de tipeo: parsear en cada tecla borra el
  * separador decimal apenas se escribe y hace imposible tipear "1.5".
+ *
+ * `selectTextOnFocus`: los numéricos arrancan en 0 (así el promotor ve que el
+ * campo es un monto y no un texto, y no queda ambiguo entre "cero" y "sin dato").
+ * Pero un 0 precargado obliga a borrarlo antes de tipear, y con el pulgar sobre un
+ * campo chico eso produce "05000". Seleccionando todo al enfocar, la primera tecla
+ * lo reemplaza.
  */
 export function CampoNumero({
   etiqueta,
@@ -67,6 +73,7 @@ export function CampoNumero({
         placeholder={placeholder ?? "0"}
         placeholderTextColor={colores.textoTenue}
         keyboardType="decimal-pad"
+        selectTextOnFocus
       />
     </View>
   );

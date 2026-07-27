@@ -5,7 +5,7 @@ import { Productor, Solicitud, TipoDesembolso } from "../db/models";
 import { database } from "../lib/db";
 import { actualizarSolicitud, crearSolicitud } from "../lib/crear";
 import { useSesion } from "../lib/sesion";
-import { estilos, fmtFecha } from "./estilos";
+import { estadoSolicitud, estilos, fmtFecha } from "./estilos";
 import { PickerModal } from "./componentes/Picker";
 import { useOpcionesProductor } from "./componentes/opciones";
 import { etiquetaZona, useNombresZona } from "./useNombresZona";
@@ -39,6 +39,9 @@ import {
  * Los entregadores se agregan desde la pestaña del detalle, no acá: mantiene este
  * form en una sola pantalla y sigue el mismo patrón que el form web.
  */
+/** Default de los campos de cantidad/monto. Ver la nota donde se usa. */
+const CERO = "0";
+
 export function NuevaSolicitudScreen({
   navigation,
   route,
@@ -56,11 +59,15 @@ export function NuevaSolicitudScreen({
   const [zonaProductor, setZonaProductor] = useState<string | null>(null);
   const [codigoProductor, setCodigoProductor] = useState<string | null>(null);
   const [tipoId, setTipoId] = useState<number | null>(null);
-  const [total, setTotal] = useState("");
+  // Los numéricos arrancan en 0 y no vacíos: en el campo un input vacío se lee como
+  // "todavía no cargué esto" y el promotor duda de si el dato hace falta. Con 0 se
+  // ve que es un monto y que su default es cero. El CampoNumero selecciona todo al
+  // enfocarse, así que el 0 no estorba para tipear.
+  const [total, setTotal] = useState(CERO);
   const [planInversion, setPlanInversion] = useState("");
   const [motivo, setMotivo] = useState("");
-  const [prodEstimada, setProdEstimada] = useState("");
-  const [entregaEstimada, setEntregaEstimada] = useState("");
+  const [prodEstimada, setProdEstimada] = useState(CERO);
+  const [entregaEstimada, setEntregaEstimada] = useState(CERO);
   const [abierto, setAbierto] = useState<"productor" | "tipo" | null>(null);
   const [guardando, setGuardando] = useState(false);
 
@@ -90,12 +97,12 @@ export function NuevaSolicitudScreen({
         setEditando(s);
         setProductorId(s.idSocio != null ? String(s.idSocio) : null);
         setTipoId(s.tipoCredito ?? null);
-        setTotal(s.total != null ? String(s.total) : "");
+        setTotal(s.total != null ? String(s.total) : CERO);
         setPlanInversion(s.planInversion ?? "");
         setMotivo(s.motivo ?? "");
-        setProdEstimada(s.prodEstimada != null ? String(s.prodEstimada) : "");
+        setProdEstimada(s.prodEstimada != null ? String(s.prodEstimada) : CERO);
         setEntregaEstimada(
-          s.entregaEstimada != null ? String(s.entregaEstimada) : ""
+          s.entregaEstimada != null ? String(s.entregaEstimada) : CERO
         );
       })
       .catch(() => undefined);
@@ -129,6 +136,7 @@ export function NuevaSolicitudScreen({
   const productor = productores.find((p) => p.valor === productorId);
   const tipo = tipos.find((t) => t.idTipoDesembolso === tipoId);
   const montoTotal = aNumero(total);
+  const estadoActual = estadoSolicitud(editando?.estado);
 
   const opcionesTipo = useMemo(
     () =>
@@ -217,8 +225,23 @@ export function NuevaSolicitudScreen({
         </View>
         <View style={estilos.detalleFila}>
           <Text style={estilos.detalleEtiqueta}>Fecha</Text>
-          <Text style={estilos.detalleValor}>{fmtFecha(fecha.getTime())}</Text>
+          <Text style={estilos.detalleValor}>
+            {fmtFecha((editando?.fecha ?? fecha.getTime()) as number)}
+          </Text>
         </View>
+        {/* El estado lo resuelve la oficina desde la web: acá es informativo y no
+            editable. Al crear no se muestra —siempre sería "Pendiente"— para no
+            sumar una fila que no dice nada. */}
+        {editando ? (
+          <View style={estilos.detalleFila}>
+            <Text style={estilos.detalleEtiqueta}>Estado</Text>
+            <Text
+              style={[estilos.detalleValor, { color: estadoActual.color }]}
+            >
+              {estadoActual.texto}
+            </Text>
+          </View>
+        ) : null}
 
         <CampoSeleccion
           etiqueta="Tipo de crédito"

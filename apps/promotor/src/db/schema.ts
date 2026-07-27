@@ -32,7 +32,16 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  * (ver src/lib/crear.ts).
  */
 
-export const SCHEMA_VERSION = 1;
+/**
+ * Cada bump necesita su paso en db/migrations.ts, en el MISMO commit. Sin eso,
+ * WMDB no tiene cómo actualizar la base del teléfono y la borra — con lo que el
+ * promotor haya capturado y no sincronizado adentro. Ver la nota de migrations.ts.
+ *
+ *   1 → schema inicial
+ *   2 → resultado_atv / consultado_atv en solicitudes + tabla bitacora
+ *   3 → server_id en las bidireccionales (id numérico del servidor)
+ */
+export const SCHEMA_VERSION = 3;
 
 /**
  * Orden de sync. Importa para el push: el padre tiene que subir antes que el hijo
@@ -153,6 +162,17 @@ export const schema = appSchema({
     tableSchema({
       name: "solicitudes",
       columns: [
+        // Id NUMÉRICO del servidor, aparte del `id` de identidad.
+        //
+        // Hace falta porque en las bidireccionales el `id` es el ClientUuid (para que la
+        // fila no se duplique al volver del servidor), y hay cosas que sólo funcionan con
+        // el numérico: subir un adjunto y consultar ATV de una solicitud ya sincronizada.
+        // Antes se deducía —del id local si era numérico, o de `server_ids` si este
+        // teléfono la había pusheado— y faltaba el caso más común en un teléfono nuevo:
+        // la fila bajó de un pull y este dispositivo nunca la pusheó. Ver v1.53/RC/54.
+        //
+        // Null mientras la fila no subió: todavía no tiene id de servidor.
+        { name: "server_id", type: "string", isOptional: true },
         { name: "id_socio", type: "number", isIndexed: true, isOptional: true },
         { name: "codigo", type: "string", isOptional: true },
         { name: "fecha", type: "number", isOptional: true },
@@ -175,7 +195,15 @@ export const schema = appSchema({
         { name: "entrega_estimada", type: "number", isOptional: true },
         { name: "prod_estimada", type: "number", isOptional: true },
         { name: "aprobado", type: "number", isOptional: true },
+        // 0/null = pendiente · 1 = aprobada · 2 = rechazada. Lo resuelve la
+        // oficina desde la web; el móvil sólo lo muestra.
         { name: "estado", type: "number", isOptional: true },
+        // Veredicto de Hacienda (ATV). NO son campos de captura: los escribe
+        // únicamente la consulta a /api/mobile/hacienda/atv y viajan al servidor
+        // con el push. 0 = no se pudo consultar · 1 = no inscrito ·
+        // 2 = inscrito sin café · 3 = inscrito con café (CIIU 0127).
+        { name: "resultado_atv", type: "number", isOptional: true },
+        { name: "consultado_atv", type: "number", isOptional: true },
         // Read-only desde el móvil: los escribe el hook del BE cuando entra
         // la visita de validación de crédito.
         { name: "prod_estimada_promotor", type: "number", isOptional: true },
@@ -190,6 +218,8 @@ export const schema = appSchema({
     tableSchema({
       name: "entregadores",
       columns: [
+        /** Id numérico del servidor. Ver la nota en `solicitudes`. */
+        { name: "server_id", type: "string", isOptional: true },
         // string, no number: guarda el id LOCAL de la solicitud padre — el id
         // del servidor si vino de un pull, o el uuid propio si se creó offline.
         // El BE lo resuelve contra mt.MobileIdMap al pushear.
@@ -212,6 +242,8 @@ export const schema = appSchema({
     tableSchema({
       name: "visitas",
       columns: [
+        /** Id numérico del servidor. Ver la nota en `solicitudes`. */
+        { name: "server_id", type: "string", isOptional: true },
         { name: "id_tipo_visita", type: "number" },
         { name: "id_socio", type: "number", isIndexed: true, isOptional: true },
         { name: "cosecha", type: "string", isOptional: true },
@@ -280,6 +312,36 @@ export const schema = appSchema({
         // Cuándo se subió. Lo usa la purga para saber qué copias locales ya
         // cumplieron su plazo de retención.
         { name: "subida_at", type: "number", isOptional: true },
+      ],
+    }),
+
+    // ─── Bitácora local (NO se sincroniza) ──────────────────────────────
+    // Qué pasó en ESTE teléfono: cada sincronización y cada consulta a Hacienda.
+    //
+    // Existe porque los dos casos que más cuesta diagnosticar son remotos: "sigue
+    // todo pendiente" y "el ATV no me dijo nada". El promotor está en el campo, sin
+    // cable ni logcat, y desde el servidor las fallas son indistinguibles entre sí
+    // y de "no había nada que enviar" (fue exactamente lo que escondió el bug del
+    // case de los uuid). Con esto se le puede pedir que lea la pantalla.
+    //
+    // El log server-side (mt.MobileSyncLog en la LogDB) es la otra mitad: éste ve
+    // lo que el teléfono intentó, incluso cuando nunca llegó al servidor.
+    //
+    // Se purga al mismo plazo que las copias locales de adjuntos: es diagnóstico
+    // reciente, no archivo histórico — para eso está la LogDB.
+    tableSchema({
+      name: "bitacora",
+      columns: [
+        /** 'sync' | 'atv' */
+        { name: "tipo", type: "string", isIndexed: true },
+        { name: "ok", type: "boolean" },
+        /** Una línea legible, que es lo que se le pide leer al promotor. */
+        { name: "resumen", type: "string" },
+        /** JSON con el desglose por colección / la respuesta de Hacienda. */
+        { name: "detalle", type: "string", isOptional: true },
+        { name: "error", type: "string", isOptional: true },
+        { name: "duracion_ms", type: "number", isOptional: true },
+        { name: "created_at", type: "number", isIndexed: true },
       ],
     }),
   ],

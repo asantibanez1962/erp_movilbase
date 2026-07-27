@@ -197,6 +197,15 @@ export class Finca extends Model {
 export class Solicitud extends Model {
   static readonly table = "solicitudes";
 
+  /**
+   * Id NUMÉRICO del servidor, que en las bidireccionales NO es el `id` (ése es el
+   * ClientUuid, para que la fila no se duplique al volver del pull). Lo necesitan los
+   * adjuntos y la consulta ATV de una fila ya sincronizada.
+   *
+   * @readonly porque lo escribe sólo el pull; null mientras la fila no subió.
+   */
+  @readonly @field("server_id") serverIdRemoto!: string | null;
+
   @field("id_socio") idSocio!: number | null;
   @field("codigo") codigo!: string | null;
   @field("fecha") fecha!: number | null;
@@ -226,6 +235,14 @@ export class Solicitud extends Model {
   @readonly @field("prod_estimada_promotor") prodEstimadaPromotor!: number | null;
   @readonly @field("inspeccion_campo") inspeccionCampo!: number | null;
 
+  /**
+   * Veredicto de Hacienda. No son @readonly aunque no se editen: los escribe la
+   * consulta ATV (lib/atv.ts) y tienen que poder subir con el push. La regla de
+   * "no editables" se sostiene porque ningún form los toca — no por el decorador.
+   */
+  @field("resultado_atv") resultadoAtv!: number | null;
+  @field("consultado_atv") consultadoAtv!: number | null;
+
   @field("client_uuid") clientUuid!: string | null;
   @field("compania") compania!: number | null;
   @field("push_status") pushStatus!: string | null;
@@ -247,10 +264,46 @@ export class Solicitud extends Model {
   get esLocal(): boolean {
     return this.syncStatus === "created";
   }
+
+  /**
+   * Sólo se puede resolver (aprobar/rechazar) desde la web, y sólo si está
+   * pendiente. El móvil usa esto para saber si la consulta ATV tiene sentido: el
+   * BE la rechaza con NO_PENDIENTE en una solicitud ya resuelta.
+   */
+  get estaPendiente(): boolean {
+    return (this.estado ?? 0) === 0;
+  }
+
+  /** Texto del veredicto de Hacienda, o null si nunca se consultó. */
+  get resultadoAtvTexto(): string | null {
+    if (this.consultadoAtv == null) return null;
+    switch (this.resultadoAtv) {
+      case 1:
+        return "No inscrito en Hacienda";
+      case 2:
+        return "Inscrito, sin actividad de café";
+      case 3:
+        return "Inscrito con actividad de café";
+      default:
+        // 0 y cualquier valor futuro que la app no conozca: se consultó pero no
+        // hubo respuesta útil. Mejor decirlo que mostrar "—" como si no se hubiera
+        // intentado nunca.
+        return "No se pudo consultar";
+    }
+  }
 }
 
 export class Entregador extends Model {
   static readonly table = "entregadores";
+
+  /**
+   * Id NUMÉRICO del servidor, que en las bidireccionales NO es el `id` (ése es el
+   * ClientUuid, para que la fila no se duplique al volver del pull). Lo necesitan los
+   * adjuntos y la consulta ATV de una fila ya sincronizada.
+   *
+   * @readonly porque lo escribe sólo el pull; null mientras la fila no subió.
+   */
+  @readonly @field("server_id") serverIdRemoto!: string | null;
 
   /** Id LOCAL de la solicitud padre — server id si vino de un pull, uuid si no. */
   @field("id_solicitud") idSolicitud!: string;
@@ -268,6 +321,15 @@ export class Entregador extends Model {
 
 export class Visita extends Model {
   static readonly table = "visitas";
+
+  /**
+   * Id NUMÉRICO del servidor, que en las bidireccionales NO es el `id` (ése es el
+   * ClientUuid, para que la fila no se duplique al volver del pull). Lo necesitan los
+   * adjuntos y la consulta ATV de una fila ya sincronizada.
+   *
+   * @readonly porque lo escribe sólo el pull; null mientras la fila no subió.
+   */
+  @readonly @field("server_id") serverIdRemoto!: string | null;
 
   @field("id_tipo_visita") idTipoVisita!: number;
   @field("id_socio") idSocio!: number | null;
@@ -334,6 +396,27 @@ export class PendingUpload extends Model {
   }
 }
 
+/**
+ * Un evento de la bitácora local: una sincronización o una consulta a Hacienda.
+ *
+ * Vive en el teléfono y no viaja: es la mitad del diagnóstico que el servidor no
+ * puede ver, porque incluye los intentos que nunca llegaron a la red. Ver la nota
+ * de la tabla en schema.ts.
+ */
+export class EventoBitacora extends Model {
+  static readonly table = "bitacora";
+
+  /** 'sync' | 'atv' */
+  @field("tipo") tipo!: string;
+  @field("ok") ok!: boolean;
+  @field("resumen") resumen!: string;
+  /** JSON serializado. Se guarda como texto para no atarlo a una forma fija. */
+  @field("detalle") detalle!: string | null;
+  @field("error") error!: string | null;
+  @field("duracion_ms") duracionMs!: number | null;
+  @field("created_at") createdAt!: number;
+}
+
 /** Lo que espera createDatabase. El orden no importa. */
 export const MODEL_CLASSES = [
   TipoVisita,
@@ -347,4 +430,5 @@ export const MODEL_CLASSES = [
   Visita,
   ServerId,
   PendingUpload,
+  EventoBitacora,
 ];

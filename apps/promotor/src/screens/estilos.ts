@@ -101,3 +101,42 @@ export function fmtFecha(ms: number | null | undefined): string {
   if (ms == null) return "—";
   return new Date(ms).toLocaleDateString("es-CR");
 }
+
+/** Con hora — la bitácora necesita distinguir dos sincronizaciones del mismo día. */
+export function fmtFechaHora(ms: number | null | undefined): string {
+  if (ms == null) return "—";
+  const d = new Date(ms);
+  return `${d.toLocaleDateString("es-CR")} ${d.toLocaleTimeString("es-CR", {
+    hour: "2-digit",
+    minute: "2-digit",
+  })}`;
+}
+
+/**
+ * Estado de la solicitud como texto + color, con los colores que pidió la
+ * operación: verde aprobada, rojo rechazada, negro pendiente.
+ *
+ * El negro (y no gris) es a propósito: pendiente es el estado NORMAL de una
+ * solicitud recién levantada en el campo, no una advertencia. Atenuarlo la haría
+ * ver como incompleta.
+ *
+ * Se resuelve acá y no en el modelo para que los colores queden en un solo lugar
+ * junto a la paleta; el grid y el detalle usan lo mismo y no pueden divergir.
+ */
+export function estadoSolicitud(estado: number | null | undefined): {
+  texto: string;
+  color: string;
+} {
+  switch (estado ?? 0) {
+    case 1:
+      return { texto: "Aprobada", color: colores.exito };
+    case 2:
+      return { texto: "Rechazada", color: colores.error };
+    case 0:
+      return { texto: "Pendiente", color: colores.texto };
+    default:
+      // Estado que la app no conoce (el master podría sumar otro): se muestra el
+      // número en vez de mentir con "Pendiente".
+      return { texto: `Estado ${estado}`, color: colores.textoTenue };
+  }
+}

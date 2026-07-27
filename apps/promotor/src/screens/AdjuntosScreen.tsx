@@ -15,6 +15,7 @@ import {
   flushAdjuntos,
   type AdjuntoServidor,
 } from "../lib/adjuntos";
+import { abrirAjustesDeLaApp } from "../lib/permisos";
 import { PendingUpload } from "../db/models";
 import { colores, estilos } from "./estilos";
 
@@ -72,13 +73,19 @@ export function AdjuntosScreen({ route }: Readonly<{ route: any }>) {
   }
 
   if (!permiso.granted) {
+    // Si Android ya no va a mostrar el diálogo (denegado dos veces, o el permiso
+    // auto-revocado por desuso), el botón de pedirlo no hace nada y parece que la
+    // app está rota. En ese caso el único camino es Ajustes, y hay que decirlo.
+    const soloAjustes = !permiso.canAskAgain;
     return (
       <View style={[estilos.root, estilos.center]}>
         <Text style={[estilos.vacioTexto, { marginBottom: 20 }]}>
-          Necesitamos permiso de cámara para adjuntar imágenes.
+          {soloAjustes
+            ? 'Android ya no va a preguntar por el permiso de cámara. Hay que activarlo a mano en Ajustes → Permisos → Cámara, eligiendo "Mientras usas la app".'
+            : "Necesitamos permiso de cámara para adjuntar imágenes."}
         </Text>
         <TouchableOpacity
-          onPress={pedirPermiso}
+          onPress={soloAjustes ? () => void abrirAjustesDeLaApp() : pedirPermiso}
           style={{
             backgroundColor: colores.primario,
             paddingHorizontal: 24,
@@ -89,7 +96,7 @@ export function AdjuntosScreen({ route }: Readonly<{ route: any }>) {
           }}
         >
           <Text style={{ color: "#fff", fontWeight: "700", fontSize: 16 }}>
-            Dar permiso
+            {soloAjustes ? "Abrir ajustes" : "Dar permiso"}
           </Text>
         </TouchableOpacity>
       </View>

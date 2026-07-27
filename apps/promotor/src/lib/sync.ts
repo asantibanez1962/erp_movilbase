@@ -1,10 +1,12 @@
 import { Q } from "@nozbe/watermelondb";
 import { runSync } from "@erp/shared-sync";
+import type { PushResponse } from "@erp/shared-types";
 import { database } from "./db";
 import { getSyncClient } from "./api";
 import { config } from "./config";
 import { COLLECTIONS } from "../db/schema";
 import { flushAdjuntos, purgarAdjuntosLocales, registrarServerIds } from "./adjuntos";
+import { purgarBitacora, registrarEvento } from "./bitacora";
 import { useSesion } from "./sesion";
 import { cargarPoliticas, puedeEnviarse } from "./politicas";
 
@@ -26,6 +28,7 @@ const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas"] as const;
  */
 export async function syncNow(): Promise<void> {
   const api = getSyncClient();
+  const inicio = Date.now();
 
   // Las políticas se refrescan en cada sync: son config del servidor y pueden
   // cambiar sin republicar la app. Si el manifest falla se sigue con lo que haya
@@ -37,13 +40,41 @@ export async function syncNow(): Promise<void> {
   }
   const politicas = useSesion.getState().politicas;
 
-  const pushResponses = await runSync(database, {
-    api,
-    collections: [...COLLECTIONS],
-    schemaVersion: config.schemaVersion,
-    // Retención: una fila con política hasta-evento no sale hasta que su campo
-    // de cierre tiene valor (ej. recibo impreso).
-    puedeEnviar: (coleccion, fila) => puedeEnviarse(politicas, coleccion, fila),
+  // Se cuenta ANTES de sincronizar: después de un push exitoso ya no hay pendientes
+  // que contar, y "cuántas cosas tenía sin subir" es justo el dato que se necesita
+  // para entender un reclamo de "no envió nada".
+  const pendientesAntes = await contarPendientes();
+
+  let pushResponses: Awaited<ReturnType<typeof runSync>>;
+  try {
+    pushResponses = await runSync(database, {
+      api,
+      collections: [...COLLECTIONS],
+      schemaVersion: config.schemaVersion,
+      // Retención: una fila con política hasta-evento no sale hasta que su campo
+      // de cierre tiene valor (ej. recibo impreso).
+      puedeEnviar: (coleccion, fila) => puedeEnviarse(politicas, coleccion, fila),
+    });
+  } catch (err) {
+    // El sync falla y se propaga (la pantalla lo muestra), pero antes queda
+    // registrado: un sync que nunca llegó al servidor no deja rastro del otro lado,
+    // y sin esto la única evidencia sería el logcat de un teléfono en el campo.
+    await registrarEvento({
+      tipo: "sync",
+      ok: false,
+      resumen: `Sincronización falló con ${pendientesAntes} pendiente(s)`,
+      error: (err as Error)?.message ?? String(err),
+      duracionMs: Date.now() - inicio,
+    });
+    throw err;
+  }
+
+  await registrarEvento({
+    tipo: "sync",
+    ok: true,
+    resumen: resumirPush(pushResponses, pendientesAntes),
+    detalle: detallarPush(pushResponses),
+    duracionMs: Date.now() - inicio,
   });
 
   // Guardar los localId → serverId de lo que se acaba de aceptar, ANTES de
@@ -67,24 +98,85 @@ export async function syncNow(): Promise<void> {
   // dónde correrlo: el BE no puede tocar el filesystem del teléfono, así que la
   // mantenimiento del dispositivo se engancha al momento en que la app está
   // activa y conectada. Best-effort — que falle no invalida el sync.
+  //
+  // La bitácora se purga al MISMO plazo que las fotos: las dos son diagnóstico
+  // reciente del dispositivo, no archivo. Lo permanente vive en la LogDB.
   try {
     const dias = useSesion.getState().retencionFotosDias;
     const borradas = await purgarAdjuntosLocales(dias);
     if (borradas > 0) {
       console.info(`[fotos] ${borradas} copia(s) local(es) purgada(s) tras ${dias} días`);
     }
+    const eventos = await purgarBitacora(dias);
+    if (eventos > 0) {
+      console.info(`[bitácora] ${eventos} evento(s) purgado(s) tras ${dias} días`);
+    }
   } catch (err) {
-    console.warn("purga de fotos locales falló", err);
+    console.warn("purga de datos locales vencidos falló", err);
   }
+}
+
+/**
+ * Una línea que el promotor pueda leer por teléfono. Incluye lo que había pendiente
+ * ANTES: "0 enviadas" con 3 pendientes es un problema; con 0 pendientes es normal.
+ */
+function resumirPush(
+  respuestas: Record<string, PushResponse>,
+  pendientesAntes: number
+): string {
+  let aceptadas = 0;
+  let rechazadas = 0;
+  for (const resp of Object.values(respuestas)) {
+    for (const filas of Object.values(resp.accepted ?? {})) aceptadas += filas.length;
+    for (const filas of Object.values(resp.rejected ?? {})) rechazadas += filas.length;
+  }
+  const partes = [`${aceptadas} enviada(s)`];
+  if (rechazadas > 0) partes.push(`${rechazadas} rechazada(s)`);
+  if (pendientesAntes > 0) partes.push(`de ${pendientesAntes} pendiente(s)`);
+  return `Sincronización OK — ${partes.join(", ")}`;
+}
+
+/**
+ * Desglose por colección, con el motivo de cada rechazo y el id de cada fila que subió.
+ *
+ * Los motivos hacen diagnosticable un "no envió nada": sin ellos, un UNRESOLVED_PARENT y
+ * un permiso faltante se ven iguales desde afuera.
+ *
+ * Los ids (local → servidor, con el número si el servidor lo asignó) son el rastro
+ * documental del lado del teléfono. En el servidor está la misma información en
+ * dbo.MobileSyncRow, pero acá cubre el caso en que el teléfono cree que algo subió y el
+ * servidor no lo tenga: son los dos extremos del mismo envío y se pueden cruzar.
+ */
+function detallarPush(respuestas: Record<string, PushResponse>): unknown {
+  const porColeccion: Record<string, unknown> = {};
+  for (const [coleccion, resp] of Object.entries(respuestas)) {
+    const enviadas = Object.values(resp.accepted ?? {})
+      .flat()
+      .map((a) => ({
+        local: a.local_id,
+        servidor: a.server_id,
+        ...(a.codigo ? { codigo: a.codigo } : {}),
+      }));
+    const rechazos = Object.values(resp.rejected ?? {})
+      .flat()
+      .map((r) => ({ local: r.local_id, motivo: r.reason, mensaje: r.message }));
+    porColeccion[coleccion] = { aceptadas: enviadas.length, enviadas, rechazos };
+  }
+  return porColeccion;
 }
 
 /**
  * Cuánto trabajo del teléfono todavía no llegó al servidor. Se usa para no dejar
  * cambiar de cosecha con cosas sin subir, que el reset borraría.
  *
- * Incluye las fotos en cola: viven en una tabla local que `unsafeResetDatabase`
- * también vacía, así que si no se contaran, cambiar de cosecha las perdería en
+ * Incluye los adjuntos en cola: viven en una tabla local que `unsafeResetDatabase`
+ * también vacía, así que si no se contaran, cambiar de cosecha los perdería en
  * silencio junto con los archivos que referencian.
+ *
+ * `status != 'subida'` y no todas las filas: los adjuntos YA subidos conservan su
+ * fila para poder verlos sin señal hasta que los libere la purga, y contarlos hacía
+ * que el drawer mostrara 0 pendientes mientras "Cambiar cosecha" se negaba diciendo
+ * que había N sin sincronizar. El mismo criterio que usePendientes.
  */
 export async function contarPendientes(): Promise<number> {
   let total = 0;
@@ -94,7 +186,10 @@ export async function contarPendientes(): Promise<number> {
       .query(Q.where("_status", Q.notEq("synced")))
       .fetchCount();
   }
-  total += await database.get("pending_uploads").query().fetchCount();
+  total += await database
+    .get("pending_uploads")
+    .query(Q.where("status", Q.notEq("subida")))
+    .fetchCount();
   return total;
 }
 

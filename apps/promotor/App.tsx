@@ -41,6 +41,7 @@ import { VisitasScreen } from "./src/screens/VisitasScreen";
 import { VisitaDetailScreen } from "./src/screens/VisitaDetailScreen";
 import { NuevaVisitaScreen } from "./src/screens/NuevaVisitaScreen";
 import { AdjuntosScreen } from "./src/screens/AdjuntosScreen";
+import { BitacoraScreen } from "./src/screens/BitacoraScreen";
 import { bootstrapApi } from "./src/lib/api";
 import { syncNow } from "./src/lib/sync";
 
@@ -371,6 +372,14 @@ function CustomDrawer(props: DrawerContentComponentProps) {
       />
       {ultimoError ? <Text style={styles.drawerError}>⚠ {ultimoError}</Text> : null}
 
+      {/* Diagnóstico: qué intentó este teléfono. Es lo que se lee por teléfono
+          cuando el promotor dice "no envió nada". */}
+      <DrawerItem
+        label="Bitácora del teléfono"
+        onPress={() => props.navigation.navigate("Bitacora")}
+        labelStyle={styles.drawerLabel}
+      />
+
       <DrawerItem
         label="Cerrar sesión"
         onPress={logout}
@@ -401,6 +410,18 @@ function AuthenticatedNav() {
       }}
     >
       <Drawer.Screen name="Main" component={MainTabs} />
+      {/* Bitácora: se llega desde el drawer, no desde un tab. Es una pantalla de
+          diagnóstico —se abre cuando algo no cuadra—, no parte del trabajo diario. */}
+      <Drawer.Screen
+        name="Bitacora"
+        component={BitacoraScreen}
+        options={{
+          headerShown: true,
+          title: "Bitácora del teléfono",
+          headerStyle: { backgroundColor: "#0f172a" },
+          headerTintColor: "#f1f5f9",
+        }}
+      />
     </Drawer.Navigator>
   );
 }

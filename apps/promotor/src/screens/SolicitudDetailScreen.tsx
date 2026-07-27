@@ -16,10 +16,19 @@ import {
   TipoDesembolso,
 } from "../db/models";
 import { database } from "../lib/db";
+import { consultarAtv, type ResultadoAtv } from "../lib/atv";
+import { syncNow } from "../lib/sync";
 import { crearEntregador, eliminarEntregador } from "../lib/crear";
 import { useSesion } from "../lib/sesion";
 import { esEditable } from "../lib/politicas";
-import { colores, estilos, fmtFecha, fmtMoneda } from "./estilos";
+import {
+  colores,
+  estadoSolicitud,
+  estilos,
+  fmtFecha,
+  fmtFechaHora,
+  fmtMoneda,
+} from "./estilos";
 import { useNombresProductor } from "./useNombresProductor";
 import { EstadoPush } from "./EstadoPush";
 import { PickerModal } from "./componentes/Picker";
@@ -53,22 +62,29 @@ export function SolicitudDetailScreen({
   const [cargando, setCargando] = useState(true);
   const [pickerAbierto, setPickerAbierto] = useState(false);
   const [pestania, setPestania] = useState<Pestania>("datos");
+  const [consultandoAtv, setConsultandoAtv] = useState(false);
+  const [atv, setAtv] = useState<ResultadoAtv | null>(null);
   const nombres = useNombresProductor();
   const nombresZona = useNombresZona();
   const politicas = useSesion((s) => s.politicas);
   const productores = useOpcionesProductor();
 
   useEffect(() => {
-    let cancelado = false;
-    database
+    // findAndObserve y no find: la fila cambia por debajo cuando entra un sync —
+    // el veredicto de Hacienda que escribió el BE, o el estado que resolvió la
+    // oficina. Con un find único la pantalla quedaba congelada en el momento en que
+    // se abrió y parecía que el dato no había llegado.
+    const subSol = database
       .get<Solicitud>("solicitudes")
-      .find(solicitudId)
-      .then((s) => {
-        if (cancelado) return;
-        setSolicitud(s);
-        setCargando(false);
-      })
-      .catch(() => !cancelado && setCargando(false));
+      .findAndObserve(solicitudId)
+      .subscribe({
+        next: (s) => {
+          setSolicitud(s);
+          setCargando(false);
+        },
+        // La fila puede desaparecer del cache (cambio de cosecha, purga).
+        error: () => setCargando(false),
+      });
 
     const subEnt = database
       .get<Entregador>("entregadores")
@@ -92,7 +108,7 @@ export function SolicitudDetailScreen({
       .subscribe(setAdjuntos);
 
     return () => {
-      cancelado = true;
+      subSol.unsubscribe();
       subEnt.unsubscribe();
       subTipos.unsubscribe();
       subAdj.unsubscribe();
@@ -157,6 +173,43 @@ export function SolicitudDetailScreen({
     );
   };
 
+  /**
+   * Consulta a Hacienda. El resultado se guarda en `atv` además de en la fila: si la
+   * solicitud ya se sincronizó, el veredicto no se persiste local (lo escribió el BE
+   * y baja en el próximo pull), así que sin este estado la pantalla no mostraría nada
+   * y parecería que la consulta no hizo nada.
+   */
+  const consultarHacienda = async () => {
+    if (!solicitud || consultandoAtv) return;
+    setConsultandoAtv(true);
+    try {
+      const resultado = await consultarAtv(solicitud);
+      setAtv(resultado);
+      Alert.alert("Hacienda", resultado.mensaje);
+
+      // Si el veredicto lo escribió el BE (solicitud ya sincronizada), se sincroniza
+      // enseguida para BAJARLO. Sin esto quedaba sólo en la pantalla: cerrabas la app y
+      // el dato desaparecía del teléfono hasta el próximo sync, aunque estuviera guardado
+      // en el ERP.
+      //
+      // No hace falta preguntar si hay conexión: la consulta a Hacienda acaba de
+      // funcionar, así que la hay. Best-effort igual — si falla, el dato está en el
+      // servidor y baja en el sync siguiente.
+      if (resultado.persistido) {
+        syncNow().catch((err) =>
+          console.info("sync post-ATV falló; el dato baja después", (err as Error)?.message)
+        );
+      }
+    } catch (e) {
+      Alert.alert(
+        "No se pudo consultar",
+        (e as Error)?.message ?? "Error desconocido"
+      );
+    } finally {
+      setConsultandoAtv(false);
+    }
+  };
+
   const tipoCredito = solicitud?.tipoCredito;
   const tipoNombre = useMemo(() => {
     if (tipoCredito == null) return null;
@@ -182,6 +235,7 @@ export function SolicitudDetailScreen({
   }
 
   const s = solicitud;
+  const est = estadoSolicitud(s.estado);
   // Las solicitudes viejas usan la variante de rubros sueltos; sólo se muestran
   // esos campos si de verdad traen algo, para no llenar la pantalla de ceros.
   const tieneRubros =
@@ -278,11 +332,73 @@ export function SolicitudDetailScreen({
           <Dato etiqueta="Fecha" valor={fmtFecha(s.fecha)} />
           <Dato etiqueta="Cosecha" valor={s.cosecha?.trim()} />
           <Dato etiqueta="Zona" valor={etiquetaZona(nombresZona, s.zona)} />
+          {/* Lo resuelve la oficina desde la web; acá es sólo lectura. Verde
+              aprobada, rojo rechazada, negro pendiente. */}
+          <Dato etiqueta="Estado" valor={est.texto} color={est.color} />
 
           <Text style={estilos.seccion}>Crédito</Text>
           <Dato etiqueta="Tipo" valor={tipoNombre} />
           <Dato etiqueta="Total" valor={fmtMoneda(s.total)} />
           <Dato etiqueta="Aprobado" valor={fmtMoneda(s.aprobado)} />
+
+          {/* ── Hacienda (ATV) ─────────────────────────────────────────────
+              Los dos campos no se editan nunca: sólo los mueve la consulta. El
+              botón necesita internet, así que es un acto explícito del promotor
+              cuando ve que tiene señal — nunca automático, para no interrumpir la
+              captura ni gastar la poca batería en reintentos. */}
+          <Text style={estilos.seccion}>Hacienda (ATV)</Text>
+          <Dato
+            etiqueta="Resultado"
+            valor={atv?.mensaje ?? s.resultadoAtvTexto}
+            color={colorAtv(atv?.resultadoAtv ?? s.resultadoAtv, s.consultadoAtv)}
+          />
+          <Dato
+            etiqueta="Consultado"
+            valor={
+              atv != null
+                ? fmtFechaHora(atv.consultadoAtv)
+                : s.consultadoAtv != null
+                  ? fmtFechaHora(s.consultadoAtv)
+                  : null
+            }
+          />
+          {/* Sólo mientras está pendiente: el BE rechaza la consulta en una
+              solicitud ya resuelta (NO_PENDIENTE), así que ofrecer el botón sería
+              prometer algo que va a fallar. */}
+          {s.estaPendiente ? (
+            <TouchableOpacity
+              style={[estilos.fila, { alignItems: "center" }]}
+              onPress={consultarHacienda}
+              disabled={consultandoAtv}
+            >
+              <Text
+                style={{
+                  color: consultandoAtv ? colores.textoTenue : colores.primario,
+                  fontSize: 15,
+                  fontWeight: "700",
+                }}
+              >
+                {consultandoAtv
+                  ? "Consultando Hacienda..."
+                  : s.consultadoAtv != null
+                    ? "🔄 Volver a consultar Hacienda"
+                    : "🔍 Consultar Hacienda (necesita internet)"}
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+          {/* Si la solicitud ya subió, el veredicto lo escribió el BE y baja en el
+              próximo pull; hasta entonces lo que se ve es la respuesta de la
+              consulta. Decirlo evita que parezca que no se guardó. */}
+          {atv != null && atv.persistido ? (
+            <Text style={[estilos.vacioTexto, { paddingHorizontal: 16, paddingTop: 8 }]}>
+              Ya quedó registrado en el ERP.
+            </Text>
+          ) : null}
+          {atv != null && !atv.persistido ? (
+            <Text style={[estilos.vacioTexto, { paddingHorizontal: 16, paddingTop: 8 }]}>
+              Viaja al ERP con la próxima sincronización.
+            </Text>
+          ) : null}
 
           {tieneRubros ? (
             <>
@@ -426,14 +542,38 @@ function Tab({
   );
 }
 
+/**
+ * Color del veredicto ATV. No usa la misma escala que el estado de la solicitud a
+ * propósito: acá nada es "rechazado" — que un productor no tenga la actividad de café
+ * registrada es un dato para la oficina, no un veto del promotor. De ahí que 1 y 2
+ * sean advertencia (ámbar) y no rojo.
+ *
+ *   3 = inscrito con café      → verde, es lo que se espera
+ *   1 = no inscrito
+ *   2 = inscrito sin café      → ámbar, hay algo que revisar
+ *   0 = no se pudo consultar   → tenue, no dice nada del productor
+ */
+function colorAtv(
+  resultado: number | null | undefined,
+  consultado: number | null | undefined
+): string | undefined {
+  if (consultado == null && resultado == null) return undefined;
+  if (resultado === 3) return colores.exito;
+  if (resultado === 1 || resultado === 2) return colores.advertencia;
+  return colores.textoTenue;
+}
+
 function Dato({
   etiqueta,
   valor,
-}: Readonly<{ etiqueta: string; valor?: string | null }>) {
+  color,
+}: Readonly<{ etiqueta: string; valor?: string | null; color?: string }>) {
   return (
     <View style={estilos.detalleFila}>
       <Text style={estilos.detalleEtiqueta}>{etiqueta}</Text>
-      <Text style={estilos.detalleValor}>{valor || "—"}</Text>
+      <Text style={[estilos.detalleValor, color ? { color } : null]}>
+        {valor || "—"}
+      </Text>
     </View>
   );
 }

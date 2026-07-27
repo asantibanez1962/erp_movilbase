@@ -8,6 +8,7 @@ import {
 } from "react-native";
 import { useAuthStore } from "@erp/shared-api";
 import { cargarContexto, type EmpresaContexto } from "../lib/contexto";
+import { pedirPermisosDeCampo } from "../lib/permisos";
 import { useSesion } from "../lib/sesion";
 import { syncNow } from "../lib/sync";
 import { colores, estilos } from "./estilos";
@@ -114,6 +115,16 @@ export function ContextoScreen() {
     if (!puedeEntrar || !empresa || !cosecha) return;
     setGuardando(true);
     try {
+      // Los permisos de ubicación y cámara se piden ACÁ, una vez, antes de entrar:
+      // el promotor está eligiendo contexto —normalmente bajo techo y con las manos
+      // libres—, no en medio de una visita. Pedirlos durante la captura hace que se
+      // toque "Solo esta vez" para sacarse el diálogo de encima, y ése Android lo
+      // revoca al rato: de ahí la sensación de que pregunta siempre.
+      //
+      // No bloquea: si los niega, igual entra. Sin cámara se sigue capturando
+      // visitas y solicitudes, que es el trabajo principal.
+      await pedirPermisosDeCampo();
+
       await elegir({
         companyId: empresa.id,
         cosecha,

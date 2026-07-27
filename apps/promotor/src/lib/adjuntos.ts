@@ -154,16 +154,32 @@ export async function registrarServerIds(
 /**
  * Id de servidor de un registro, o null si todavía no se puede saber.
  *
- * Tres casos, en orden:
- *   1. el id local ya ES numérico → la fila vino de un pull sin ClientUuid
+ * Cuatro casos, en orden:
+ *   1. la fila trae `server_id` del pull (v1.53/RC/54) → es el más confiable, y el
+ *      ÚNICO que cubre una fila bajada del servidor que este teléfono nunca pusheó.
+ *      En un dispositivo recién instalado son todas: sin esto, los adjuntos sobre
+ *      cualquier registro anterior se quedaban en la cola para siempre.
+ *   2. el id local ya ES numérico → la fila vino de un pull sin ClientUuid
  *      (creada en la web), así que el id local es el del servidor
- *   2. hay mapeo en server_ids → la creó este teléfono y ya subió
- *   3. nada → el registro no se sincronizó todavía; el adjunto sigue esperando
+ *   3. hay mapeo en server_ids → la creó este teléfono y ya subió
+ *   4. nada → el registro no se sincronizó todavía; el adjunto sigue esperando
  */
 async function resolverServerId(
   coleccion: string,
   registroLocalId: string
 ): Promise<string | null> {
+  // Genérico por _raw y no por un modelo tipado: esta cola sirve a cualquier
+  // colección, y las que no tienen la columna simplemente devuelven undefined.
+  try {
+    const fila = await database.get(coleccion).find(registroLocalId);
+    const delPull = (fila as unknown as { _raw: { server_id?: string | null } })._raw
+      ?.server_id;
+    if (delPull) return String(delPull);
+  } catch {
+    // El registro puede no existir ya (borrado local) o la colección no tener la
+    // columna. Se sigue con los otros caminos.
+  }
+
   if (/^\d+$/.test(registroLocalId)) return registroLocalId;
 
   // Se busca por las dos formas de case. SQL Server devuelve UNIQUEIDENTIFIER en
