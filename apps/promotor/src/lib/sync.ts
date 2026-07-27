@@ -1,5 +1,5 @@
 import { Q } from "@nozbe/watermelondb";
-import { PullFallidoError, runSync } from "@erp/shared-sync";
+import { runSync, type FalloPull } from "@erp/shared-sync";
 import type { PushResponse } from "@erp/shared-types";
 import { database } from "./db";
 import { getSyncClient } from "./api";
@@ -26,7 +26,7 @@ const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas"] as const;
  * Las fotos NO viajan por acá (el contrato de sync es JSON): se suben después,
  * cuando las visitas ya tienen id de servidor.
  */
-export async function syncNow(): Promise<void> {
+export async function syncNow(): Promise<FalloPull[]> {
   const api = getSyncClient();
   const inicio = Date.now();
 
@@ -45,9 +45,9 @@ export async function syncNow(): Promise<void> {
   // para entender un reclamo de "no envió nada".
   const pendientesAntes = await contarPendientes();
 
-  let pushResponses: Awaited<ReturnType<typeof runSync>>;
+  let resultado: Awaited<ReturnType<typeof runSync>>;
   try {
-    pushResponses = await runSync(database, {
+    resultado = await runSync(database, {
       api,
       collections: [...COLLECTIONS],
       schemaVersion: config.schemaVersion,
@@ -59,29 +59,30 @@ export async function syncNow(): Promise<void> {
     // El sync falla y se propaga (la pantalla lo muestra), pero antes queda
     // registrado: un sync que nunca llegó al servidor no deja rastro del otro lado,
     // y sin esto la única evidencia sería el logcat de un teléfono en el campo.
-    // Si el fallo fue de uno o más pulls, se guarda el desglose POR COLECCIÓN. Ese
-    // detalle es lo que convierte "error de sincronización" en algo accionable: la
-    // primera vez que pasó —un permiso faltante en un catálogo de 11 filas— hubo que
-    // ir a leer el log del servidor para saber cuál colección era.
-    const fallos = err instanceof PullFallidoError ? err.fallos : null;
+    // Acá sólo caen los fallos que NO son de un pull individual (el push, o un error
+    // al aplicar): desde que el sync es resiliente, una colección que no se pudo traer
+    // vuelve en `resultado.fallos` en vez de tirar.
     await registrarEvento({
       tipo: "sync",
       ok: false,
-      resumen: fallos
-        ? `No se pudo traer: ${fallos.map((f) => f.coleccion).join(", ")}`
-        : `Sincronización falló con ${pendientesAntes} pendiente(s)`,
-      detalle: fallos ? { fallos, pendientes: pendientesAntes } : undefined,
+      resumen: `Sincronización falló con ${pendientesAntes} pendiente(s)`,
       error: (err as Error)?.message ?? String(err),
       duracionMs: Date.now() - inicio,
     });
     throw err;
   }
 
+  const { push: pushResponses, fallos } = resultado;
+
   await registrarEvento({
     tipo: "sync",
-    ok: true,
-    resumen: resumirPush(pushResponses, pendientesAntes),
-    detalle: detallarPush(pushResponses),
+    ok: fallos.length === 0,
+    resumen:
+      fallos.length === 0
+        ? resumirPush(pushResponses, pendientesAntes)
+        : `${resumirPush(pushResponses, pendientesAntes)} — sin traer: ` +
+          fallos.map((f) => f.coleccion).join(", "),
+    detalle: { push: detallarPush(pushResponses), fallos },
     duracionMs: Date.now() - inicio,
   });
 
@@ -122,6 +123,11 @@ export async function syncNow(): Promise<void> {
   } catch (err) {
     console.warn("purga de datos locales vencidos falló", err);
   }
+
+  // Las colecciones que no se pudieron traer se DEVUELVEN en vez de tirar: las demás
+  // ya se aplicaron y avanzaron su checkpoint, así que el sync sirvió. Quien llame
+  // decide cómo mostrarlo — parcial es una advertencia, y que fallen todas, un error.
+  return fallos;
 }
 
 /**

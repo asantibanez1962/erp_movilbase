@@ -37,6 +37,8 @@ import {
   resumenPendientes,
 } from "./src/lib/rebajar";
 import { cerrarSesion, verificarAlcance } from "./src/lib/alcance";
+import { describirFallos } from "@erp/shared-sync";
+import { COLLECTIONS } from "./src/db/schema";
 import { PickerModal } from "./src/screens/componentes/Picker";
 import { usePendientes } from "./src/screens/usePendientes";
 import { ProductoresScreen } from "./src/screens/ProductoresScreen";
@@ -477,7 +479,19 @@ function CustomDrawer(props: DrawerContentComponentProps) {
     setSyncing(true);
     setUltimoError(null);
     try {
-      await syncNow();
+      // Desde que el sync es resiliente, las colecciones que no se pudieron traer
+      // VUELVEN acá en vez de tirar: las demás ya se aplicaron. Que falle una parte no
+      // es lo mismo que no haber sincronizado, y el mensaje lo dice distinto —
+      // decírselo igual haría que el promotor desconfíe de un sync que sí sirvió.
+      const fallos = await syncNow();
+      if (fallos.length > 0) {
+        const todas = fallos.length >= COLLECTIONS.length;
+        setUltimoError(
+          todas
+            ? describirFallos(fallos)
+            : `Sincronizado, pero sin traer: ${describirFallos(fallos)}`
+        );
+      }
     } catch (e) {
       const msg = (e as Error)?.message ?? "Error desconocido";
       console.warn("sync failed", msg);

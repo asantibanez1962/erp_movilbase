@@ -11,6 +11,7 @@ import { Q } from "@nozbe/watermelondb";
 import { TipoVisita, Visita } from "../db/models";
 import { database } from "../lib/db";
 import { syncNow } from "../lib/sync";
+import { describirFallos } from "@erp/shared-sync";
 import { colores, estilos, fmtFecha } from "./estilos";
 import { useNombresProductor } from "./useNombresProductor";
 import { EstadoPush } from "./EstadoPush";
@@ -105,7 +106,10 @@ export function VisitasScreen({ navigation }: Readonly<{ navigation: any }>) {
     setSincronizando(true);
     setError(null);
     try {
-      await syncNow();
+      // Los fallos por colección vuelven en vez de tirar (el sync es resiliente): lo
+      // que sí se pudo traer ya está aplicado.
+      const fallos = await syncNow();
+      setError(fallos.length > 0 ? describirFallos(fallos) : null);
     } catch (e) {
       setError((e as Error)?.message ?? "Error de sincronización");
     } finally {

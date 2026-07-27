@@ -2,6 +2,7 @@ import { Database, Model } from "@nozbe/watermelondb";
 import { synchronize } from "@nozbe/watermelondb/sync";
 import type { SyncApi } from "@erp/shared-api";
 import type { PullResponse, PushResponse } from "@erp/shared-types";
+import { guardarCheckpoints, leerCheckpoints } from "./checkpoints";
 
 /**
  * Bridge entre el SyncApi (HTTP contra BE) y WMDB synchronize().
@@ -75,19 +76,24 @@ type ChangeBucket = {
 export async function runSync(
   db: Database,
   opts: SyncOptions
-): Promise<Record<string, PushResponse>> {
+): Promise<ResultadoSync> {
   // Captura responses de pushChanges para procesar accepted/rejected
   // post-synchronize. WMDB no nos deja devolverlas directo (pushChanges
   // espera void), pero el closure las acumula sin problema.
   const pushResponses: Record<string, PushResponse> = {};
 
+  // Se llenan dentro de pullChanges y se consumen después de synchronize().
+  const fallos: FalloPull[] = [];
+  const checkpointsNuevos: Record<string, number> = {};
+
   await synchronize({
     database: db,
 
-    pullChanges: async ({ lastPulledAt }) => {
-      // WMDB usa null/undefined al primer sync; el BE acepta last_pulled_at
-      // null como "traeme cualquier cambio". Convertimos undefined → null.
-      const lastPulledAtMs = lastPulledAt ?? null;
+    pullChanges: async () => {
+      // El `lastPulledAt` que pasa WatermelonDB se IGNORA a propósito: es uno solo para
+      // toda la base, y con un único checkpoint el sync tiene que ser todo-o-nada (ver
+      // checkpoints.ts). Cada colección lleva el suyo.
+      const checkpoints = await leerCheckpoints(db, opts.collections);
 
       // Una request por collection. En paralelo — el BE las maneja
       // independientes (no hay tx cross-collection en pull).
@@ -98,34 +104,36 @@ export async function runSync(
       // forma de diagnosticarlo desde el teléfono — hubo que ir a leer el log del
       // servidor.
       //
-      // Se sigue tirando si alguna falla: `synchronize()` es atómico a propósito y
-      // devolver las que sí anduvieron haría avanzar el checkpoint GLOBAL, incluido
-      // el de la que falló — y sus filas no volverían nunca. Pérdida silenciosa, peor
-      // que el fallo ruidoso. El sync parcial de verdad necesita checkpoints por
-      // colección; es la etapa siguiente.
       const resultados = await Promise.allSettled(
         opts.collections.map(async (name) => {
           const resp = await opts.api.pull(name, {
-            last_pulled_at: lastPulledAtMs,
+            last_pulled_at: checkpoints[name] ?? null,
             schema_version: opts.schemaVersion,
           });
           return { name, resp };
         })
       );
 
-      const fallos: FalloPull[] = [];
       const responses: Array<{ name: string; resp: PullResponse }> = [];
       resultados.forEach((r, i) => {
-        if (r.status === "fulfilled") responses.push(r.value);
-        else fallos.push(describirFallo(opts.collections[i] ?? "?", r.reason));
-      });
-
-      if (fallos.length > 0) {
-        for (const f of fallos) {
+        const nombre = opts.collections[i] ?? "?";
+        if (r.status === "fulfilled") {
+          responses.push(r.value);
+          // El checkpoint se ANOTA acá pero se guarda recién después de que
+          // synchronize() aplicó los cambios: si la aplicación falla, avanzarlo
+          // habría dejado un hueco que ningún delta futuro va a llenar.
+          checkpointsNuevos[nombre] = r.value.resp.timestamp;
+        } else {
+          const f = describirFallo(nombre, r.reason);
+          fallos.push(f);
           console.info(`[sync] pull ${f.coleccion}: ${f.codigo} — ${f.mensaje}`);
         }
-        throw new PullFallidoError(fallos);
-      }
+      });
+
+      // NO se tira aunque haya fallos: las colecciones que sí vinieron se aplican y
+      // avanzan, y la que falló conserva su checkpoint viejo — se pone al día sola en
+      // el próximo sync. Antes un permiso faltante en un catálogo de 11 filas dejaba
+      // al promotor sin productores, solicitudes ni visitas, que funcionaban perfecto.
 
       // Reduce a un único ChangeSet { table: changes }. Cualquier table
       // que NO vino en la response queda como empty (WMDB lo exige).
@@ -315,7 +323,15 @@ export async function runSync(
     }
   });
 
-  return pushResponses;
+  // Los checkpoints se guardan RECIÉN ACÁ, con los cambios ya aplicados. Avanzarlos
+  // antes habría dejado un hueco si la aplicación fallaba: la colección pediría desde
+  // un punto posterior a filas que nunca llegaron a la base.
+  //
+  // Las que fallaron no están en el mapa, así que conservan el suyo y se ponen al día
+  // en el próximo sync. Ésa es toda la idea.
+  await guardarCheckpoints(db, checkpointsNuevos);
+
+  return { push: pushResponses, fallos };
 }
 
 /**
@@ -325,6 +341,18 @@ export async function runSync(
  * campo y quien lo atiende por teléfono necesita saber cuál colección y por qué, no
  * "Error de sincronización".
  */
+/**
+ * Resultado de un sync.
+ *
+ * `fallos` NO vacío no significa que el sync no sirvió: las colecciones que sí
+ * vinieron ya están aplicadas y su checkpoint avanzó. Quien llame decide cómo
+ * mostrarlo — un fallo parcial es una advertencia, y que fallen TODAS es un error.
+ */
+export interface ResultadoSync {
+  push: Record<string, PushResponse>;
+  fallos: FalloPull[];
+}
+
 export interface FalloPull {
   coleccion: string;
   /** Código estable del BE (PERMISSION_DENIED, COLLECTION_NOT_FOUND…) o el del error. */
@@ -332,35 +360,28 @@ export interface FalloPull {
   mensaje: string;
 }
 
-export class PullFallidoError extends Error {
-  constructor(public readonly fallos: FalloPull[]) {
-    super(PullFallidoError.describir(fallos));
-    this.name = "PullFallidoError";
+/**
+ * El texto que va a ver el promotor.
+ *
+ * Con una sola colección se muestra su mensaje, y sólo se le antepone el nombre si el
+ * mensaje no lo menciona ya — el del BE suele decirlo ("Permiso requerido para sync de
+ * 'tipos_visita'…") y repetirlo quedaba redundante justo en el texto que alguien va a
+ * leer por teléfono.
+ *
+ * Con varias, casi siempre es el mismo motivo (se cayó la red): se dice una vez y se
+ * listan las colecciones, en vez de nueve renglones iguales.
+ */
+export function describirFallos(fallos: FalloPull[]): string {
+  if (fallos.length === 0) return "";
+  if (fallos.length === 1) {
+    const f = fallos[0]!;
+    return f.mensaje.includes(f.coleccion) ? f.mensaje : `${f.coleccion}: ${f.mensaje}`;
   }
-
-  /**
-   * El texto que va a ver el promotor en la pantalla.
-   *
-   * Con una sola colección se muestra su mensaje, y sólo se le antepone el nombre si
-   * el mensaje no lo menciona ya — el del BE suele decirlo ("Permiso requerido para
-   * sync de 'tipos_visita'…") y repetirlo quedaba redundante justo en el texto que
-   * alguien va a leer por teléfono.
-   */
-  private static describir(fallos: FalloPull[]): string {
-    if (fallos.length === 1) {
-      const f = fallos[0]!;
-      return f.mensaje.includes(f.coleccion)
-        ? f.mensaje
-        : `${f.coleccion}: ${f.mensaje}`;
-    }
-    // Varias: casi siempre es el mismo motivo (se cayó la red), así que se dice una
-    // vez y se listan las colecciones.
-    const motivos = new Set(fallos.map((f) => f.mensaje));
-    const nombres = fallos.map((f) => f.coleccion).join(", ");
-    return motivos.size === 1
-      ? `${[...motivos][0]} (${nombres})`
-      : `No se pudieron traer: ${fallos.map((f) => `${f.coleccion} (${f.codigo})`).join(", ")}`;
-  }
+  const motivos = new Set(fallos.map((f) => f.mensaje));
+  const nombres = fallos.map((f) => f.coleccion).join(", ");
+  return motivos.size === 1
+    ? `${[...motivos][0]} (${nombres})`
+    : `No se pudieron traer: ${fallos.map((f) => `${f.coleccion} (${f.codigo})`).join(", ")}`;
 }
 
 /**

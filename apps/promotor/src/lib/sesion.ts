@@ -22,6 +22,19 @@ import type { MapaPoliticas } from "./politicas";
 
 const K_EMPRESA = "promotor.companyId";
 const K_COSECHA = "promotor.cosecha";
+/**
+ * Las zonas autorizadas TAMBIÉN se persisten, no sólo empresa y cosecha.
+ *
+ * Sin esto, cada arranque en frío las levanta vacías y cualquier comparación contra
+ * las del servidor da "cambiaron" — que es lo que hacía que verificarAlcance rebajara
+ * todos los datos en cada arranque, borrando de paso los checkpoints de sync y
+ * volviendo a bajar 740 filas cada vez.
+ *
+ * Forman parte del ALCANCE de los datos locales tanto como la empresa y la cosecha, así
+ * que tienen que sobrevivir igual que ellas.
+ */
+const K_ZONAS = "promotor.zonas";
+const K_TODAS_ZONAS = "promotor.todasLasZonas";
 
 export interface SesionState {
   companyId: number | null;
@@ -82,14 +95,31 @@ export const useSesion = create<SesionState>((set) => ({
 
   hidratar: async () => {
     try {
-      const [empresa, cosecha] = await Promise.all([
+      const [empresa, cosecha, zonasRaw, todasRaw] = await Promise.all([
         SecureStore.getItemAsync(K_EMPRESA),
         SecureStore.getItemAsync(K_COSECHA),
+        SecureStore.getItemAsync(K_ZONAS),
+        SecureStore.getItemAsync(K_TODAS_ZONAS),
       ]);
       const companyId = empresa ? Number(empresa) : null;
+
+      // Las zonas se restauran para poder comparar el alcance al arrancar. Un parseo
+      // fallido deja el array vacío, que verificarAlcance interpreta como "no se sabe"
+      // y NO como "cambiaron" — la diferencia entre adoptar el valor del servidor y
+      // rebajar toda la base sin motivo.
+      let zonas: string[] = [];
+      try {
+        const parseadas = zonasRaw ? JSON.parse(zonasRaw) : null;
+        if (Array.isArray(parseadas)) zonas = parseadas.filter((z) => typeof z === "string");
+      } catch {
+        // formato viejo o corrupto: se queda vacío
+      }
+
       set({
         companyId: companyId != null && !Number.isNaN(companyId) ? companyId : null,
         cosecha: cosecha ?? null,
+        zonas,
+        todasLasZonas: todasRaw === "1",
         hidratando: false,
       });
     } catch {
@@ -109,6 +139,8 @@ export const useSesion = create<SesionState>((set) => ({
     await Promise.all([
       SecureStore.setItemAsync(K_EMPRESA, String(companyId)),
       SecureStore.setItemAsync(K_COSECHA, cosecha),
+      SecureStore.setItemAsync(K_ZONAS, JSON.stringify(zonas)),
+      SecureStore.setItemAsync(K_TODAS_ZONAS, todasLasZonas ? "1" : "0"),
     ]);
     set({
       companyId,
@@ -130,6 +162,8 @@ export const useSesion = create<SesionState>((set) => ({
     await Promise.all([
       SecureStore.deleteItemAsync(K_EMPRESA),
       SecureStore.deleteItemAsync(K_COSECHA),
+      SecureStore.deleteItemAsync(K_ZONAS),
+      SecureStore.deleteItemAsync(K_TODAS_ZONAS),
     ]);
     set({
       companyId: null,

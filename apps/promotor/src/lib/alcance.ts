@@ -57,6 +57,25 @@ export async function verificarAlcance(): Promise<{ cambio: boolean; aviso?: str
     return { cambio: false };
   }
 
+  // Sin zonas conocidas NO se concluye que cambiaron: se adopta lo del servidor y
+  // listo. La diferencia importa — comparar contra un array vacío daba "cambiaron"
+  // SIEMPRE, y eso rebajaba toda la base en cada arranque, borrando de paso los
+  // checkpoints de sync y volviendo a bajar las 740 filas cada vez.
+  //
+  // Pasa cuando la sesión viene de una versión anterior que no las persistía, o si el
+  // valor guardado no se pudo leer. En los dos casos lo correcto es adoptar, no
+  // resetear: no hay evidencia de que el alcance haya cambiado.
+  if (s.zonas.length === 0 && !s.todasLasZonas) {
+    await s.elegir({
+      companyId: s.companyId,
+      cosecha: s.cosecha ?? "",
+      zonas: zonasServidor,
+      zonasNombres: s.zonasNombres,
+      todasLasZonas: todasServidor,
+    });
+    return { cambio: false };
+  }
+
   const antes = firma(s.companyId, s.cosecha, s.zonas);
   const ahora = firma(s.companyId, s.cosecha, zonasServidor);
   if (antes === ahora && todasServidor === s.todasLasZonas) return { cambio: false };
