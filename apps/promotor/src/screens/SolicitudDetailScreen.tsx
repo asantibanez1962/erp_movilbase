@@ -187,19 +187,16 @@ export function SolicitudDetailScreen({
       setAtv(resultado);
       Alert.alert("Hacienda", resultado.mensaje);
 
-      // Si el veredicto lo escribió el BE (solicitud ya sincronizada), se sincroniza
-      // enseguida para BAJARLO. Sin esto quedaba sólo en la pantalla: cerrabas la app y
-      // el dato desaparecía del teléfono hasta el próximo sync, aunque estuviera guardado
-      // en el ERP.
+      // Se sincroniza enseguida para que el veredicto LLEGUE al ERP. Ya está guardado
+      // en la fila local, así que no se pierde si esto falla; pero dejarlo pendiente
+      // cuando justo ahora hay señal —la consulta a Hacienda acaba de funcionar— sería
+      // desaprovechar el único momento garantizado de conectividad.
       //
-      // No hace falta preguntar si hay conexión: la consulta a Hacienda acaba de
-      // funcionar, así que la hay. Best-effort igual — si falla, el dato está en el
-      // servidor y baja en el sync siguiente.
-      if (resultado.persistido) {
-        syncNow().catch((err) =>
-          console.info("sync post-ATV falló; el dato baja después", (err as Error)?.message)
-        );
-      }
+      // Best-effort y sin await: si falla, viaja en el próximo sync como cualquier otro
+      // cambio pendiente.
+      syncNow().catch((err) =>
+        console.info("sync post-ATV falló; queda pendiente", (err as Error)?.message)
+      );
     } catch (e) {
       Alert.alert(
         "No se pudo consultar",
@@ -386,17 +383,12 @@ export function SolicitudDetailScreen({
               </Text>
             </TouchableOpacity>
           ) : null}
-          {/* Si la solicitud ya subió, el veredicto lo escribió el BE y baja en el
-              próximo pull; hasta entonces lo que se ve es la respuesta de la
-              consulta. Decirlo evita que parezca que no se guardó. */}
-          {atv != null && atv.persistido ? (
+          {/* El veredicto queda guardado en el teléfono y sube con el sync. Se dice
+              explícitamente porque, al no cambiar nada visible más que estos dos campos,
+              sin el aviso parece que la consulta no hizo nada. */}
+          {atv != null ? (
             <Text style={[estilos.vacioTexto, { paddingHorizontal: 16, paddingTop: 8 }]}>
-              Ya quedó registrado en el ERP.
-            </Text>
-          ) : null}
-          {atv != null && !atv.persistido ? (
-            <Text style={[estilos.vacioTexto, { paddingHorizontal: 16, paddingTop: 8 }]}>
-              Viaja al ERP con la próxima sincronización.
+              Guardado. Sube al ERP con la sincronización.
             </Text>
           ) : null}
 

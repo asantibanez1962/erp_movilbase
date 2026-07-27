@@ -220,7 +220,16 @@ export async function runSync(
         if (isEmpty) continue;
 
         const resp = await opts.api.push(collName, {
-          changes: { [collName]: bucket },
+          changes: {
+            [collName]: {
+              // Los creados van completos: la fila no existe en el servidor, así que
+              // todo lo que trae es información nueva.
+              created: bucket.created.map((f) => limpiarMetadatos(f)),
+              // Los modificados van MÍNIMOS — sólo lo que cambió. Ver soloLoCambiado.
+              updated: bucket.updated.map((f) => soloLoCambiado(f)),
+              deleted: bucket.deleted,
+            },
+          },
           last_pulled_at: lastPulledAt,
         });
         pushResponses[collName] = resp;
@@ -293,4 +302,80 @@ async function safeFind(
   } catch {
     return null;
   }
+}
+
+/**
+ * Metadatos internos de WatermelonDB que no tienen por qué viajar.
+ *
+ * `_status` y `_changed` son contabilidad del cliente; el servidor los ignora (no
+ * están en ninguna lista de campos aceptados) pero mandarlos infla el payload y
+ * confunde a cualquiera que lea el wire.
+ */
+const METADATOS_WMDB = new Set(["_status", "_changed"]);
+
+/**
+ * Copia sin los metadatos internos.
+ *
+ * SIEMPRE devuelve un objeto NUEVO. No es prolijidad: WatermelonDB compara el raw que
+ * mandó a pushChanges contra el raw actual de la fila para decidir si la marca como
+ * sincronizada (`areRecordsEqual`). Mutar el objeto del bucket rompería esa
+ * contabilidad y las filas quedarían pendientes o se marcarían de más.
+ */
+function limpiarMetadatos(raw: Record<string, unknown>): Record<string, unknown> {
+  const salida: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (!METADATOS_WMDB.has(k)) salida[k] = v;
+  }
+  return salida;
+}
+
+/**
+ * La fila modificada reducida a lo que de verdad cambió.
+ *
+ * POR QUÉ NO SE MANDA COMPLETA
+ * ----------------------------
+ * Mandando la fila entera, el push lleva TODOS los campos actualizables — incluidos
+ * los que el promotor nunca tocó. Y ahí un teléfono con datos viejos pisa lo que otro
+ * cambió: el caso concreto es el veredicto de Hacienda, que la oficina puede haber
+ * reconsultado después del último pull del teléfono. Mandando sólo lo modificado, un
+ * campo únicamente puede pisarse si el promotor lo editó a propósito — y en ese caso
+ * su valor ES el más nuevo.
+ *
+ * Eso vuelve innecesario el control de versión optimista para el caso normal: la
+ * única colisión posible es que los dos hayan editado el MISMO campo, y ahí gana el
+ * último, que es lo razonable (el historial del servidor deja el rastro).
+ *
+ * `_changed` es la lista que WatermelonDB ya mantiene por fila: los nombres de columna
+ * tocados desde el último sync, en snake_case — el mismo vocabulario del wire, así que
+ * no hay traducción en el medio.
+ *
+ * El `id` viaja siempre aunque no esté en `_changed`: es cómo el servidor encuentra la
+ * fila. Igual `client_uuid`, que es la identidad cuando el id local es un uuid.
+ *
+ * Si `_changed` viene vacío (no debería, pero el wire no es un contrato que controlemos
+ * de los dos lados), se manda la fila completa: pasarse de generoso es recuperable,
+ * perder la edición del promotor no.
+ */
+function soloLoCambiado(raw: Record<string, unknown>): Record<string, unknown> {
+  // typeof explícito: `_changed` es un string CSV, pero el raw viene tipado como
+  // unknown y un String(objeto) daría "[object Object]" — o sea una lista de campos
+  // inventada, que es peor que no tener ninguna.
+  const cambiados =
+    typeof raw._changed === "string"
+      ? raw._changed
+          .split(",")
+          .map((c) => c.trim())
+          .filter(Boolean)
+      : [];
+
+  if (cambiados.length === 0) return limpiarMetadatos(raw);
+
+  const salida: Record<string, unknown> = { id: raw.id };
+  if (raw.client_uuid != null) salida.client_uuid = raw.client_uuid;
+
+  for (const campo of cambiados) {
+    if (METADATOS_WMDB.has(campo)) continue;
+    if (campo in raw) salida[campo] = raw[campo];
+  }
+  return salida;
 }

@@ -76,7 +76,28 @@ export interface ManifestResponse {
  *   hasta-evento  editable hasta que un evento la cierra (ej. imprimir un recibo),
  *                 y RECIÉN AHÍ entra a la cola de envío.
  */
-export type PoliticaEdicion = "automatica" | "hasta-sync" | "hasta-evento";
+/**
+ * CICLO DE VIDA de la fila en el teléfono: hasta cuándo se edita y cuándo se envía.
+ * Eje ortogonal a sync_policy, que es la DIRECCIÓN.
+ *
+ *   automatica        no se edita; se envía apenas se guarda (catálogos)
+ *   hasta-sync        editable mientras no subió. Una vez arriba es read-only
+ *   hasta-evento      editable mientras campo_cierre esté vacío, y RECIÉN ENTONCES se
+ *                     envía (recibo de café al imprimirse)
+ *   hasta-resolucion  editable mientras campo_cierre esté vacío, INCLUSO ya
+ *                     sincronizada, y se envía siempre
+ *
+ * Los dos últimos comparten el criterio de edición y difieren en el envío. Hacen
+ * falta los dos porque una solicitud se sigue pudiendo corregir después de subir
+ * —hasta que la oficina la aprueba o rechaza— mientras una visita, no: una vez
+ * enviada queda firme. Con un solo valor habría que elegir cuál de las dos
+ * romper.
+ */
+export type PoliticaEdicion =
+  | "automatica"
+  | "hasta-sync"
+  | "hasta-evento"
+  | "hasta-resolucion";
 
 export interface CollectionInfo {
   name: string;
@@ -90,7 +111,7 @@ export interface CollectionInfo {
   /** "pull-only" | "push-only" | "bidirectional" */
   sync_policy: "pull-only" | "push-only" | "bidirectional";
   politica_edicion: PoliticaEdicion;
-  /** Sólo en hasta-evento: campo que marca la fila como cerrada. */
+  /** En hasta-evento y hasta-resolucion: campo que marca la fila como cerrada. */
   campo_cierre?: string | null;
   last_server_change: number;
 }

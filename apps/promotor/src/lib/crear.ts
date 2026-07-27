@@ -103,13 +103,19 @@ export async function crearSolicitud(
 }
 
 /**
- * Edita una solicitud que TODAVÍA no subió.
+ * Edita una solicitud, haya subido o no.
  *
- * Sólo se permite mientras `esLocal` (WatermelonDB la mantiene en estado
- * 'created'): editar así es puramente local y el push la sube completa cuando
- * toque. Una solicitud ya sincronizada NO se puede editar desde el móvil — el
- * push del BE rechaza `updated` con NOT_SUPPORTED, y habilitarlo requiere además
- * política de conflictos con la web. Esa pieza está pendiente aparte.
+ * La regla ya no es "sólo mientras es local" sino **mientras la oficina no la
+ * resolvió**: `estado` en 0. Es la política `hasta-resolucion` de la colección, y por
+ * eso el guard mira el estado y no `_status`.
+ *
+ * Si la fila ya estaba sincronizada, WatermelonDB la marca 'updated' y el push manda
+ * SÓLO los campos que cambiaron (`_changed`). Eso es lo que hace segura la edición
+ * post-sync: un campo que el promotor no tocó no puede pisar el valor del servidor.
+ *
+ * El BE igual valida por su cuenta —conjunto de campos actualizables, lock rules de
+ * negocio y el lock de edición concurrente— así que una solicitud que se aprobó entre
+ * la edición y el sync vuelve rechazada con su motivo, no se aplica a la fuerza.
  *
  * No se tocan cosecha, zona ni compania: son contexto heredado, no campos del form.
  */
@@ -117,9 +123,9 @@ export async function actualizarSolicitud(
   solicitud: Solicitud,
   input: Omit<NuevaSolicitudInput, "idSocio" | "codigo" | "zona" | "fecha">
 ): Promise<void> {
-  if (!solicitud.esLocal) {
+  if (!solicitud.estaPendiente) {
     throw new Error(
-      "Esta solicitud ya se sincronizó; los cambios se hacen desde el ERP web."
+      "Esta solicitud ya fue aprobada o rechazada; los cambios se hacen desde el ERP web."
     );
   }
 

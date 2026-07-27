@@ -89,34 +89,67 @@ export function puedeEnviarse(
   fila: Record<string, unknown>
 ): boolean {
   const { politica, campoCierre } = politicaDe(mapa, coleccion);
+  // `hasta-resolucion` NO retiene: comparte con hasta-evento el criterio de edición,
+  // pero envía siempre. Es la diferencia entre las dos.
   if (politica !== "hasta-evento" || !campoCierre) return true;
 
-  const v = fila[campoCierre];
-  return v != null && v !== "" && v !== false && v !== 0;
+  return !estaAbierta(fila, campoCierre);
+}
+
+/**
+ * ¿El campo de cierre está vacío, o sea la fila sigue abierta?
+ *
+ * Vacío es null, cadena vacía, false o 0. El 0 importa: el campo de cierre de una
+ * solicitud es `estado`, donde 0 significa pendiente — tratarlo como "cerrado" por ser
+ * falsy dejaría toda solicitud pendiente como no editable, que es exactamente lo
+ * contrario de lo que se quiere.
+ *
+ * `campoCierre` es un nombre de COLUMNA (viene de la metadata del servidor), y estas
+ * funciones reciben dos formas distintas: el engine pasa raws —donde las claves son
+ * columnas— y las pantallas pasan modelos de WatermelonDB, donde son propiedades
+ * camelCase. Se mira primero `_raw`, que siempre tiene la columna, y se cae a la
+ * propiedad para el caso en que coincidan (`estado`) o venga un objeto plano.
+ */
+function estaAbierta(fila: Record<string, unknown>, campoCierre: string): boolean {
+  const raw = (fila as { _raw?: Record<string, unknown> })._raw;
+  const v = raw && campoCierre in raw ? raw[campoCierre] : fila[campoCierre];
+  return v == null || v === "" || v === false || v === 0;
 }
 
 /**
  * ¿Se puede editar en el móvil?
  *
- * `automatica`   → nunca (son maestras del servidor).
- * `hasta-sync`   → mientras no subió.
- * `hasta-evento` → mientras no se cerró; el envío viene después.
+ * `automatica`       → nunca (son maestras del servidor).
+ * `hasta-sync`       → mientras no subió. Arriba queda read-only.
+ * `hasta-evento`     → mientras el campo de cierre esté vacío; el envío viene después.
+ * `hasta-resolucion` → mientras el campo de cierre esté vacío, INCLUSO ya sincronizada.
  *
- * Ya sincronizado es siempre read-only: corregirlo es trabajo de la web.
+ * El último es el que rompe la regla vieja de "sincronizado ⇒ read-only", y a propósito:
+ * una solicitud se sigue pudiendo corregir mientras la oficina no la resolvió, y el push
+ * lleva sólo los campos que cambiaron. Una visita, en cambio, queda firme al enviarse —
+ * de ahí que hagan falta dos políticas y no una sola más permisiva.
  */
 export function esEditable(
   mapa: MapaPoliticas,
   coleccion: string,
-  // Un Model de WatermelonDB, del que sólo se leen syncStatus y —en hasta-evento—
-  // el campo de cierre. No se tipa como Record<string, unknown> porque las clases
+  // Un Model de WatermelonDB, del que sólo se leen syncStatus y —cuando la política lo
+  // usa— el campo de cierre. No se tipa como Record<string, unknown> porque las clases
   // de WMDB no tienen index signature.
   fila: { syncStatus?: string }
 ): boolean {
   const { politica, campoCierre } = politicaDe(mapa, coleccion);
   if (politica === "automatica") return false;
+
+  // Único caso en que la fila sincronizada sigue abierta. Sin campo de cierre no hay
+  // forma de saber si lo está, así que se cae al criterio conservador de hasta-sync.
+  if (politica === "hasta-resolucion" && campoCierre) {
+    return estaAbierta(fila as Record<string, unknown>, campoCierre);
+  }
+
   if (fila.syncStatus !== "created") return false;
+
   if (politica === "hasta-evento" && campoCierre) {
-    return !puedeEnviarse(mapa, coleccion, fila as Record<string, unknown>);
+    return estaAbierta(fila as Record<string, unknown>, campoCierre);
   }
   return true;
 }
