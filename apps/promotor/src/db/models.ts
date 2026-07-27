@@ -37,6 +37,7 @@ export class TipoVisita extends Model {
   // RequiereSolicitud era BIT, así que históricamente llegaron con tipos distintos.
   @readonly @field("requiere_finca") requiereFinca!: number | boolean | null;
   @readonly @field("requiere_solicitud") requiereSolicitud!: number | boolean | null;
+  @readonly @field("requiere_gps") requiereGps!: number | boolean | null;
   @readonly @field("compania") compania!: number | null;
   @readonly @field("sync_updated_at") syncUpdatedAt!: number;
 
@@ -80,6 +81,18 @@ export class TipoVisita extends Model {
   /** Liga la visita a una solicitud y habilita la producción estimada. */
   get exigeSolicitud(): boolean {
     return esVerdadero(this.requiereSolicitud);
+  }
+
+  /**
+   * El tipo exige punto GPS.
+   *
+   * "Exige" y no "obliga": la app deshabilita guardar mientras no haya punto y ofrece
+   * reintentar, pero si el promotor confirma que no hay señal se guarda con
+   * `gpsOmitido`. Bloquear duro le costaría la visita entera bajo sombra de cafetal, y
+   * perder el dato es peor que perder el punto.
+   */
+  get exigeGps(): boolean {
+    return esVerdadero(this.requiereGps);
   }
 }
 
@@ -344,6 +357,8 @@ export class Visita extends Model {
   @field("observaciones") observaciones!: string | null;
   @field("gps_lat") gpsLat!: number | null;
   @field("gps_lng") gpsLng!: number | null;
+  /** Se guardó sin punto a pesar de que el tipo lo exigía, con confirmación explícita. */
+  @field("gps_omitido") gpsOmitido!: number | null;
   @field("prod_estimada_promotor") prodEstimadaPromotor!: number | null;
   @field("estado") estado!: number | null;
   @field("client_uuid") clientUuid!: string | null;
@@ -354,6 +369,17 @@ export class Visita extends Model {
 
   get tieneGps(): boolean {
     return this.gpsLat != null && this.gpsLng != null;
+  }
+
+  /**
+   * Se guardó sin punto aunque el tipo lo exigía, con confirmación del promotor.
+   *
+   * No es lo mismo que `!tieneGps`: eso incluye los tipos que nunca pidieron GPS.
+   * Esto es una decisión registrada — "no había señal" — y es la información que el
+   * legacy perdía al rechazar la visita en vez de guardarla.
+   */
+  get gpsFueOmitido(): boolean {
+    return esVerdadero(this.gpsOmitido) && !this.tieneGps;
   }
 }
 

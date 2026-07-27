@@ -140,14 +140,7 @@ export function VisitaDetailScreen({
           v.prodEstimadaPromotor != null ? String(v.prodEstimadaPromotor) : null
         }
       />
-      <Dato
-        etiqueta="GPS"
-        valor={
-          v.tieneGps
-            ? `📍 ${v.gpsLat!.toFixed(5)}, ${v.gpsLng!.toFixed(5)}`
-            : "sin coordenadas"
-        }
-      />
+      <Dato etiqueta="GPS" valor={textoGps(v)} />
 
       <Text style={estilos.seccion}>Observaciones</Text>
       <View style={estilos.detalleFila}>
@@ -216,4 +209,16 @@ function Dato({
       <Text style={estilos.detalleValor}>{valor || "—"}</Text>
     </View>
   );
+}
+
+/**
+ * "GPS omitido" y "sin coordenadas" no son lo mismo y no pueden mostrarse igual: lo
+ * primero significa que el tipo de visita exigía el punto y el promotor confirmó que no
+ * había señal —una decisión registrada—, y lo segundo, que nunca hizo falta.
+ */
+function textoGps(v: Visita): string {
+  if (v.tieneGps) {
+    return `📍 ${v.gpsLat!.toFixed(5)}, ${v.gpsLng!.toFixed(5)}`;
+  }
+  return v.gpsFueOmitido ? "omitido — no había señal" : "sin coordenadas";
 }

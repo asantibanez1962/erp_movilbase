@@ -131,6 +131,9 @@ export function NuevaVisitaScreen({
   const exigeFinca = tipo?.exigeFinca ?? false;
   const exigeRecibidor = tipo?.exigeRecibidor ?? false;
   const exigeSolicitud = tipo?.exigeSolicitud ?? false;
+  // El tipo exige punto GPS (v1.53/RC/57). "Exige" y no "obliga": ver la nota de
+  // `omitirGps` más abajo.
+  const exigeGps = tipo?.exigeGps ?? false;
 
   // Los dos efectos de limpieza reaccionan sólo a cambios HECHOS POR EL USUARIO.
   // Sin los refs se disparaban también en el primer render y al precargar en modo
@@ -166,12 +169,31 @@ export function NuevaVisitaScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tipoId]);
 
+  /**
+   * El promotor confirmó que no hay señal GPS y guarda igual.
+   *
+   * POR QUÉ EXISTE ESTA VÁLVULA
+   * El legacy rechaza una visita sin GPS. Replicarlo tal cual acá le costaría la visita
+   * entera: bajo sombra de cafetal el fix puede tardar minutos o no llegar, y perder el
+   * registro es peor que perder el punto. Así que la app INSISTE —guardar deshabilitado,
+   * reintento a la vista— pero deja una salida explícita, y la marca en `gps_omitido`
+   * para que la oficina distinga "no se pudo" de "nadie se ocupó". Eso último es
+   * justamente lo que el legacy pierde al rechazar.
+   *
+   * Se resetea si cambia el tipo: la confirmación fue para ESTE tipo de visita.
+   */
+  const [omitirGps, setOmitirGps] = useState(false);
+  useEffect(() => setOmitirGps(false), [tipoId]);
+
+  const faltaGps = exigeGps && punto == null && !omitirGps;
+
   const puedeGuardar =
     tipoId != null &&
     (!exigeProductor || productorId != null) &&
     (!exigeRecibidor || recibidorCodigo != null) &&
     (!exigeFinca || fincaId != null) &&
     (!exigeSolicitud || solicitudId != null) &&
+    !faltaGps &&
     !guardando;
 
   const guardar = async () => {
@@ -197,6 +219,8 @@ export function NuevaVisitaScreen({
         prodEstimadaPromotor: aNumero(prodEstimada),
         gpsLat: punto?.lat ?? null,
         gpsLng: punto?.lng ?? null,
+        // Sólo cuenta como omisión si el tipo lo exigía y de verdad no hay punto.
+        gpsOmitido: exigeGps && punto == null,
       };
 
       if (editando) {
@@ -223,6 +247,23 @@ export function NuevaVisitaScreen({
    * lo va a mostrar (denegado dos veces, o auto-revocado), se lo manda a Ajustes en
    * vez de dejarlo tocando un botón que no hace nada.
    */
+  /**
+   * Confirma la omisión del GPS. Con diálogo y no con un toggle silencioso: es una
+   * decisión que queda registrada en el expediente de la visita, así que el promotor
+   * tiene que enterarse de que la está tomando.
+   */
+  const confirmarOmitirGps = () => {
+    Alert.alert(
+      "Guardar sin GPS",
+      "Este tipo de visita necesita el punto. Si no hay señal se puede guardar igual, " +
+        "pero queda registrado que la visita no tiene coordenadas. ¿Continuar?",
+      [
+        { text: "Seguir intentando", style: "cancel" },
+        { text: "Guardar sin GPS", style: "destructive", onPress: () => setOmitirGps(true) },
+      ]
+    );
+  };
+
   const reintentarGps = async () => {
     if (gpsEstado === "sin-permiso") {
       const permiso = await permisoUbicacion(true);
@@ -354,10 +395,48 @@ export function NuevaVisitaScreen({
           onPress={guardar}
           deshabilitado={!puedeGuardar}
         />
-        {gpsEstado === "sin-senal" || gpsEstado === "sin-permiso" ? (
-          <Text style={[estilos.vacioTexto, { paddingTop: 10 }]}>
-            Se puede guardar sin GPS; la visita queda sin coordenadas.
-          </Text>
+        {/* Sin GPS, el mensaje y las opciones dependen de si el tipo lo exige. */}
+        {punto == null && (gpsEstado === "sin-senal" || gpsEstado === "sin-permiso") ? (
+          exigeGps ? (
+            <>
+              <Text
+                style={[
+                  estilos.vacioTexto,
+                  { paddingTop: 10, paddingHorizontal: 16, color: colores.advertencia },
+                ]}
+              >
+                Este tipo de visita necesita el punto GPS. Tocá la fila de arriba para
+                reintentar; a veces hay que salir de debajo de los árboles.
+              </Text>
+              {/* La salida explícita. No se ofrece de entrada —aparece recién cuando el
+                  GPS ya falló— para que sea la última opción y no la primera. */}
+              {omitirGps ? (
+                <Text
+                  style={[
+                    estilos.vacioTexto,
+                    { paddingTop: 10, paddingHorizontal: 16, color: colores.error },
+                  ]}
+                >
+                  Se va a guardar SIN coordenadas, y queda marcado como GPS omitido.
+                </Text>
+              ) : (
+                <TouchableOpacity
+                  onPress={confirmarOmitirGps}
+                  style={{ paddingVertical: 14, paddingHorizontal: 16, alignItems: "center" }}
+                >
+                  <Text
+                    style={{ color: colores.error, fontSize: 15, fontWeight: "700" }}
+                  >
+                    Guardar sin GPS
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </>
+          ) : (
+            <Text style={[estilos.vacioTexto, { paddingTop: 10 }]}>
+              Se puede guardar sin GPS; la visita queda sin coordenadas.
+            </Text>
+          )
         ) : null}
         <View style={{ height: 40 }} />
       </ScrollView>

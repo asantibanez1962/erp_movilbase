@@ -40,8 +40,9 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *   1 → schema inicial
  *   2 → resultado_atv / consultado_atv en solicitudes + tabla bitacora
  *   3 → server_id en las bidireccionales (id numérico del servidor)
+ *   4 → requiere_gps en tipos_visita + gps_omitido en visitas
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Orden de sync. Importa para el push: el padre tiene que subir antes que el hijo
@@ -73,6 +74,9 @@ export const schema = appSchema({
         // requiere_solicitud habilita el link a la solicitud de crédito.
         { name: "requiere_finca", type: "number", isOptional: true },
         { name: "requiere_solicitud", type: "number", isOptional: true },
+        // El tipo exige punto GPS. La app insiste pero no prohíbe: si el promotor
+        // confirma que no hay fix, la visita se guarda con gps_omitido en 1.
+        { name: "requiere_gps", type: "number", isOptional: true },
         { name: "compania", type: "number", isOptional: true },
         { name: "sync_updated_at", type: "number", isIndexed: true },
       ],
@@ -257,6 +261,9 @@ export const schema = appSchema({
         { name: "observaciones", type: "string", isOptional: true },
         { name: "gps_lat", type: "number", isOptional: true },
         { name: "gps_lng", type: "number", isOptional: true },
+        // El promotor confirmó que no había señal y guardó sin punto, en un tipo que lo
+        // exige. Distingue "no se pudo" de "nadie se ocupó".
+        { name: "gps_omitido", type: "number", isOptional: true },
         { name: "prod_estimada_promotor", type: "number", isOptional: true },
         { name: "estado", type: "number", isOptional: true },
         { name: "client_uuid", type: "string", isOptional: true },

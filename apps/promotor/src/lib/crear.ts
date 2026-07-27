@@ -175,6 +175,10 @@ export async function actualizarVisita(
       // Sólo se completa si faltaba; no se sobreescribe un punto ya tomado.
       if (rec.gpsLat == null && input.gpsLat != null) rec.gpsLat = input.gpsLat;
       if (rec.gpsLng == null && input.gpsLng != null) rec.gpsLng = input.gpsLng;
+      // Si el reintento consiguió el punto, la omisión deja de aplicar: dejarla en 1
+      // marcaría como "no se pudo" una visita que sí terminó con coordenadas.
+      if (rec.gpsLat != null && rec.gpsLng != null) rec.gpsOmitido = 0;
+      else if (input.gpsOmitido) rec.gpsOmitido = 1;
       rec.pushStatus = null;
       rec.pushError = null;
     });
@@ -237,6 +241,12 @@ export interface NuevaVisitaInput {
   prodEstimadaPromotor?: number | null;
   gpsLat?: number | null;
   gpsLng?: number | null;
+  /**
+   * El tipo exigía GPS y el promotor confirmó que no había señal. Queda registrado para
+   * que la oficina distinga "no se pudo" de "nadie se ocupó" — la información que el
+   * legacy perdía al rechazar la visita.
+   */
+  gpsOmitido?: boolean;
   fecha?: Date;
 }
 
@@ -254,6 +264,7 @@ export async function crearVisita(input: NuevaVisitaInput): Promise<Visita> {
     rec.prodEstimadaPromotor = input.prodEstimadaPromotor ?? null;
     rec.gpsLat = input.gpsLat ?? null;
     rec.gpsLng = input.gpsLng ?? null;
+    rec.gpsOmitido = input.gpsOmitido ? 1 : 0;
     rec.fecha = (input.fecha ?? new Date()).getTime();
     rec.estado = 0;
     rec.compania = companyId;

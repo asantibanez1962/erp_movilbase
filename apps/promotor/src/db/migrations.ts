@@ -77,5 +77,24 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      // v3 → v4: GPS exigible por tipo de visita, con la omisión registrada.
+      //
+      // `requiere_gps` en el tipo y `gps_omitido` en la visita. El legacy rechaza una
+      // visita sin GPS; acá se exige sin prohibir, porque bajo sombra de cafetal el fix
+      // puede no llegar y perder la visita entera es peor que perder el punto. Ver
+      // v1.53/RC/57.
+      toVersion: 4,
+      steps: [
+        addColumns({
+          table: "tipos_visita",
+          columns: [{ name: "requiere_gps", type: "number", isOptional: true }],
+        }),
+        addColumns({
+          table: "visitas",
+          columns: [{ name: "gps_omitido", type: "number", isOptional: true }],
+        }),
+      ],
+    },
   ],
 });
