@@ -254,4 +254,9 @@ export async function cambiarCosecha(cosecha: string): Promise<void> {
   });
 
   await syncNow();
+
+  // Mismo motivo que en rebajarTodo: el reset dejó a las pantallas con suscripciones
+  // muertas. Sin remontar, se cambia de cosecha y se siguen viendo los datos de la
+  // anterior.
+  useSesion.getState().remontar();
 }

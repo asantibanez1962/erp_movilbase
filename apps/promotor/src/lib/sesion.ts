@@ -50,6 +50,21 @@ export interface SesionState {
     todasLasZonas: boolean;
     retencionFotosDias?: number;
   }) => Promise<void>;
+  /**
+   * Se incrementa para forzar que TODA la app se vuelva a montar.
+   *
+   * Hace falta después de `unsafeResetDatabase`: WatermelonDB mata las suscripciones
+   * vivas al resetear —lo dice su propio código: "App should not hold onto
+   * subscriptions or Watermelon objects while resetting database"— y las pantallas
+   * quedan con objetos viejos en memoria y observadores muertos que ya no se
+   * actualizan. Los datos se borraron de verdad, pero la pantalla muestra una foto de
+   * antes, y uno concluye —con razón— que el rebajado no funcionó.
+   *
+   * Remontar el árbol descarta esos objetos y recrea todas las queries contra la base
+   * nueva. Es la forma limpia de lograrlo sin obligar a cerrar y abrir la app.
+   */
+  generacion: number;
+  remontar: () => void;
   setPoliticas: (p: MapaPoliticas) => void;
   limpiar: () => Promise<void>;
 }
@@ -62,6 +77,7 @@ export const useSesion = create<SesionState>((set) => ({
   todasLasZonas: false,
   retencionFotosDias: 30,
   politicas: {},
+  generacion: 0,
   hidratando: true,
 
   hidratar: async () => {
@@ -105,6 +121,8 @@ export const useSesion = create<SesionState>((set) => ({
       ...(retencionFotosDias != null ? { retencionFotosDias } : {}),
     });
   },
+
+  remontar: () => set((e) => ({ generacion: e.generacion + 1 })),
 
   setPoliticas: (politicas) => set({ politicas }),
 

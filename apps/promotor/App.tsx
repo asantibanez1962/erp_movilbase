@@ -24,12 +24,18 @@ import {
   DrawerItem,
 } from "@react-navigation/drawer";
 import { Alert } from "react-native";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuthStore } from "@erp/shared-api";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { ContextoScreen } from "./src/screens/ContextoScreen";
 import { useSesion } from "./src/lib/sesion";
 import { cambiarCosecha, contarPendientes, HayPendientesError } from "./src/lib/sync";
 import { cargarContexto } from "./src/lib/contexto";
+import {
+  describirPendientes,
+  rebajarTodo,
+  resumenPendientes,
+} from "./src/lib/rebajar";
 import { PickerModal } from "./src/screens/componentes/Picker";
 import { usePendientes } from "./src/screens/usePendientes";
 import { ProductoresScreen } from "./src/screens/ProductoresScreen";
@@ -201,6 +207,24 @@ function VisitasStackScreens() {
 
 // ─── Bottom tabs ─────────────────────────────────────────────────────
 
+/**
+ * Ícono de un tab.
+ *
+ * @expo/vector-icons ya viene con Expo, así que esto no suma dependencia. Se usa acá
+ * y no los caracteres unicode del drawer porque un tab necesita dos estados visuales
+ * (activo/inactivo) y un tamaño estable: un emoji cambia de forma entre fabricantes y
+ * no toma el color del tema.
+ *
+ * Los tres elegidos dicen QUÉ hay adentro, no una metáfora: personas para el padrón de
+ * productores, un documento que se edita para las solicitudes, y un punto en el mapa
+ * para las visitas — que es literalmente lo que la visita captura.
+ */
+function iconoTab(nombre: React.ComponentProps<typeof MaterialCommunityIcons>["name"]) {
+  return ({ color, size }: { color: string; size: number }) => (
+    <MaterialCommunityIcons name={nombre} size={size} color={color} />
+  );
+}
+
 const Tabs = createBottomTabNavigator();
 function MainTabs() {
   // El inset es el alto de la barra de gestos/navegación del SO. Sin sumarlo,
@@ -227,17 +251,17 @@ function MainTabs() {
       <Tabs.Screen
         name="ProductoresTab"
         component={ProductoresStackScreens}
-        options={{ tabBarLabel: "Productores" }}
+        options={{ tabBarLabel: "Productores", tabBarIcon: iconoTab("account-group") }}
       />
       <Tabs.Screen
         name="SolicitudesTab"
         component={SolicitudesStackScreens}
-        options={{ tabBarLabel: "Solicitudes" }}
+        options={{ tabBarLabel: "Solicitudes", tabBarIcon: iconoTab("file-document-edit") }}
       />
       <Tabs.Screen
         name="VisitasTab"
         component={VisitasStackScreens}
-        options={{ tabBarLabel: "Visitas" }}
+        options={{ tabBarLabel: "Visitas", tabBarIcon: iconoTab("map-marker-check") }}
       />
     </Tabs.Navigator>
   );
@@ -286,6 +310,7 @@ function CustomDrawer(props: DrawerContentComponentProps) {
   const [cosechas, setCosechas] = useState<string[]>([]);
   const [pickerCosecha, setPickerCosecha] = useState(false);
   const [cambiando, setCambiando] = useState(false);
+  const [rebajando, setRebajando] = useState(false);
 
   /**
    * Cambiar de cosecha rebaja los datos (ver cambiarCosecha), así que se avisa
@@ -327,6 +352,77 @@ function CustomDrawer(props: DrawerContentComponentProps) {
       );
     } finally {
       setCambiando(false);
+    }
+  };
+
+  /**
+   * Rebajar todos los datos: borrar la base local y traerla completa del servidor.
+   *
+   * Válvula de escape para cuando el cache queda en un estado que no se arregla
+   * sincronizando — antes la única salida era desinstalar la app.
+   *
+   * DOS PASOS A PROPÓSITO. Primero se intenta subir lo pendiente; si algo queda, se
+   * muestra QUÉ se va a perder (la lista, no un número) y recién ahí se pide la
+   * confirmación destructiva. Un número no alcanza para decidir si vale la pena
+   * descartar el trabajo de una mañana.
+   */
+  const rebajarDatos = async () => {
+    if (rebajando) return;
+    setUltimoError(null);
+
+    const pendientes = await resumenPendientes();
+
+    if (pendientes.total === 0) {
+      Alert.alert(
+        "Rebajar todos los datos",
+        "Se borran los datos de este teléfono y se vuelven a bajar del servidor. " +
+          "No hay nada sin enviar, así que no se pierde trabajo.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Rebajar", onPress: () => void ejecutarRebajado(false) },
+        ]
+      );
+      return;
+    }
+
+    // Hay pendientes: aviso con el desglose, y la confirmación destructiva aparte.
+    Alert.alert(
+      "Hay trabajo sin enviar",
+      `Todavía no subieron: ${describirPendientes(pendientes)}.\n\n` +
+        "Si rebajás los datos ahora, ESO SE PIERDE y no se puede recuperar. " +
+        "Conviene intentar sincronizar primero.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Descartar y rebajar",
+          style: "destructive",
+          onPress: () =>
+            Alert.alert(
+              "Confirmar",
+              `Se van a descartar ${describirPendientes(pendientes)}. ¿Seguro?`,
+              [
+                { text: "No", style: "cancel" },
+                {
+                  text: "Sí, descartar",
+                  style: "destructive",
+                  onPress: () => void ejecutarRebajado(true),
+                },
+              ]
+            ),
+        },
+      ]
+    );
+  };
+
+  const ejecutarRebajado = async (descartar: boolean) => {
+    setRebajando(true);
+    setUltimoError(null);
+    try {
+      await rebajarTodo({ descartar });
+    } catch (e) {
+      setUltimoError((e as Error)?.message ?? "No se pudieron rebajar los datos");
+    } finally {
+      setRebajando(false);
     }
   };
 
@@ -374,6 +470,12 @@ function CustomDrawer(props: DrawerContentComponentProps) {
 
       {/* Diagnóstico: qué intentó este teléfono. Es lo que se lee por teléfono
           cuando el promotor dice "no envió nada". */}
+      <DrawerItem
+        label={rebajando ? "Rebajando datos..." : "Rebajar todos los datos"}
+        onPress={rebajarDatos}
+        labelStyle={styles.drawerLabel}
+      />
+
       <DrawerItem
         label="Bitácora del teléfono"
         onPress={() => props.navigation.navigate("Bitacora")}
@@ -436,6 +538,9 @@ export default function App() {
   const sesionCompanyId = useSesion((s) => s.companyId);
   const sesionCosecha = useSesion((s) => s.cosecha);
   const hidratandoSesion = useSesion((s) => s.hidratando);
+  // Cambia después de un reset de la base local (rebajar datos / cambiar cosecha) y
+  // fuerza a que todo el árbol se vuelva a montar. Ver `remontar` en lib/sesion.ts.
+  const generacion = useSesion((s) => s.generacion);
   const hidratarSesion = useSesion((s) => s.hidratar);
 
   useEffect(() => {
@@ -474,7 +579,7 @@ export default function App() {
             // Autenticado pero sin contexto de trabajo: el sync está scopeado por
             // empresa y cosecha, así que entrar sin elegirlas no traería nada.
             if (sesionCompanyId == null || !sesionCosecha) return <ContextoScreen />;
-            return <AuthenticatedNav />;
+            return <AuthenticatedNav key={generacion} />;
           })()}
         </NavigationContainer>
       </SafeAreaProvider>
