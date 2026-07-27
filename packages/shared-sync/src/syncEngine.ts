@@ -1,7 +1,7 @@
 import { Database, Model } from "@nozbe/watermelondb";
 import { synchronize } from "@nozbe/watermelondb/sync";
 import type { SyncApi } from "@erp/shared-api";
-import type { PushResponse } from "@erp/shared-types";
+import type { PullResponse, PushResponse } from "@erp/shared-types";
 
 /**
  * Bridge entre el SyncApi (HTTP contra BE) y WMDB synchronize().
@@ -91,7 +91,19 @@ export async function runSync(
 
       // Una request por collection. En paralelo — el BE las maneja
       // independientes (no hay tx cross-collection en pull).
-      const responses = await Promise.all(
+      //
+      // allSettled y no all: con `all`, el primer rechazo aborta y el error que sale
+      // no dice QUÉ colección falló. Un permiso faltante en un catálogo de 11 filas
+      // se veía como "Error de sincronización" a secas, en las tres pantallas, sin
+      // forma de diagnosticarlo desde el teléfono — hubo que ir a leer el log del
+      // servidor.
+      //
+      // Se sigue tirando si alguna falla: `synchronize()` es atómico a propósito y
+      // devolver las que sí anduvieron haría avanzar el checkpoint GLOBAL, incluido
+      // el de la que falló — y sus filas no volverían nunca. Pérdida silenciosa, peor
+      // que el fallo ruidoso. El sync parcial de verdad necesita checkpoints por
+      // colección; es la etapa siguiente.
+      const resultados = await Promise.allSettled(
         opts.collections.map(async (name) => {
           const resp = await opts.api.pull(name, {
             last_pulled_at: lastPulledAtMs,
@@ -100,6 +112,20 @@ export async function runSync(
           return { name, resp };
         })
       );
+
+      const fallos: FalloPull[] = [];
+      const responses: Array<{ name: string; resp: PullResponse }> = [];
+      resultados.forEach((r, i) => {
+        if (r.status === "fulfilled") responses.push(r.value);
+        else fallos.push(describirFallo(opts.collections[i] ?? "?", r.reason));
+      });
+
+      if (fallos.length > 0) {
+        for (const f of fallos) {
+          console.info(`[sync] pull ${f.coleccion}: ${f.codigo} — ${f.mensaje}`);
+        }
+        throw new PullFallidoError(fallos);
+      }
 
       // Reduce a un único ChangeSet { table: changes }. Cualquier table
       // que NO vino en la response queda como empty (WMDB lo exige).
@@ -290,6 +316,78 @@ export async function runSync(
   });
 
   return pushResponses;
+}
+
+/**
+ * Una colección cuyo pull falló, con el motivo ya legible.
+ *
+ * El punto es que el mensaje sirva SIN acceso al servidor: el promotor está en el
+ * campo y quien lo atiende por teléfono necesita saber cuál colección y por qué, no
+ * "Error de sincronización".
+ */
+export interface FalloPull {
+  coleccion: string;
+  /** Código estable del BE (PERMISSION_DENIED, COLLECTION_NOT_FOUND…) o el del error. */
+  codigo: string;
+  mensaje: string;
+}
+
+export class PullFallidoError extends Error {
+  constructor(public readonly fallos: FalloPull[]) {
+    super(PullFallidoError.describir(fallos));
+    this.name = "PullFallidoError";
+  }
+
+  /**
+   * El texto que va a ver el promotor en la pantalla.
+   *
+   * Con una sola colección se muestra su mensaje, y sólo se le antepone el nombre si
+   * el mensaje no lo menciona ya — el del BE suele decirlo ("Permiso requerido para
+   * sync de 'tipos_visita'…") y repetirlo quedaba redundante justo en el texto que
+   * alguien va a leer por teléfono.
+   */
+  private static describir(fallos: FalloPull[]): string {
+    if (fallos.length === 1) {
+      const f = fallos[0]!;
+      return f.mensaje.includes(f.coleccion)
+        ? f.mensaje
+        : `${f.coleccion}: ${f.mensaje}`;
+    }
+    // Varias: casi siempre es el mismo motivo (se cayó la red), así que se dice una
+    // vez y se listan las colecciones.
+    const motivos = new Set(fallos.map((f) => f.mensaje));
+    const nombres = fallos.map((f) => f.coleccion).join(", ");
+    return motivos.size === 1
+      ? `${[...motivos][0]} (${nombres})`
+      : `No se pudieron traer: ${fallos.map((f) => `${f.coleccion} (${f.codigo})`).join(", ")}`;
+  }
+}
+
+/**
+ * Saca el código y el mensaje que mandó el BE.
+ *
+ * El cuerpo de un 403/404 del sync es `{ code, message }` con texto pensado para
+ * mostrarse. Sin esto queda el mensaje de axios ("Request failed with status code
+ * 403"), que dice el número pero no la causa ni el permiso que falta.
+ */
+function describirFallo(coleccion: string, err: unknown): FalloPull {
+  const data = (err as { response?: { data?: { code?: string; message?: string }; status?: number } })
+    ?.response;
+  if (data?.data?.message) {
+    return {
+      coleccion,
+      codigo: data.data.code ?? String(data.status ?? "ERROR"),
+      mensaje: data.data.message,
+    };
+  }
+  const mensaje = (err as Error)?.message ?? String(err);
+  return {
+    coleccion,
+    codigo: data?.status ? String(data.status) : "ERROR",
+    mensaje: mensaje.includes("Network")
+      ? "Sin conexión con el servidor."
+      : mensaje,
+  };
 }
 
 async function safeFind(

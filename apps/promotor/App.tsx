@@ -36,6 +36,7 @@ import {
   rebajarTodo,
   resumenPendientes,
 } from "./src/lib/rebajar";
+import { cerrarSesion, verificarAlcance } from "./src/lib/alcance";
 import { PickerModal } from "./src/screens/componentes/Picker";
 import { usePendientes } from "./src/screens/usePendientes";
 import { ProductoresScreen } from "./src/screens/ProductoresScreen";
@@ -426,6 +427,51 @@ function CustomDrawer(props: DrawerContentComponentProps) {
     }
   };
 
+  /**
+   * Cerrar sesión de verdad: credenciales, contexto Y datos locales.
+   *
+   * Borra la base porque el cache pertenece a un usuario y a su alcance. Si quedara, el
+   * próximo que entre heredaría empresa, cosecha y los productores y solicitudes del
+   * anterior — y un delta nunca lo corregiría, porque esas filas no cambiaron del lado
+   * del servidor, simplemente dejaron de corresponderle.
+   *
+   * Con trabajo sin subir avisa antes: cerrar sesión no puede ser una forma silenciosa
+   * de perder la mañana de alguien.
+   */
+  const salir = async () => {
+    const pendientes = await resumenPendientes();
+    const ejecutar = async (descartar: boolean) => {
+      try {
+        await cerrarSesion({ descartar });
+        logout();
+      } catch (e) {
+        setUltimoError((e as Error)?.message ?? "No se pudo cerrar la sesión");
+      }
+    };
+
+    if (pendientes.total === 0) {
+      void ejecutar(false);
+      return;
+    }
+
+    Alert.alert(
+      "Hay trabajo sin enviar",
+      `Todavía no subieron: ${describirPendientes(pendientes)}.
+
+` +
+        "Al cerrar sesión se borran los datos de este teléfono y ESO SE PIERDE. " +
+        "Conviene sincronizar primero.",
+      [
+        { text: "Cancelar", style: "cancel" },
+        {
+          text: "Salir y descartar",
+          style: "destructive",
+          onPress: () => void ejecutar(true),
+        },
+      ]
+    );
+  };
+
   const handleSync = async () => {
     if (syncing) return;
     setSyncing(true);
@@ -453,6 +499,15 @@ function CustomDrawer(props: DrawerContentComponentProps) {
         </Text>
       </View>
 
+      {/* El error va ARRIBA de las acciones y no debajo de una de ellas: lo escriben
+          las cuatro (sincronizar, cambiar cosecha, rebajar, salir) y ubicado después
+          de "Cambiar cosecha" parecía de esa, que es de las que menos falla. */}
+      {ultimoError ? (
+        <View style={styles.drawerErrorCaja}>
+          <Text style={styles.drawerError}>⚠ {ultimoError}</Text>
+        </View>
+      ) : null}
+
       <DrawerItem
         label={syncing ? "Sincronizando..." : etiquetaSync(pendientes)}
         onPress={handleSync}
@@ -466,8 +521,6 @@ function CustomDrawer(props: DrawerContentComponentProps) {
         onPress={abrirCambioCosecha}
         labelStyle={styles.drawerLabel}
       />
-      {ultimoError ? <Text style={styles.drawerError}>⚠ {ultimoError}</Text> : null}
-
       {/* Diagnóstico: qué intentó este teléfono. Es lo que se lee por teléfono
           cuando el promotor dice "no envió nada". */}
       <DrawerItem
@@ -484,7 +537,7 @@ function CustomDrawer(props: DrawerContentComponentProps) {
 
       <DrawerItem
         label="Cerrar sesión"
-        onPress={logout}
+        onPress={salir}
         labelStyle={styles.drawerLabel}
       />
 
@@ -546,6 +599,22 @@ export default function App() {
   useEffect(() => {
     bootstrapApi()
       .then(() => hidratarSesion())
+      .then(async () => {
+        // ¿Le cambiaron las zonas autorizadas desde la última vez?
+        //
+        // Hace falta revisarlo explícitamente porque el pull es un DELTA: si le suman
+        // una zona, las filas de esa zona no cambiaron del lado del servidor, así que
+        // no entran en ningún delta y el teléfono no las vería NUNCA. Un cambio de
+        // alcance no se arregla sincronizando — hay que rebajar todo.
+        //
+        // Best-effort: sin señal no hace nada y se revisa la próxima vez.
+        try {
+          const { aviso } = await verificarAlcance();
+          if (aviso) setBootError(aviso);
+        } catch (err) {
+          console.info("no se pudo verificar el alcance", (err as Error)?.message);
+        }
+      })
       .then(() => setBootDone(true))
       .catch((e) => {
         setBootError(e?.message ?? "Error inicializando el app");
@@ -608,10 +677,17 @@ const styles = StyleSheet.create({
   drawerTitle: { color: "#f1f5f9", fontSize: 20, fontWeight: "700" },
   drawerUser: { color: "#94a3b8", fontSize: 13, marginTop: 4 },
   drawerLabel: { color: "#e2e8f0" },
+  drawerErrorCaja: {
+    backgroundColor: "#7f1d1d",
+    marginHorizontal: 12,
+    marginBottom: 12,
+    borderRadius: 6,
+    paddingVertical: 10,
+  },
   drawerError: {
-    color: "#fca5a5",
+    color: "#fecaca",
     fontSize: 12,
-    paddingHorizontal: 16,
-    paddingBottom: 8,
+    paddingHorizontal: 12,
+    lineHeight: 17,
   },
 });

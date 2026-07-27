@@ -1,5 +1,5 @@
 import { Q } from "@nozbe/watermelondb";
-import { runSync } from "@erp/shared-sync";
+import { PullFallidoError, runSync } from "@erp/shared-sync";
 import type { PushResponse } from "@erp/shared-types";
 import { database } from "./db";
 import { getSyncClient } from "./api";
@@ -59,10 +59,18 @@ export async function syncNow(): Promise<void> {
     // El sync falla y se propaga (la pantalla lo muestra), pero antes queda
     // registrado: un sync que nunca llegó al servidor no deja rastro del otro lado,
     // y sin esto la única evidencia sería el logcat de un teléfono en el campo.
+    // Si el fallo fue de uno o más pulls, se guarda el desglose POR COLECCIÓN. Ese
+    // detalle es lo que convierte "error de sincronización" en algo accionable: la
+    // primera vez que pasó —un permiso faltante en un catálogo de 11 filas— hubo que
+    // ir a leer el log del servidor para saber cuál colección era.
+    const fallos = err instanceof PullFallidoError ? err.fallos : null;
     await registrarEvento({
       tipo: "sync",
       ok: false,
-      resumen: `Sincronización falló con ${pendientesAntes} pendiente(s)`,
+      resumen: fallos
+        ? `No se pudo traer: ${fallos.map((f) => f.coleccion).join(", ")}`
+        : `Sincronización falló con ${pendientesAntes} pendiente(s)`,
+      detalle: fallos ? { fallos, pendientes: pendientesAntes } : undefined,
       error: (err as Error)?.message ?? String(err),
       duracionMs: Date.now() - inicio,
     });

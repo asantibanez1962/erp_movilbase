@@ -9,6 +9,7 @@ import {
 import { useAuthStore } from "@erp/shared-api";
 import { cargarContexto, type EmpresaContexto } from "../lib/contexto";
 import { pedirPermisosDeCampo } from "../lib/permisos";
+import { cerrarSesion } from "../lib/alcance";
 import { useSesion } from "../lib/sesion";
 import { syncNow } from "../lib/sync";
 import { colores, estilos } from "./estilos";
@@ -228,7 +229,17 @@ export function ContextoScreen() {
         </>
       )}
 
-      <TouchableOpacity onPress={logout} style={{ padding: 20, alignItems: "center" }}>
+      {/* Descarta sin preguntar: en esta pantalla todavía no se eligió contexto, así
+          que no puede haber trabajo capturado. Lo que sí puede haber son datos de un
+          usuario anterior, y esos hay que borrarlos. */}
+      <TouchableOpacity
+        onPress={() => {
+          cerrarSesion({ descartar: true })
+            .catch(() => undefined)
+            .finally(logout);
+        }}
+        style={{ padding: 20, alignItems: "center" }}
+      >
         <Text style={{ color: colores.textoTenue, fontSize: 14 }}>Cerrar sesión</Text>
       </TouchableOpacity>
 
