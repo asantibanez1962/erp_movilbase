@@ -17,7 +17,6 @@ import {
 } from "../db/models";
 import { database } from "../lib/db";
 import { consultarAtv, type ResultadoAtv } from "../lib/atv";
-import { syncNow } from "../lib/sync";
 import { crearEntregador, eliminarEntregador } from "../lib/crear";
 import { useSesion } from "../lib/sesion";
 import { esEditable } from "../lib/politicas";
@@ -174,10 +173,12 @@ export function SolicitudDetailScreen({
   };
 
   /**
-   * Consulta a Hacienda. El resultado se guarda en `atv` además de en la fila: si la
-   * solicitud ya se sincronizó, el veredicto no se persiste local (lo escribió el BE
-   * y baja en el próximo pull), así que sin este estado la pantalla no mostraría nada
-   * y parecería que la consulta no hizo nada.
+   * Consulta a Hacienda. El veredicto se guarda en la fila local —que la pantalla
+   * observa en vivo— y queda pendiente de sincronizar como cualquier otro cambio.
+   *
+   * `atv` guarda además la respuesta para poder mostrar el MENSAJE, que es texto que
+   * arma el servidor ("inscrito y con actividad de café") y no está en la fila: ahí
+   * viven sólo el código y la fecha.
    */
   const consultarHacienda = async () => {
     if (!solicitud || consultandoAtv) return;
@@ -187,16 +188,17 @@ export function SolicitudDetailScreen({
       setAtv(resultado);
       Alert.alert("Hacienda", resultado.mensaje);
 
-      // Se sincroniza enseguida para que el veredicto LLEGUE al ERP. Ya está guardado
-      // en la fila local, así que no se pierde si esto falla; pero dejarlo pendiente
-      // cuando justo ahora hay señal —la consulta a Hacienda acaba de funcionar— sería
-      // desaprovechar el único momento garantizado de conectividad.
+      // NO se sincroniza acá a propósito, aunque en este momento haya señal garantizada
+      // (la consulta a Hacienda acaba de funcionar).
       //
-      // Best-effort y sin await: si falla, viaja en el próximo sync como cualquier otro
-      // cambio pendiente.
-      syncNow().catch((err) =>
-        console.info("sync post-ATV falló; queda pendiente", (err as Error)?.message)
-      );
+      // La razón es la uniformidad: todo lo que el promotor hace en el teléfono queda
+      // pendiente y lo envía él. Con el auto-sync, el veredicto era el único cambio que
+      // se iba solo, y el contador de pendientes aparecía y desaparecía en un segundo —
+      // así que el promotor nunca veía que había algo por enviar y no podía confiar en
+      // ese número como estado real de su trabajo.
+      //
+      // El costo asumido: si consulta y se va sin sincronizar, el veredicto se queda en
+      // el teléfono. El contador está justamente para que eso se vea.
     } catch (e) {
       Alert.alert(
         "No se pudo consultar",
@@ -388,7 +390,7 @@ export function SolicitudDetailScreen({
               sin el aviso parece que la consulta no hizo nada. */}
           {atv != null ? (
             <Text style={[estilos.vacioTexto, { paddingHorizontal: 16, paddingTop: 8 }]}>
-              Guardado. Sube al ERP con la sincronización.
+              Guardado en el teléfono. Queda pendiente de sincronizar.
             </Text>
           ) : null}
 
