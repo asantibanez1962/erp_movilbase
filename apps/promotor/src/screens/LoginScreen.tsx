@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   KeyboardAvoidingView,
   Platform,
   StyleSheet,
@@ -10,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useAuthStore, AuthError } from "@erp/shared-api";
+import { cliente } from "../branding";
 
 export function LoginScreen() {
   const [usuario, setUsuario] = useState("");
@@ -44,7 +46,20 @@ export function LoginScreen() {
       style={styles.root}
     >
       <View style={styles.card}>
-        <Text style={styles.title}>Promotor</Text>
+        {/* El logo del beneficio en la primera pantalla que se ve. Es también la
+            confirmación de que se instaló el APK correcto: con cinco clientes sobre
+            el mismo código, el nombre en el launcher es lo único que los distingue
+            hasta acá. Sin PNG puesto, cae al nombre del cliente en texto. */}
+        {cliente.logo ? (
+          <Image
+            source={cliente.logo}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel={cliente.nombreLargo}
+          />
+        ) : (
+          <Text style={styles.title}>{cliente.nombre}</Text>
+        )}
         <Text style={styles.subtitle}>Visitas y solicitudes de crédito</Text>
 
         <Text style={styles.label}>Usuario</Text>
@@ -106,12 +121,22 @@ function translateAuthError(code: string, fallback?: string): string {
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: "#0f172a",
+    // Sólo el fondo toma el color del cliente; la tarjeta, los campos y el botón
+    // quedan como estaban, según se pidió.
+    backgroundColor: cliente.chrome,
     justifyContent: "center",
     padding: 24,
   },
   card: { backgroundColor: "#1e293b", borderRadius: 12, padding: 24 },
   title: { fontSize: 28, fontWeight: "700", color: "#f1f5f9", marginBottom: 4 },
+  /** Placa blanca: los logos no tienen transparencia (ver App.tsx drawerLogo). */
+  logo: {
+    width: "100%",
+    height: 96,
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    marginBottom: 12,
+  },
   subtitle: { fontSize: 14, color: "#94a3b8", marginBottom: 24 },
   label: {
     fontSize: 13,

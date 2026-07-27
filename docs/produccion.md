@@ -234,20 +234,122 @@ Escenario: Confeldan tiene Recibos diferentes que Coopechira. Mismo concepto, fi
 - **Cliente 3+**: migrate a Camino 2 (metadata-driven). Ya tenés data real sobre qué necesita ser configurable.
 - **Camino 3 SOLO** cuando un cliente exija aislamiento físico (banco, gobierno, requisito de compliance).
 
-### 3.3 Logo + branding per cliente (independiente del camino)
+### 3.3 Logo + branding per cliente — IMPLEMENTADO en `apps/promotor`
 
-Tabla nueva en el BE:
-```sql
-CREATE TABLE mt.CompanyMobileBranding (
-    CompanyId       INT PRIMARY KEY,
-    LogoBase64      NVARCHAR(MAX),   -- PNG en base64
-    PrimaryColor    NVARCHAR(20),     -- "#0f172a"
-    AppName         NVARCHAR(60),     -- "Recibos Confeldan"
-    FOREIGN KEY (CompanyId) REFERENCES dbo.ge_companias(Id)
-);
+Promotor va por el Camino 3: cada beneficio tiene su BE y su DB local, y recibe su
+propio APK. El branding es **de build time**, no del servidor.
+
+#### Por qué no una tabla `mt.CompanyMobileBranding`
+
+Se evaluó pedirle el branding al BE al login. No alcanza, por dos motivos que no
+tienen vuelta:
+
+1. **El package de Android, el nombre del launcher y el ícono se hornean en el APK.**
+   Ningún endpoint los cambia después de instalado. Y el package es justo lo que
+   decide si dos APKs conviven o se pisan: si Marespi y Santa Cruz comparten
+   `cr.confeldan.promotor`, instalar uno encima del otro borra la base local del
+   primero sin ningún aviso.
+2. **Problema del huevo y la gallina.** Para preguntarle el branding al servidor hay
+   que saber en qué dirección está, y cada beneficio corre el suyo en su red. La
+   dirección tiene que venir en el APK (o escribirla a mano) antes de poder hablar
+   con nadie.
+
+La tabla server-side sigue teniendo sentido el día que haya UN backend multi-tenant
+(Camino 2), no ahora.
+
+#### Cómo funciona
+
+`apps/promotor/clientes.json` es la única fuente de verdad. Lo leen dos consumidores,
+y por eso es JSON y no un `.ts`:
+
+- `app.config.js` (Node, build time) → nombre, package, ícono, splash, URL
+- `src/branding/index.ts` (Metro, runtime) → logo y colores de la UI
+
+Una entrada por cliente:
+
+| id | nombre | color | package |
+|---|---|---|---|
+| `dev` | Promotor | `#0f172a` | `cr.confeldan.promotor` |
+| `altura` | Promotor Altura | `#5caa3b` | `cr.confeldan.promotor.altura` |
+| `laeva` | Promotor La Eva | `#095ee9` | `cr.confeldan.promotor.laeva` |
+| `diamante` | Promotor Diamante | `#095ee9` | `cr.confeldan.promotor.diamante` |
+| `santacruz` | Promotor Santa Cruz | `#5d52ba` | `cr.confeldan.promotor.santacruz` |
+| `marespi` | Promotor Marespi | `#5a7443` | `cr.confeldan.promotor.marespi` |
+
+Los colores están muestreados del pixel del logo, no elegidos a ojo.
+
+**Sin `EXPO_PUBLIC_CLIENTE` se compila el perfil `dev`**, idéntico a lo que había
+antes del branding. Eso mantiene funcionando el dev-client ya instalado en el
+teléfono de prueba, que tiene el package viejo.
+
+#### Dónde se ve la marca
+
+Sólo el **fondo** toma el color del cliente (header, tab bar, drawer, login). Menú,
+botones y acentos quedan como estaban.
+
+El color que se pinta no es el de marca crudo sino su versión **oscurecida hasta
+4.5:1 de contraste** contra el texto claro (`src/branding/index.ts`). El verde de
+Café Altura tal cual daba 2.6:1: se lee en una oficina y no se lee en un cafetal al
+mediodía, que es donde se usa la app. Se oscurece en vez de cambiarse por un gris
+para que el tono siga siendo el de la empresa.
+
+#### Agregar el logo de un cliente
+
+1. Poner el PNG en `apps/promotor/assets/clientes/<id>.png`.
+2. Poner ese nombre de archivo en el campo `logo` de `clientes.json`.
+3. Descomentar la línea del `require` en el mapa `LOGOS` de `src/branding/index.ts`
+   (Metro exige ruta literal; un `require` de un archivo inexistente rompe el bundle
+   entero, no sólo esa pantalla).
+4. Generar el ícono: `node scripts/iconos.js <id>`.
+
+No hace falta que el logo sea cuadrado ni transparente.
+
+#### Generar los íconos
+
+```bash
+cd apps/promotor
+node scripts/iconos.js            # todos los que tengan logo
+node scripts/iconos.js altura     # uno solo
 ```
 
-El mobile la pide al login (`GET /api/mobile/branding`) + cachea localmente. Cualquier camino (1/2/3) puede usar esto.
+Produce `assets/clientes/icono-<id>.png` de 1024×1024: el logo escalado sin deformar
+dentro de la zona segura del ícono adaptativo (66% central — Android recorta lo de
+afuera), sobre una placa del color de fondo del propio logo, y todo sobre el color de
+marca.
+
+El script no tiene dependencias a propósito: decodifica y codifica PNG con el `zlib`
+de Node. Instalar una librería de imágenes con el gestor equivocado (`npm` en este
+monorepo `pnpm`) ya rompió el árbol de `node_modules` una vez.
+
+#### Compilar el APK de un cliente
+
+```bash
+cd apps/promotor
+export EXPO_PUBLIC_CLIENTE=altura     # PowerShell: $env:EXPO_PUBLIC_CLIENTE="altura"
+npx expo prebuild --platform android --clean
+npx expo run:android --variant release
+```
+
+Un id que no exista en `clientes.json` hace fallar el build con la lista de válidos.
+Es a propósito: un typo en la variable no puede terminar en un APK con el branding de
+otro cliente, porque eso se descubre cuando ya está instalado.
+
+#### La URL del backend
+
+`clientes.json` trae un `apiBaseUrl` por cliente, **hoy todos provisionales** apuntando
+al de desarrollo — las IPs reales de los beneficios todavía no se conocen. Hay que
+reemplazarlas antes de generar cada APK.
+
+Si no se sabe al momento de compilar, no bloquea: el promotor la corrige desde
+**drawer → Servidor**, que además prueba la conexión. La precedencia es override del
+teléfono › la del APK › `EXPO_PUBLIC_API_URL` › loopback del emulador.
+
+⚠ **Cambiar de servidor borra la base local**, con aviso y confirmación. No es
+exceso de celo: los ids, zonas y cosechas del teléfono pertenecen a UNA base, y
+apuntar a otra dejaría filas referenciando productores que allá no existen —o que
+existen con otro dueño. Un delta nunca lo corregiría, porque del lado del servidor
+nuevo esas filas nunca cambiaron. Es el mismo razonamiento por el que cambiar de
+cosecha, ampliar zonas o cerrar sesión rebajan todo.
 
 ---
 

@@ -7,6 +7,7 @@ import {
 } from "@erp/shared-api";
 import { config } from "./config";
 import { getOrCreateDeviceId } from "./deviceId";
+import { cargarUrlServidor } from "./servidor";
 import { contextoActual } from "./sesion";
 
 /**
@@ -23,6 +24,11 @@ let httpClient: ReturnType<typeof createApiClient> | null = null;
 let syncClient: SyncApi | null = null;
 
 export async function bootstrapApi(): Promise<void> {
+  // 0. La dirección del servidor ANTES que nada: el auth store y el cliente axios
+  //    la capturan al construirse, así que leerla después no tendría efecto hasta
+  //    el siguiente arranque.
+  await cargarUrlServidor();
+
   // 1. Hidrata auth store desde SecureStore (refresh token vivo → arrancamos
   //    logueado sin pedir credenciales).
   await useAuthStore.getState().init({

@@ -1,22 +1,23 @@
-import Constants from "expo-constants";
 import { SCHEMA_VERSION } from "../db/schema";
+import { urlServidor } from "./servidor";
 
 /**
- * apiBaseUrl viene de app.json:expo.extra.apiBaseUrl.
+ * apiBaseUrl la resuelve lib/servidor.ts, que combina cuatro fuentes por precedencia:
+ * el override guardado en el teléfono, la del cliente compilado (clientes.json), la
+ * env var de dev y el loopback del emulador.
  *
- * Defaults:
- *   - Android emulator (AVD)   → http://10.0.2.2:5249    (loopback al host)
- *   - Real Android device WiFi → http://<LAN-IP>:5249    (cambiar en app.json
- *     o setear EXPO_PUBLIC_API_URL al lanzar `expo start`)
+ * Es un GETTER y no un valor fijo porque el override puede cambiar en caliente desde
+ * la pantalla de servidor. Con un valor congelado en el import, cambiarlo mostraría
+ * la dirección nueva en la UI mientras las requests seguirían yendo a la vieja —
+ * exactamente el tipo de discrepancia que hace perder una tarde de diagnóstico.
  *
  * Para forzar por env var en dev:
  *   EXPO_PUBLIC_API_URL=http://192.168.1.50:5249 pnpm start
  */
 export const config = {
-  apiBaseUrl:
-    process.env.EXPO_PUBLIC_API_URL ??
-    (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
-    "http://10.0.2.2:5249",
+  get apiBaseUrl(): string {
+    return urlServidor();
+  },
   // NO hay companyId acá a propósito. La empresa la elige el usuario al entrar y
   // vive en el store de sesión (lib/sesion.ts): las zonas autorizadas son por
   // user × empresa, así que hardcodearla haría que el alcance del sync no

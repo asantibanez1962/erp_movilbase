@@ -1,0 +1,72 @@
+{
+  "_nota": [
+    "Catálogo de clientes: una entrada por empresa que usa la app.",
+    "Lo leen DOS consumidores, y por eso es JSON y no un .ts:",
+    "  - app.config.js (Node, en build time) → nombre, package, ícono, splash",
+    "  - src/branding/index.ts (Metro, en runtime) → logo y color de la UI",
+    "Tenerlo en un solo lugar evita que el color del APK y el de la pantalla se separen.",
+    "",
+    "apiBaseUrl: el backend de CADA cliente es local a su beneficio. Los valores de",
+    "abajo son PROVISIONALES (apuntan al de desarrollo). Reemplazá cada uno por la IP",
+    "real del servidor del cliente antes de generar su APK. Si no la sabés al momento",
+    "de compilar, el promotor puede corregirla desde el drawer → 'Servidor'.",
+    "",
+    "Para compilar un cliente:  EXPO_PUBLIC_CLIENTE=altura npx expo prebuild ...",
+    "Sin la variable se compila el perfil 'dev', que es el de siempre."
+  ],
+
+  "dev": {
+    "nombre": "Promotor",
+    "nombreLargo": "Promotor (desarrollo)",
+    "_colorNota": "El navy de siempre, para que desarrollo se vea idéntico a antes del branding.",
+    "color": "#0f172a",
+    "package": "cr.confeldan.promotor",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null
+  },
+
+  "altura": {
+    "nombre": "Promotor Altura",
+    "nombreLargo": "Café Altura de San Ramón Especial S.A.",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.promotor.altura",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "altura.png"
+  },
+
+  "laeva": {
+    "nombre": "Promotor La Eva",
+    "nombreLargo": "Beneficio La Eva",
+    "color": "#095ee9",
+    "package": "cr.confeldan.promotor.laeva",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": null
+  },
+
+  "diamante": {
+    "nombre": "Promotor Diamante",
+    "nombreLargo": "Montañas del Diamante",
+    "color": "#095ee9",
+    "package": "cr.confeldan.promotor.diamante",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": null
+  },
+
+  "santacruz": {
+    "nombre": "Promotor Santa Cruz",
+    "nombreLargo": "Beneficio Santa Cruz",
+    "color": "#5d52ba",
+    "package": "cr.confeldan.promotor.santacruz",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "santacruz.png"
+  },
+
+  "marespi": {
+    "nombre": "Promotor Marespi",
+    "nombreLargo": "Marespi S.A.",
+    "color": "#5a7443",
+    "package": "cr.confeldan.promotor.marespi",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "marespi.png"
+  }
+}

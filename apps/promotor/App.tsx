@@ -23,9 +23,10 @@ import {
   DrawerContentScrollView,
   DrawerItem,
 } from "@react-navigation/drawer";
-import { Alert } from "react-native";
+import { Alert, Image } from "react-native";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useAuthStore } from "@erp/shared-api";
+import { cliente } from "./src/branding";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { ContextoScreen } from "./src/screens/ContextoScreen";
 import { useSesion } from "./src/lib/sesion";
@@ -51,17 +52,26 @@ import { VisitaDetailScreen } from "./src/screens/VisitaDetailScreen";
 import { NuevaVisitaScreen } from "./src/screens/NuevaVisitaScreen";
 import { AdjuntosScreen } from "./src/screens/AdjuntosScreen";
 import { BitacoraScreen } from "./src/screens/BitacoraScreen";
+import { ServidorScreen } from "./src/screens/ServidorScreen";
 import { bootstrapApi } from "./src/lib/api";
 import { syncNow } from "./src/lib/sync";
 
-// Mismo tema que recibos-cr — las dos apps se ven como una familia.
+/**
+ * El chrome (header, tab bar, drawer) lleva el color del cliente; el resto de la
+ * paleta —botones, acentos, labels del menú— queda como estaba, según se pidió.
+ *
+ * `cliente.chrome` no es el color de marca crudo sino su versión oscurecida hasta
+ * que el texto claro alcanza 4.5:1 de contraste. Ver src/branding: con el verde de
+ * Café Altura tal cual, el título del header quedaba en 2.6:1 y no se leía al sol.
+ * Para el perfil de desarrollo da el mismo navy de siempre.
+ */
 const navTheme: Theme = {
   ...DefaultTheme,
   dark: true,
   colors: {
     ...DefaultTheme.colors,
     background: "#f8fafc",
-    card: "#0f172a",
+    card: cliente.chrome,
     text: "#f1f5f9",
     primary: "#3b82f6",
     border: "#1e293b",
@@ -71,7 +81,7 @@ const navTheme: Theme = {
 };
 
 const stackScreenOptions = {
-  headerStyle: { backgroundColor: "#0f172a" },
+  headerStyle: { backgroundColor: cliente.chrome },
   headerTintColor: "#f1f5f9",
 } as const;
 
@@ -240,7 +250,7 @@ function MainTabs() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: "#0f172a",
+          backgroundColor: cliente.chrome,
           borderTopColor: "#1e293b",
           height: TAB_BAR_CONTENT_HEIGHT + insets.bottom,
           paddingBottom: insets.bottom + 6,
@@ -504,7 +514,20 @@ function CustomDrawer(props: DrawerContentComponentProps) {
   return (
     <DrawerContentScrollView {...props} contentContainerStyle={styles.drawerContent}>
       <View style={styles.drawerHeader}>
-        <Text style={styles.drawerTitle}>Promotor</Text>
+        {/* El logo del cliente donde antes decía "Promotor". El promotor abre el
+            drawer decenas de veces al día; es el lugar donde la marca se ve sin
+            robarle espacio a ninguna lista. Si el PNG todavía no está puesto, cae
+            al nombre en texto y no queda un hueco. */}
+        {cliente.logo ? (
+          <Image
+            source={cliente.logo}
+            style={styles.drawerLogo}
+            resizeMode="contain"
+            accessibilityLabel={cliente.nombreLargo}
+          />
+        ) : (
+          <Text style={styles.drawerTitle}>{cliente.nombre}</Text>
+        )}
         {user && <Text style={styles.drawerUser}>{user.usuario}</Text>}
         {/* Contexto siempre visible: sin esto el promotor no sabe por qué no ve
             un productor o una solicitud que espera. */}
@@ -549,6 +572,15 @@ function CustomDrawer(props: DrawerContentComponentProps) {
         labelStyle={styles.drawerLabel}
       />
 
+      {/* Servidor: cada beneficio corre el suyo en su red. Sin esta entrada, un
+          cambio de IP obligaría a recompilar el APK e instalarlo teléfono por
+          teléfono. */}
+      <DrawerItem
+        label="Servidor"
+        onPress={() => props.navigation.navigate("Servidor")}
+        labelStyle={styles.drawerLabel}
+      />
+
       <DrawerItem
         label="Cerrar sesión"
         onPress={salir}
@@ -575,7 +607,7 @@ function AuthenticatedNav() {
         // El header visible es el del Stack interno de cada tab; el drawer no
         // rendera el suyo para no apilar dos. El hamburguesa vive en cada Stack.
         headerShown: false,
-        drawerStyle: { backgroundColor: "#0f172a" },
+        drawerStyle: { backgroundColor: cliente.chrome },
       }}
     >
       <Drawer.Screen name="Main" component={MainTabs} />
@@ -587,7 +619,17 @@ function AuthenticatedNav() {
         options={{
           headerShown: true,
           title: "Bitácora del teléfono",
-          headerStyle: { backgroundColor: "#0f172a" },
+          headerStyle: { backgroundColor: cliente.chrome },
+          headerTintColor: "#f1f5f9",
+        }}
+      />
+      <Drawer.Screen
+        name="Servidor"
+        component={ServidorScreen}
+        options={{
+          headerShown: true,
+          title: "Servidor",
+          headerStyle: { backgroundColor: cliente.chrome },
           headerTintColor: "#f1f5f9",
         }}
       />
@@ -676,7 +718,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     alignItems: "center",
     padding: 24,
-    backgroundColor: "#0f172a",
+    backgroundColor: cliente.chrome,
   },
   loadingText: { color: "#94a3b8", marginTop: 12 },
   errorText: { color: "#fca5a5", fontSize: 14, textAlign: "center" },
@@ -689,6 +731,20 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   drawerTitle: { color: "#f1f5f9", fontSize: 20, fontWeight: "700" },
+  /**
+   * Fondo blanco a propósito: ninguno de los logos que mandó el cliente viene con
+   * transparencia, así que sobre el drawer oscuro aparecería igual un rectángulo
+   * claro. Con padding y esquinas redondeadas ese rectángulo se lee como una placa
+   * de marca y no como un error de recorte.
+   */
+  drawerLogo: {
+    width: 176,
+    height: 68,
+    backgroundColor: "#ffffff",
+    borderRadius: 8,
+    alignSelf: "flex-start",
+    marginBottom: 10,
+  },
   drawerUser: { color: "#94a3b8", fontSize: 13, marginTop: 4 },
   drawerLabel: { color: "#e2e8f0" },
   drawerErrorCaja: {
