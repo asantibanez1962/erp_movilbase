@@ -25,7 +25,18 @@
       ]
     },
     "extra": {
-      "apiBaseUrl": "http://10.0.2.2:5249"
+      "apiBaseUrl": "http://10.0.2.2:5249",
+      "cliente": {
+        "id": "dev",
+        "nombre": "Promotor",
+        "nombreLargo": "Promotor (desarrollo)",
+        "color": "#0f172a",
+        "acento": "#3b82f6",
+        "tieneLogo": false
+      },
+      "eas": {
+        "projectId": "b663db6e-dda9-49bf-bfc0-c8211758f6a1"
+      }
     },
     "plugins": [
       "expo-secure-store",

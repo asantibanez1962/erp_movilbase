@@ -19,12 +19,8 @@
       "distribution": "internal",
       "android": {
         "buildType": "apk"
-      },
-      "//": "SIN EXPO_PUBLIC_API_URL a propósito. Este es el perfil del que heredan los APK de los clientes, y la env var le gana al catálogo (ver src/lib/servidor.ts): dejarla acá le metería la IP de desarrollo a los cinco beneficios en silencio. La dirección de cada cliente sale de clientes.json."
+      }
     },
-
-    "//clientes": "Un perfil por cliente, heredando de preview. EXPO_PUBLIC_CLIENTE tiene que estar ACÁ y no en el shell: un build cloud corre en los servidores de Expo y no ve el entorno local, así que `EXPO_PUBLIC_CLIENTE=altura eas build` generaría un APK con el perfil dev y nadie se daría cuenta hasta instalarlo.",
-
     "altura": {
       "extends": "preview",
       "env": { "EXPO_PUBLIC_CLIENTE": "altura" }
@@ -45,7 +41,6 @@
       "extends": "preview",
       "env": { "EXPO_PUBLIC_CLIENTE": "marespi" }
     },
-
     "production": {
       "android": {
         "buildType": "app-bundle"
