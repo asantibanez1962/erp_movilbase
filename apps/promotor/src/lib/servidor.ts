@@ -16,20 +16,28 @@ import * as SecureStore from "expo-secure-store";
  *
  * PRECEDENCIA (de mayor a menor)
  *   1. Lo que el usuario guardó en este teléfono   (SecureStore)
- *   2. La del cliente compilado                     (clientes.json → expo.extra)
- *   3. EXPO_PUBLIC_API_URL                          (dev, al lanzar expo start)
+ *   2. EXPO_PUBLIC_API_URL                          (dev, al lanzar expo start)
+ *   3. La del cliente compilado                     (clientes.json → expo.extra)
  *   4. El loopback del emulador                     (último recurso)
  *
  * El override va arriba de todo a propósito: si alguien lo puso a mano, es porque la
  * compilada no servía.
+ *
+ * La env var va ARRIBA del catálogo, igual que antes del branding. En desarrollo el
+ * teléfono llega al backend por el túnel de adb, no por la IP del beneficio: si el
+ * catálogo ganara, apuntar Metro a un cliente dejaría al teléfono sin backend.
+ *
+ * ⚠ El corolario es que un APK compilado con EXPO_PUBLIC_API_URL en el ambiente se
+ * lleva ESA dirección y no la del cliente. Por eso se sacó de los perfiles de
+ * distribución en eas.json — ahí sí tiene que mandar el catálogo.
  */
 
 const K_URL = "promotor.apiBaseUrl";
 
 function porDefectoSinOverride(): string {
   return (
-    (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
     process.env.EXPO_PUBLIC_API_URL ??
+    (Constants.expoConfig?.extra?.apiBaseUrl as string | undefined) ??
     "http://10.0.2.2:5249"
   );
 }

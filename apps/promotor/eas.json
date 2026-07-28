@@ -20,9 +20,7 @@
       "android": {
         "buildType": "apk"
       },
-      "env": {
-        "EXPO_PUBLIC_API_URL": "http://192.168.100.10:5249"
-      }
+      "//": "SIN EXPO_PUBLIC_API_URL a propósito. Este es el perfil con el que se generan los APK de los clientes, y la env var le gana al catálogo (ver src/lib/servidor.ts): dejarla acá le metería la IP de desarrollo a los cinco beneficios en silencio. La dirección de cada cliente sale de clientes.json."
     },
     "production": {
       "android": {
