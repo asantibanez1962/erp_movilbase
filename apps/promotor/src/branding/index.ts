@@ -53,16 +53,14 @@ const extra = (Constants.expoConfig?.extra?.cliente as ClienteExtra | undefined)
  * Metro resuelve los assets en build time, así que la ruta de `require` tiene que ser
  * un literal — no se puede armar con el id. De ahí el mapa explícito.
  *
- * Un cliente sin PNG puesto todavía queda en `null` y la UI cae al nombre en texto.
- * Requerir un archivo inexistente rompe el bundle entero, no sólo esa pantalla.
+ * Un cliente sin PNG puesto queda en `null` y la UI cae al nombre en texto. Requerir
+ * un archivo inexistente rompe el bundle entero, no sólo esa pantalla.
  */
 const LOGOS: Record<string, ImageSourcePropType | null> = {
   dev: null,
   altura: require("../../assets/clientes/altura.png"),
-  // Faltan los PNG. Al ponerlos en assets/clientes/, descomentar la línea que
-  // corresponda y agregar el nombre del archivo en clientes.json.
-  laeva: null, // require("../../assets/clientes/laeva.png"),
-  diamante: null, // require("../../assets/clientes/diamante.png"),
+  laeva: require("../../assets/clientes/laeva.png"),
+  diamante: require("../../assets/clientes/diamante.png"),
   santacruz: require("../../assets/clientes/santacruz.png"),
   marespi: require("../../assets/clientes/marespi.png"),
 };
