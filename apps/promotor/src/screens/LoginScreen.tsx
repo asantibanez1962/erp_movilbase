@@ -12,12 +12,26 @@ import {
 } from "react-native";
 import { useAuthStore, AuthError } from "@erp/shared-api";
 import { cliente } from "../branding";
+import { ServidorScreen } from "./ServidorScreen";
 
 export function LoginScreen() {
   const [usuario, setUsuario] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /**
+   * La pantalla de servidor tiene que ser alcanzable SIN sesión.
+   *
+   * Vivía sólo en el drawer, que está detrás del login. Si a un beneficio le
+   * compilamos una IP equivocada —y hoy las cinco son provisionales— el promotor no
+   * puede entrar, y por lo tanto tampoco llegar a la pantalla que existe justamente
+   * para corregirla. La única salida habría sido recompilar el APK y reinstalárselo,
+   * que es lo que esa pantalla evita.
+   *
+   * Se muestra en lugar del formulario, sin navegador: acá todavía no hay ninguno
+   * montado.
+   */
+  const [verServidor, setVerServidor] = useState(false);
   const login = useAuthStore((s) => s.login);
 
   const submit = async () => {
@@ -39,6 +53,14 @@ export function LoginScreen() {
       setLoading(false);
     }
   };
+
+  if (verServidor) {
+    return (
+      <View style={styles.root}>
+        <ServidorScreen onVolver={() => setVerServidor(false)} />
+      </View>
+    );
+  }
 
   return (
     <KeyboardAvoidingView
@@ -98,6 +120,17 @@ export function LoginScreen() {
             <Text style={styles.buttonText}>Ingresar</Text>
           )}
         </TouchableOpacity>
+
+        {/* Discreto: el 99% de las veces no se toca. Pero cuando la dirección del
+            servidor está mal, es la única salida que no pasa por reinstalar el APK. */}
+        <TouchableOpacity
+          onPress={() => setVerServidor(true)}
+          disabled={loading}
+          style={styles.enlaceServidor}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        >
+          <Text style={styles.enlaceServidorTexto}>Configurar servidor</Text>
+        </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>
   );
@@ -129,6 +162,13 @@ const styles = StyleSheet.create({
   },
   card: { backgroundColor: "#1e293b", borderRadius: 12, padding: 24 },
   title: { fontSize: 28, fontWeight: "700", color: "#f1f5f9", marginBottom: 4 },
+  enlaceServidor: {
+    minHeight: 44,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 8,
+  },
+  enlaceServidorTexto: { color: "#94a3b8", fontSize: 13 },
   /** Placa blanca: los logos no tienen transparencia (ver App.tsx drawerLogo). */
   logo: {
     width: "100%",

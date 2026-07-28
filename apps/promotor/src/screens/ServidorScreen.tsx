@@ -38,7 +38,9 @@ import { colores, estilos } from "./estilos";
  * mismo razonamiento por el que cambiar de cosecha, ampliar zonas o cerrar sesión
  * rebajan todo.
  */
-export function ServidorScreen() {
+export function ServidorScreen({
+  onVolver,
+}: Readonly<{ onVolver?: () => void }> = {}) {
   const [texto, setTexto] = useState(urlServidor());
   const [probando, setProbando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -283,6 +285,25 @@ export function ServidorScreen() {
         al servidor anterior. Después de entrar de nuevo, la primera sincronización baja
         todo desde el servidor nuevo.
       </Text>
+
+      {/* Sólo cuando se llega desde el login, que no tiene drawer ni header con
+          botón de atrás. Desde el drawer sobra: el header ya lo resuelve. */}
+      {onVolver ? (
+        <TouchableOpacity
+          onPress={onVolver}
+          disabled={guardando}
+          style={{
+            minHeight: 48,
+            alignItems: "center",
+            justifyContent: "center",
+            marginTop: 12,
+          }}
+        >
+          <Text style={{ color: colores.primario, fontSize: 15, fontWeight: "600" }}>
+            Volver al ingreso
+          </Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }

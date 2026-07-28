@@ -447,8 +447,13 @@ function CustomDrawer(props: DrawerContentComponentProps) {
    * anterior — y un delta nunca lo corregiría, porque esas filas no cambiaron del lado
    * del servidor, simplemente dejaron de corresponderle.
    *
-   * Con trabajo sin subir avisa antes: cerrar sesión no puede ser una forma silenciosa
-   * de perder la mañana de alguien.
+   * SIEMPRE PIDE CONFIRMACIÓN, aun sin nada pendiente.
+   *
+   * Antes salía directo cuando no había trabajo sin subir, con el razonamiento de que
+   * así no se perdía nada. Ese razonamiento miraba sólo la mitad: no se pierde ningún
+   * registro, pero sí la base entera, y volver a bajarla son cientos de filas. Para un
+   * promotor en el campo con datos móviles eso no es gratis, y un toque accidental en
+   * el drawer no puede costarlo — sobre todo estando pegado a otras opciones inocuas.
    */
   const salir = async () => {
     const pendientes = await resumenPendientes();
@@ -462,7 +467,16 @@ function CustomDrawer(props: DrawerContentComponentProps) {
     };
 
     if (pendientes.total === 0) {
-      void ejecutar(false);
+      Alert.alert(
+        "Cerrar sesión",
+        "Se borran los datos de este teléfono: pertenecen a tu usuario y a tu zona. " +
+          "No hay nada sin enviar, así que no se pierde trabajo, pero al volver a " +
+          "entrar hay que bajarlos completos del servidor.",
+        [
+          { text: "Cancelar", style: "cancel" },
+          { text: "Cerrar sesión", style: "destructive", onPress: () => void ejecutar(false) },
+        ]
+      );
       return;
     }
 
@@ -558,19 +572,6 @@ function CustomDrawer(props: DrawerContentComponentProps) {
         onPress={abrirCambioCosecha}
         labelStyle={styles.drawerLabel}
       />
-      {/* Diagnóstico: qué intentó este teléfono. Es lo que se lee por teléfono
-          cuando el promotor dice "no envió nada". */}
-      <DrawerItem
-        label={rebajando ? "Rebajando datos..." : "Rebajar todos los datos"}
-        onPress={rebajarDatos}
-        labelStyle={styles.drawerLabel}
-      />
-
-      <DrawerItem
-        label="Bitácora del teléfono"
-        onPress={() => props.navigation.navigate("Bitacora")}
-        labelStyle={styles.drawerLabel}
-      />
 
       {/* Servidor: cada beneficio corre el suyo en su red. Sin esta entrada, un
           cambio de IP obligaría a recompilar el APK e instalarlo teléfono por
@@ -578,6 +579,28 @@ function CustomDrawer(props: DrawerContentComponentProps) {
       <DrawerItem
         label="Servidor"
         onPress={() => props.navigation.navigate("Servidor")}
+        labelStyle={styles.drawerLabel}
+      />
+
+      {/* Diagnóstico: qué intentó este teléfono. Es lo que se lee por teléfono
+          cuando el promotor dice "no envió nada". */}
+      <DrawerItem
+        label="Bitácora del teléfono"
+        onPress={() => props.navigation.navigate("Bitacora")}
+        labelStyle={styles.drawerLabel}
+      />
+
+      {/* Las dos que borran la base local, agrupadas y separadas del resto.
+          No es decoración: las opciones de arriba son inocuas y éstas cuestan una
+          rebajada completa. Tenerlas mezcladas hace que un toque errado en un
+          teléfono, con una mano, salga caro. */}
+      <View style={styles.drawerSeparador}>
+        <Text style={styles.drawerSeccion}>Borra los datos del teléfono</Text>
+      </View>
+
+      <DrawerItem
+        label={rebajando ? "Rebajando datos..." : "Rebajar todos los datos"}
+        onPress={rebajarDatos}
         labelStyle={styles.drawerLabel}
       />
 
@@ -747,6 +770,20 @@ const styles = StyleSheet.create({
   },
   drawerUser: { color: "#94a3b8", fontSize: 13, marginTop: 4 },
   drawerLabel: { color: "#e2e8f0" },
+  drawerSeparador: {
+    borderTopWidth: 1,
+    borderTopColor: "#334155",
+    marginTop: 12,
+    paddingTop: 12,
+    paddingHorizontal: 16,
+  },
+  drawerSeccion: {
+    color: "#94a3b8",
+    fontSize: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.5,
+  },
   drawerErrorCaja: {
     backgroundColor: "#7f1d1d",
     marginHorizontal: 12,
