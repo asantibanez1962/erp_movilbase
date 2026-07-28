@@ -21,21 +21,29 @@ import type { ImageSourcePropType } from "react-native";
  * conserva aparte, en `marca`, para superficies donde no hay texto encima.
  */
 
-const FALLBACK = {
-  id: "dev",
-  nombre: "Promotor",
-  nombreLargo: "Promotor",
-  color: "#0f172a",
-  tieneLogo: false,
-};
-
 interface ClienteExtra {
   id: string;
   nombre: string;
   nombreLargo: string;
   color: string;
+  /** Fijo en clientes.json; si viene null se deriva del color de marca. */
+  acento?: string | null;
   tieneLogo: boolean;
 }
+
+/**
+ * Si el manifest no trae el bloque —config vieja cacheada, o un arranque raro— se usa
+ * el perfil de desarrollo. Quedarse sin colores rompería la app entera por un dato
+ * cosmético.
+ */
+const FALLBACK: ClienteExtra = {
+  id: "dev",
+  nombre: "Promotor",
+  nombreLargo: "Promotor",
+  color: "#0f172a",
+  acento: "#3b82f6",
+  tieneLogo: false,
+};
 
 const extra = (Constants.expoConfig?.extra?.cliente as ClienteExtra | undefined) ?? FALLBACK;
 
@@ -92,6 +100,29 @@ function contraste(a: string, b: string): number {
 }
 
 /**
+ * Aclara `color` hasta que contra `fondo` alcance `minimo` de contraste.
+ *
+ * Es la operación inversa a la de abajo y hace falta para el acento: el color de
+ * marca puro sobre el chrome —que es ese mismo color oscurecido— da alrededor de
+ * 1.5:1. El tab activo quedaría indistinguible del inactivo, que es justo lo único
+ * que ese color tiene que comunicar.
+ *
+ * El mínimo es 3:1 y no 4.5:1 porque WCAG pide 3:1 para íconos y texto grande, que
+ * es lo que hay en una tab bar.
+ */
+function aclararHastaContraste(color: string, fondo: string, minimo: number): string {
+  let rgb = aRgb(color);
+  for (let i = 0; i < 60 && contraste(aHex(rgb), fondo) < minimo; i++) {
+    rgb = [
+      rgb[0] + (255 - rgb[0]) * 0.06,
+      rgb[1] + (255 - rgb[1]) * 0.06,
+      rgb[2] + (255 - rgb[2]) * 0.06,
+    ];
+  }
+  return aHex(rgb);
+}
+
+/**
  * Oscurece `color` hasta que contra `texto` alcance `minimo` de contraste.
  *
  * Mezcla hacia el negro en pasos chicos en vez de calcular el factor exacto: el
@@ -111,6 +142,8 @@ function oscurecerHastaContraste(color: string, texto: string, minimo: number): 
 
 const TEXTO_CHROME = "#f1f5f9";
 
+const chrome = oscurecerHastaContraste(extra.color, TEXTO_CHROME, 4.5);
+
 /** El cliente activo, con lo que la UI necesita para pintarse. */
 export const cliente = {
   id: extra.id,
@@ -120,9 +153,20 @@ export const cliente = {
   marca: extra.color,
   /**
    * Color del header, la tab bar y el drawer. Es el de marca, oscurecido lo justo
-   * para que el texto claro se lea al sol. Para `dev` da prácticamente el navy de
-   * siempre, así que el look conocido no cambia.
+   * para que el texto claro se lea al sol. Para `dev` es el navy de siempre, así que
+   * el look conocido no cambia.
    */
-  chrome: oscurecerHastaContraste(extra.color, TEXTO_CHROME, 4.5),
+  chrome,
+  /**
+   * Acento sobre el chrome: hoy, el tab activo. El de marca aclarado hasta separarse
+   * del fondo, salvo que clientes.json lo fije (es el caso de `dev`, donde aclarar el
+   * navy daría un gris azulado en vez del azul conocido).
+   */
+  // Se comprueba que sea un string y no sólo que exista: Expo convierte los null del
+  // manifest en {}, y un objeto pasaría el ?? para terminar en un color NaN.
+  acento:
+    typeof extra.acento === "string" && extra.acento
+      ? extra.acento
+      : aclararHastaContraste(extra.color, chrome, 3),
   logo: LOGOS[extra.id] ?? null,
 };

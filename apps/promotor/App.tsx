@@ -257,7 +257,7 @@ function MainTabs() {
           paddingTop: 6,
         },
         tabBarLabelStyle: { fontSize: 14, fontWeight: "600" },
-        tabBarActiveTintColor: "#3b82f6",
+        tabBarActiveTintColor: cliente.acento,
         tabBarInactiveTintColor: "#94a3b8",
       }}
     >

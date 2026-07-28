@@ -79,6 +79,11 @@ module.exports = ({ config }) => {
         nombre: cliente.nombre,
         nombreLargo: cliente.nombreLargo,
         color: cliente.color,
+        // Opcional: sin esto se deriva del color de marca. Sólo `dev` lo fija.
+        // Se OMITE la clave en vez de mandarla en null: Expo serializa los null del
+        // manifest como {}, que es truthy, y del otro lado terminaría usándose como
+        // si fuera un color.
+        ...(cliente.acento ? { acento: cliente.acento } : {}),
         tieneLogo: Boolean(logo),
       },
     },

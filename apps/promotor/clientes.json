@@ -20,6 +20,8 @@
     "nombreLargo": "Promotor (desarrollo)",
     "_colorNota": "El navy de siempre, para que desarrollo se vea idéntico a antes del branding.",
     "color": "#0f172a",
+    "_acentoNota": "Fijo, porque aclarar el navy daría un gris azulado y no el azul de siempre.",
+    "acento": "#3b82f6",
     "package": "cr.confeldan.promotor",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null
