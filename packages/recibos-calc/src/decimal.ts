@@ -62,6 +62,26 @@ export function redondear(v: number, escala: number): number {
  * preferible a "arreglarlo" y que el móvil imprima un número distinto del que el
  * servidor va a guardar.
  */
+/**
+ * Redondeo al cuartillo con PISO, para la cantidad final del recibo.
+ *
+ * ⚠️ No usa `redondeoCafe` a propósito, aunque el factor sea el mismo 0.25.
+ *
+ * `redondeo_Cafe` hace `convert(integer, monto*4 + .5)`, y ese convert trunca hacia
+ * cero. Para −50 da −199.5 → −199 → **−49.75**: redondear un negativo que ya era
+ * exacto lo corre un cuartillo. Se comprobó contra la base — dos recibos de la cosecha
+ * en curso se rompían al pasarlos por ahí.
+ *
+ * Con piso, −199.5 → −200 → −50. Para positivos las dos dan lo mismo.
+ *
+ * `redondeo_Cafe` se deja intacta en el servidor porque la usan otros módulos; el
+ * arreglo vive dentro del cálculo del recibo, que es donde el valor puede ser
+ * negativo. Ver `Sql/Upgrades/v1.71/RC/16_fn_calcula_recibo_cuartillos.sql`.
+ */
+export function redondearACuartillo(v: number): number {
+  return Math.floor(Number((v * 4 + 0.5).toPrecision(15))) / 4;
+}
+
 export function redondeoCafe(monto: number, factor: number): number {
   if (factor === 0) return monto;
   const f = 100 / factor * 0.01;

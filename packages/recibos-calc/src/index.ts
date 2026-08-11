@@ -9,7 +9,13 @@
  */
 export { calcularRecibo } from "./calculo";
 export { buscarPrecio } from "./precio";
-export { redondeoCafe, redondear, truncar, partirEnCuartillos } from "./decimal";
+export {
+  redondeoCafe,
+  redondearACuartillo,
+  redondear,
+  truncar,
+  partirEnCuartillos,
+} from "./decimal";
 export type {
   CastigoBroca,
   CastigoCosecha,

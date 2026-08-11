@@ -1,4 +1,10 @@
-import { partirEnCuartillos, redondear, redondeoCafe, truncar } from "./decimal";
+import {
+  partirEnCuartillos,
+  redondear,
+  redondearACuartillo,
+  redondeoCafe,
+  truncar,
+} from "./decimal";
 import type { Catalogos, EntradaCalculo, ResultadoCalculo } from "./tipos";
 
 /**
@@ -151,10 +157,12 @@ export function calcularRecibo(e: EntradaCalculo, cat: Catalogos): ResultadoCalc
     rebajoflote + cuartillosrebajoflote * 0.25 + rebajofloteseco + cuartillosrebajofloteseco * 0.25,
     3
   );
-  const cantidad = redondear(
-    bruto - rflote - castigosbroca - rverde + (e.errormedidor ?? 0),
-    3
-  );
+  // La cantidad final se redondea al cuartillo: `errormedidor` es el único término
+  // que puede traer decimales sueltos y sin esto la cantidad queda fuera del dominio
+  // (las cajuelas son enteras y los cuartillos van de 0 a 3). Con piso y no con
+  // redondeoCafe — ver la nota en decimal.ts sobre los negativos.
+  const neto = redondear(bruto - rflote - castigosbroca - rverde + (e.errormedidor ?? 0), 3);
+  const cantidad = redondearACuartillo(neto);
   const p = partirEnCuartillos(cantidad);
 
   return {

@@ -282,8 +282,36 @@ El móvil es justamente lo que abre esa puerta, y del lado impreso.
 ```
 
 Para −31,75 da −31 cajuelas y −3 cuartillos. La base guarda −32 y 1, que suma lo mismo
-y sí respeta el rango 0..3. El port usa piso —comprobado contra los recibos negativos
-guardados— y por eso **difiere del servidor en esos casos hasta que el BE se corrija**.
+y sí respeta el rango 0..3.
+
+**3. `redondeo_Cafe` corre los negativos un cuartillo** — apareció al arreglar el 1.
+
+```sql
+@resultado = convert(integer, (@monto*@f)+.5) / @f   -- convert trunca hacia cero
+```
+
+Para −50: `−199.5 → −199 → −49.75`. O sea que redondear un valor **que ya era exacto**
+lo cambia. Se descubrió porque el primer intento de arreglo usaba `redondeo_Cafe` para
+la cantidad final y rompió dos recibos de la cosecha en curso que antes coincidían.
+
+La función se deja **intacta**: la usan otros módulos y cambiarla afectaría cálculos
+que este trabajo no verificó. El redondeo se hace con `FLOOR` dentro del cálculo del
+recibo, que es donde el valor puede ser negativo. Para positivos las dos dan lo mismo.
+
+### 5.3 Estado: arreglado y verificado sin regresiones
+
+`Sql/Upgrades/v1.71/RC/16_fn_calcula_recibo_cuartillos.sql` aplica los tres puntos.
+Medido contra la base, mismas muestras de 5.000 recibos antes y después:
+
+| Cosecha | Original (cantidad / descomp.) | Con el arreglo |
+|---|---|---|
+| 2025-2026 | 5000 / 4999 | **5000 / 5000** |
+| 2024-2025 | 4996 / 4996 | **4999 / 4999** |
+| 2023-2024 | 4996 / 4995 | **4998 / 4998** |
+| 2022-2023 | 4945 / 4943 | **4945 / 4945** |
+
+Mejora en las cuatro cosechas y no regresa en ninguna. Con la función corregida, el
+port en TypeScript sube a **99,95 %** en la cosecha en curso y **99,97 %** en 2023-2024.
 
 ---
 
