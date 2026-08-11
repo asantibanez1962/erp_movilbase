@@ -56,7 +56,21 @@ haya ambigüedad, la de este documento es la **jornada**.
 - Impresión térmica **Bluetooth directa ESC/POS** (sin diálogo del sistema).
 
 Fuera de scope: modificación de recibos, anulación desde el móvil, tipo de café en la
-bitácora.
+bitácora, y **`errormedidor`**.
+
+### `errormedidor` NO se captura en el móvil
+
+Existe para quien hace recibos a mano, sin teléfono. El móvil lo deja siempre en 0.
+
+Vale entender por qué esto es más que un campo menos en la pantalla. La cadena del
+cálculo mantiene sola la invariante de cuartillos: el bruto viene en cuartillos, los
+descuentos se redondean a cuartillos, y la resta de cuartillos da cuartillos. El único
+término que podía romperla era `errormedidor`, que se suma al final sin redondear (ver
+§5.2). **Sin él, el recibo del móvil no puede salirse del dominio.**
+
+El arreglo del BE sigue haciendo falta igual, pero para el camino manual y el web. Y si
+alguna vez se decide capturarlo en el móvil, hay que **validar que sea múltiplo de
+0,25** antes de aceptarlo.
 
 ### App nueva
 
