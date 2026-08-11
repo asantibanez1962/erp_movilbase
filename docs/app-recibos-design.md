@@ -591,6 +591,25 @@ diciendo cosas distintas.
 Es la misma familia de `PoliticaEdicion` que promotor (`hasta-sync`,
 `hasta-resolucion`), pero con su propio corte: **hasta-impresion**.
 
+**Y un recibo sin imprimir NO se sincroniza.** Es trabajo a medio hacer: se queda en el
+teléfono, retenido, hasta que se imprime. Encaja tal cual con el mecanismo de retención
+que el motor ya tiene (`CampoCierre`) — acá el campo de cierre es `impreso`. En el
+drawer aparecería igual que en promotor: "sin enviar" y "sin cerrar" contados aparte,
+porque son dos problemas distintos y el segundo no se arregla sincronizando.
+
+**La excepción es el recibo anulado**, que sí sube aunque nunca se haya impreso, con
+todo en cero.
+
+Que suba es lo importante: **preserva el número en la secuencia**. Sin él quedaría un
+hueco imposible de distinguir de un recibo perdido, y esa es justo la duda cara —
+alguien tendría que salir a buscar un papel que nunca existió.
+
+⚠️ La tabla `recibos` **no tiene columna de anulación**: sólo `observaciones` e
+`impreso`. Un recibo anulado *es* uno con las cantidades en cero. Y no es un caso raro:
+hay entre 900 y 1.250 por cosecha. Queda por definir cómo distingue la oficina un
+anulado de un cero legítimo — probablemente por `observaciones`, pero hoy nada lo
+garantiza.
+
 ⚠️ Queda por averiguar qué hace `tr_rc_remedida_remdirty`, para cuando se encare la
 remedida (§8).
 
