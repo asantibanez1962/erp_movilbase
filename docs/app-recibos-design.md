@@ -41,8 +41,18 @@ dos veces:
 3. `re_Bitacora_recibos` — **la jornada de trabajo del recibidor**, que es de la que
    habla este documento.
 
-En la UI se llama *Bitácora*, que es como la nombra la operación. En el código, cuando
-haya ambigüedad, la de este documento es la **jornada**.
+Y en esta app van a ser cuatro, porque tendrá su propio log de diagnóstico como
+promotor. Para que no se confundan nunca:
+
+| Se llama… | Es | Dónde vive | ¿La toca el móvil? |
+|---|---|---|---|
+| **jornada** | el día de trabajo del recibidor: apertura, cierre, placa, transportista | `re_Bitacora_recibos` | **sí** — la crea y la sincroniza |
+| **auditoría** | una fila por versión del recibo (A alta / M modificación) | `bitacora_recibos` → `vw_rc_bitacora_recibo` | no — la genera el trigger en el servidor |
+| **log del teléfono** | diagnóstico local: qué intentó este equipo | SQLite del dispositivo | sí, pero nunca sale del teléfono |
+| **auditoría de precios** | historial de `rc_precios` | `bitacora_rc_precios` | no |
+
+En la UI la primera se llama *Bitácora*, que es como la nombra la operación. En el
+código, cuando haya riesgo de confusión, es la **jornada**.
 
 ---
 
@@ -555,8 +565,34 @@ cosechas, porque el contenido era idéntico.
   promotor. Cambiar de recibidor tiene el mismo efecto que cambiar de cosecha —
   **es un cambio de alcance y obliga a rebajar los datos**.
 
-⚠️ Los triggers `tr_recibos` y `tr_rc_remedida_remdirty` se van a disparar con cada
-inserción del móvil. Hay que saber qué hacen antes de mandar el primer recibo.
+### 9.3 La auditoría del recibo empieza en el servidor
+
+`tr_recibos` alimenta `bitacora_recibos`, el historial que el web muestra como pestaña
+"Bitácora" dentro del form del recibo (una fila por versión, tipo A alta / M
+modificación). **Eso no es la jornada de §6** — mismo nombre, cosas distintas.
+
+Cuando el recibo del móvil llega al servidor, el trigger le crea su fila **tipo A**,
+como si lo hubieran digitado. O sea que el trigger no es un riesgo a evaluar: es la
+trazabilidad, gratis.
+
+**El móvil no sincroniza la auditoría en ninguna dirección.** Lo que pasó en el teléfono
+antes de sincronizar no interesa al historial.
+
+### 9.4 Política de edición: el recibo se congela al imprimirse
+
+En el teléfono el recibo se puede corregir **hasta que se imprime**. Después queda
+congelado, y sube como alta.
+
+El corte es la impresión y no la sincronización, y la diferencia importa: el papel ya
+está firmado por el productor. Un recibo que se pudiera editar entre la impresión y el
+sync produciría exactamente la contradicción que este diseño evita — papel y sistema
+diciendo cosas distintas.
+
+Es la misma familia de `PoliticaEdicion` que promotor (`hasta-sync`,
+`hasta-resolucion`), pero con su propio corte: **hasta-impresion**.
+
+⚠️ Queda por averiguar qué hace `tr_rc_remedida_remdirty`, para cuando se encare la
+remedida (§8).
 
 ---
 
