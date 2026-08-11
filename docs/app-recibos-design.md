@@ -192,14 +192,31 @@ con teléfono, no un proceso. Si falta, el sync falla y el recibo queda pendient
 el mensaje diga por qué. **Va como precondición de despliegue, verificada antes de
 entregar un equipo.**
 
-### La bitácora se numera igual
+### La bitácora NO se numera en el móvil — se identifica por `idbitacora`
 
-`re_Bitacora_recibos.numero` es hoy `nchar(5)`, que no da para meterle el recibidor
-adentro: quedarían 2 dígitos de secuencia, 99 bitácoras por cosecha.
+Primero se pensó ensanchar `re_Bitacora_recibos.numero` —hoy `nchar(5)`— y componerlo
+como el recibo. **Se descartó**: la bitácora se identifica por su PK `idbitacora`, que
+es IDENTITY y asigna el servidor.
 
-**Decidido: se ensancha** y se numera con la misma regla que el recibo — recibidor(3) +
-secuencia. Una sola regla de numeración para las dos entidades, en vez de dos que hay
-que recordar. Es un `ALTER` de bajo riesgo: ninguna aplicación toca esa tabla hoy.
+Por qué es mejor así: el `numero` sólo haría falta si el móvil tuviera que numerar
+offline, y eso arrastra todo lo que arrastra el número del recibo — un contador local,
+una forma de recuperarlo si se reinstala el teléfono, y el riesgo de colisión. Nada de
+eso hace falta para un padre cuya única función es agrupar los recibos del día.
+
+El motor de sync ya resuelve el caso: el móvil crea la bitácora offline con su
+ClientUuid, le cuelga los recibos, y al sincronizar el servidor asigna el `idbitacora`
+real y reescribe las referencias. Es exactamente el caso del entregador y su solicitud
+en la app promotor.
+
+Los datos históricos (1072 filas, 2021-2023, de un sistema que ya no se usa) quedan
+intactos con su formato viejo. De paso: se midió y **no son únicos bajo ninguna
+combinación** — `cosecha+numero` tiene 164 grupos duplicados, y hasta
+`recibidor+cosecha+numero+fecha` tiene 17. Otra razón para no apoyar nada en ese campo.
+
+⚠️ **Queda una consecuencia sin resolver**: el cierre imprime la bitácora, y eso pasa
+offline, cuando el `idbitacora` todavía no existe. Hay que decidir qué identifica a esa
+hoja en el papel — fecha + recibidor + placa puede alcanzar, o hace falta algo que
+permita casarla después contra la fila del servidor.
 
 ---
 
@@ -462,7 +479,7 @@ Todos **ya tienen entidad en el BE**. No hay que crear ninguna: sólo registrarl
 | Zonas | `Zona` | |
 | Tipo de café | `TipoCafe` | ⚠️ en el recibo se guarda en `zona` (§5) |
 | Tipo de descuento | `TipoCastigo` | |
-| Descuentos por cosecha | `CastigoCosecha` → `re_castigos_cosecha` | cálculo: tope y % |
+| Descuentos por cosecha | `CastigoCosecha` → `rc_castigoscosecha` | cálculo: tope y % (ver §9.2) |
 | Niveles por recibidor/cosecha | `RecibidorCosechaNivel` | cálculo: nivel |
 | Castigos de broca | `CastigoBroca` → `rc_castigosbroca` | cálculo: bloques de 100 |
 | Calidades | `Calidad` | entra al precio |
@@ -506,6 +523,33 @@ techo a consumir, el teléfono necesitaría el saldo — y offline nunca lo tend
 porque el productor pudo haber entregado en otro recibidor esa misma mañana. Habría que
 elegir entre bloquear café legítimo o permitir de más. **Al no llevar saldo, el problema
 no existe**, y la decisión se resuelve con datos que no cambian durante la jornada.
+
+### 9.2 Los castigos de cosecha estaban en dos tablas — ✅ unificado
+
+Al ir a registrar este catálogo apareció que había **dos USER_TABLE independientes** con
+los mismos datos:
+
+- `rc_castigoscosecha` — la entidad `CastigoCosecha`, o sea **lo que edita el web**
+- `re_castigos_cosecha` — **lo que leía `f_rc_calcula_recibo`**
+
+Sin sinónimo, sin vista y sin trigger entre ellas. Coincidían por casualidad histórica.
+
+El efecto ya estaba activo y no tenía nada que ver con el móvil: **cambiar un tope desde
+el web no afectaba el cálculo del recibo**. Nadie lo notó porque nunca se editaron.
+
+Para el móvil habría sido peor: el teléfono sincroniza la tabla de la entidad y calcula
+con esos valores mientras el servidor recalcula con la otra. El día que difirieran, el
+papel firmado y el registro guardado dirían cosas distintas.
+
+Arreglado en `Sql/Upgrades/v1.71/RC/17_castigos_cosecha_unifica.sql`: la vieja se
+renombra a `_legacy`, un sinónimo con su nombre apunta a la buena —así lo que siga
+usando el nombre viejo, como el PowerBuilder, converge en vez de separarse— y la función
+pasa a nombrar `rc_castigoscosecha` directamente, para que el día que el legacy
+desaparezca no dependa de un sinónimo. Verificado: mismos resultados en las cuatro
+cosechas, porque el contenido era idéntico.
+
+---
+
 - **Subida**: bitácoras y recibos, con la bitácora como padre resuelto por ClientUuid.
 - **Contexto**: usuario + cosecha + recibidor, análogo a empresa/cosecha/zona en
   promotor. Cambiar de recibidor tiene el mismo efecto que cambiar de cosecha —
