@@ -92,9 +92,15 @@ documento firmado que no cuadra.
 @recibo = RIGHT('000' + @recibidor, 3) + RIGHT('000000' + @cur, 6)
 ```
 
-Nueve dígitos pegados —`001000123`— que entran a `recibos.recibo`, columna
-`numeric(18,0)`. **El guión de `001-000123` es presentación**: se pone al imprimir, no
-se guarda. El teléfono tiene que reproducir esa misma composición exacta.
+Nueve dígitos pegados —`001000123`— que entran a `recibos.recibo`, que es **`char(10)`**
+(verificado en `sys.columns`, no en el model builder: ahí una línea vecina declara
+`numeric(18,0)` y es fácil atribuírsela a esta columna).
+
+Siendo texto de 10, el guión **sí cabe y sí se guarda**: en la base conviven
+`001-004116` y `0000000009`. O sea que hay al menos dos formatos históricos y el
+procedimiento actual genera un tercero (9 dígitos sin guión, con relleno a 10).
+**Hay que fijar cuál emite el móvil antes de imprimir el primero**, porque el número
+va en el papel del productor y en la llave cosecha + número.
 
 La unicidad es por **cosecha + número**, y el recibidor va adentro del número. Como hay
 **un solo teléfono por recibidor**, cada equipo es dueño de su rango y puede numerar
@@ -228,6 +234,56 @@ se puede es que la divergencia sea imposible de ignorar:
 
 Sin el punto 3, las dos versiones se separan en la primera cosecha en que alguien
 cambie un castigo, y nadie se entera hasta que un productor reclama.
+
+### 5.1 Resultado de la verificación — ✅ el port reproduce el cálculo
+
+`packages/recibos-calc` ya existe, y `scripts/verificar.cjs` lo corre contra los recibos
+reales de la base. No es un test unitario a propósito: la pregunta no es "¿pasa?" sino
+**"¿cuántos de los ya emitidos reproduce, y los que no, por qué?"**.
+
+| Cosecha | Recibos | Coincide |
+|---|---|---|
+| 2025-2026 (en curso, sin las pruebas de agosto) | 38.487 | **99,94 %** |
+| 2024-2025 | 35.854 | 99,89 % |
+| 2023-2024 | 39.855 | 99,95 % |
+
+Las cosechas anteriores a 2022 son cargas de otros sistemas y no sirven de referencia:
+sus recibos no tienen castigos, o sea que nunca pasaron por este cálculo.
+
+**Conclusión: se puede imprimir offline.** Era el riesgo que podía invalidar el módulo.
+
+### 5.2 Dos defectos del BE que encontró la verificación
+
+Ninguno da error: los dos devuelven un número equivocado en silencio. Y los dos los
+destapa el móvil, porque hoy no se ejercitan.
+
+**1. `f_rc_calcula_recibo` no redondea la cantidad final al cuartillo.**
+
+```sql
+@cantidad = @bruto - @rflote - @castigosbroca - @rverde + ISNULL(@errormedidor,0)
+```
+
+Los rebajos sí pasan por `redondeo_Cafe`, pero `errormedidor` entra crudo. Con un error
+de −2,753 la cantidad da 180,997 — que **no es representable**, porque las cajuelas son
+enteras y los cuartillos van de 0 a 3.
+
+Por qué no reventó: de los 292.243 recibos de la base, **ninguno** tiene cantidad fuera
+de cuartillo, y de los 3.781 con error de medidor en la cosecha actual, **todos** son
+múltiplos de 0,25. La resta cae en cuartillo por casualidad aritmética. Sólo 22 recibos
+en toda la historia tuvieron un error con decimales sueltos, y el PowerBuilder los
+redondeaba.
+
+El móvil es justamente lo que abre esa puerta, y del lado impreso.
+
+**2. La descomposición en cuartillos trunca en vez de usar piso.**
+
+```sql
+@rcantidad = CAST(@cantidad AS INT)   -- trunca HACIA CERO
+```
+
+Para −31,75 da −31 cajuelas y −3 cuartillos. La base guarda −32 y 1, que suma lo mismo
+y sí respeta el rango 0..3. El port usa piso —comprobado contra los recibos negativos
+guardados— y por eso **difiere del servidor en esos casos hasta que el BE se corrija**.
 
 ---
 
