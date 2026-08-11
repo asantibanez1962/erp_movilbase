@@ -42,17 +42,26 @@ dos veces:
    habla este documento.
 
 Y en esta app van a ser cuatro, porque tendrá su propio log de diagnóstico como
-promotor. Para que no se confundan nunca:
+promotor. **Vocabulario cerrado**, para que no se discuta más:
 
-| Se llama… | Es | Dónde vive | ¿La toca el móvil? |
-|---|---|---|---|
-| **jornada** | el día de trabajo del recibidor: apertura, cierre, placa, transportista | `re_Bitacora_recibos` | **sí** — la crea y la sincroniza |
-| **auditoría** | una fila por versión del recibo (A alta / M modificación) | `bitacora_recibos` → `vw_rc_bitacora_recibo` | no — la genera el trigger en el servidor |
-| **log del teléfono** | diagnóstico local: qué intentó este equipo | SQLite del dispositivo | sí, pero nunca sale del teléfono |
-| **auditoría de precios** | historial de `rc_precios` | `bitacora_rc_precios` | no |
+| Se llama… | Es | Tabla | Clase en el BE | Móvil |
+|---|---|---|---|---|
+| **Bitácora** | el cuaderno del día del recibidor, con sus N recibos | `re_Bitacora_recibos` | `BitacoraRecibidor` *(nueva)* | la crea y la sincroniza |
+| **historial del recibo** | una fila por versión (A alta / M modificación) | `bitacora_recibos` | `BitacoraRecibo` *(existe)* | no la toca |
+| **historial de precios** | versiones de `rc_precios` | `bitacora_rc_precios` | `PrecioBitacora` *(existe)* | no la toca |
+| **Eventos** | diagnóstico local: qué intentó este equipo | SQLite del dispositivo | — | nunca sale del teléfono |
 
-En la UI la primera se llama *Bitácora*, que es como la nombra la operación. En el
-código, cuando haya riesgo de confusión, es la **jornada**.
+Tres decisiones detrás de esa tabla:
+
+**Manda el negocio.** "Bitácora" significa una sola cosa para cualquiera que use el
+sistema: el cuaderno del recibidor. Es el nombre del proceso físico.
+
+**El log del teléfono pasa a llamarse "Eventos".** Es lo único renombrable sin costo
+—vive sólo en el móvil y nadie lo nombra en la operación— y es lo que libera la palabra.
+Aplica también a promotor, por consistencia entre las dos apps.
+
+**Las dos de auditoría no se tocan**: están en uso en el web y renombrarlas rompería
+formularios. Pero en prosa se llaman **historial**, nunca bitácora.
 
 ---
 
@@ -88,6 +97,47 @@ alguna vez se decide capturarlo en el móvil, hay que **validar que sea múltipl
 el mismo esquema de branding por cliente que ya tiene promotor. El recibidor y el
 promotor son personas distintas, con teléfonos y permisos distintos: no hay razón para
 meterlos en el mismo APK.
+
+---
+
+## 2.bis El proceso, en palabras de la operación
+
+Esta secuencia la dictó el usuario y es la que ordena todo el resto del documento:
+
+1. Un **recibo** es una fila de `recibos`. Su versionado es `bitacora_recibos`.
+2. El día de recibo de café en el recibidor arranca **creando una bitácora local** en el
+   teléfono. Dentro de ella se crean los recibos, que se imprimen.
+3. Al terminar, **se imprime la bitácora** como un pequeño reporte de los recibos del día.
+4. El producto se carga a un camión, que **lleva copia en papel** de los recibos y del
+   reporte final.
+5. Eso llega a la tabla `re_Bitacora_recibos`.
+6. **No sincroniza automáticamente.** Recién cuando el usuario imprime la bitácora
+   —cerrando el trabajo del día— se envían al servidor la bitácora y sus recibos.
+
+### Lo que el punto 6 decide por nosotros
+
+**Nada sale del teléfono hasta el cierre.** Ni siquiera los recibos ya impresos. El
+envío es un solo acto, con la bitácora y sus recibos juntos.
+
+Eso resuelve dos cosas de un plumazo: el padre nunca llega después que sus hijos, y
+**no hacen falta actualizaciones** — todo es alta. Sin updates no hace falta
+`RowVersion` en la bitácora, y la migración se achica a casi nada.
+
+### Contingencias de papel
+
+Son reglas de la operación, no del software, pero la app tiene que acompañarlas:
+
+- **Sin papel para la bitácora** → el usuario **simula la impresión**. Es la válvula de
+  escape que impide que el día quede atrapado en el teléfono: sin ella, un rollo que se
+  acaba a las 5 de la tarde deja toda la jornada sin sincronizar y sin forma de que la
+  oficina sepa que existió.
+- **Sin papel para los recibos** → se pasa al **plan de contingencia: talonarios
+  manuales**. El teléfono deja de emitir y se sigue en papel.
+
+Los talonarios manuales no chocan con la numeración del móvil, y eso ya está resuelto en
+el modelo: `rc_Talonario` distingue `tipo=1` (manual, con su `inicio`/`final` físicos,
+entregado a un funcionario y devuelto) de `tipo=2` (el consecutivo corrido que consume el
+móvil). Rangos distintos, sin superposición.
 
 ---
 
@@ -604,11 +654,16 @@ Que suba es lo importante: **preserva el número en la secuencia**. Sin él qued
 hueco imposible de distinguir de un recibo perdido, y esa es justo la duda cara —
 alguien tendría que salir a buscar un papel que nunca existió.
 
-⚠️ La tabla `recibos` **no tiene columna de anulación**: sólo `observaciones` e
-`impreso`. Un recibo anulado *es* uno con las cantidades en cero. Y no es un caso raro:
-hay entre 900 y 1.250 por cosecha. Queda por definir cómo distingue la oficina un
-anulado de un cero legítimo — probablemente por `observaciones`, pero hoy nada lo
-garantiza.
+La tabla `recibos` **no tiene columna de anulación**: sólo `observaciones` e `impreso`.
+Un recibo anulado *es* uno con las cantidades en cero. Y no es un caso raro: hay entre
+900 y 1.250 por cosecha, o sea que es parte normal de la operación.
+
+**Decidido: el móvil tiene una opción "Anular"** que pone las cantidades en cero y
+escribe `ANULADO` en `observaciones`.
+
+Que el texto lo ponga la app y no el recibidor es lo que hace la regla utilizable: la
+oficina puede filtrar por un valor conocido en vez de interpretar lo que tecleó cada
+quien. Sin eso, un anulado y un cero legítimo son indistinguibles en la base.
 
 ⚠️ Queda por averiguar qué hace `tr_rc_remedida_remdirty`, para cuando se encare la
 remedida (§8).
