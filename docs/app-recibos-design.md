@@ -502,6 +502,79 @@ vez del diálogo del sistema. Los 80 mm coinciden con lo que ya usaba el POC
 
 ---
 
+## 7.bis El productor que no existe
+
+Llega alguien nuevo al recibidor. **No se le puede crear como productor ahí**: el alta
+exige revisión fiscal y muchos datos, y la decisión —generalizada en todos los clientes—
+es no hacerlo en campo. Pero el café **sí se le recibe**.
+
+El legacy en WinDev lo resuelve con un productor genérico de código fijo (`C00000`, o
+`00-00000` según el cliente) y un formulario hijo donde se capturan tipo de identidad,
+identificación, nombre y apellidos, **sólo para imprimir**.
+
+### Lo que se comprobó en la base
+
+- **El genérico ya existe**: `idsocio=5109`, `codigo='C00000'`, nombre `PENDIENTE`.
+- **Se usa de verdad**: 10 recibos en 2025-2026, 84 en 2022-2023, 74 en 2021-2022. Es
+  recurrente, no excepcional.
+- **Los datos de la persona se pierden.** En esos recibos, `cedula` guarda `3101000000`
+  —la del propio "PENDIENTE"— no la de quien entregó. El WinDev los capturaba en local
+  para el papel y nunca salían del dispositivo.
+- **El código genérico vive hoy en un `.ini`** del legacy.
+- `recibos` **no tiene** columnas de nombre ni apellidos. Sí tiene `cedula`, y se llena
+  en el 100 % de los recibos (38.550 de 38.550 en la cosecha actual).
+
+### El plan
+
+**1. El recibo guarda a quién se le recibió.** Columnas nuevas en `recibos`: `nombre`,
+`apellido1`, `apellido2`. `cedula` ya existe y pasa a contener la identificación de quien
+entregó — la del productor cuando está registrado, la de la persona cuando es genérico.
+
+Esto no inventa un patrón: **el recibo ya guarda una foto de la cédula del productor**.
+Sólo se completa lo que faltaba.
+
+**2. Impresión: siempre desde los campos del recibo** (la opción *a*). Se descarta el
+`if` que elige entre productor y recibo según el código.
+
+La razón que decide es la regla de ORIGINAL y COPIA. Con la opción *b*, una copia
+impresa meses después leería el nombre **actual** del maestro; si el productor se corrigió
+—un apellido mal escrito, un cambio de razón social— la copia diría algo distinto del
+original que firmó la persona. Con los datos en el recibo, **la copia reproduce el
+original porque el recibo es una foto**, no una consulta.
+
+De paso, la impresión queda con un solo camino: sin condicionales en el código que
+produce el papel, que es donde una divergencia se vuelve irreversible.
+
+**3. El productor genérico se identifica por `idsocio`, no por código.** El formato del
+código varía por cliente (`C00000` en unos, `00-00000` en otros); el `idsocio` no tiene
+ese problema y no hay nada que parsear. El código se deriva de él si hay que mostrarlo.
+
+**En el móvil va hardcodeado por versión de cliente**, en `apps/recibos/clientes.json` —
+el mismo catálogo por cliente que ya lleva el logo, el color, el package y la URL del
+backend, y que se hornea en cada APK. Hoy ese valor vive en un `.ini` del legacy.
+
+⚠️ **El servidor tiene que validarlo al recibir.** Si el valor del APK y el del servidor
+difieren —un cliente al que se le cambió el genérico y quedó con un APK viejo— los
+recibos se atribuirían a otro productor **sin ningún error**: entrarían como si fueran de
+alguien registrado, con el nombre real de esa persona en el papel y el idsocio de otra en
+la base. El servidor conoce su propio genérico (`re_parametros` es su lugar natural, junto
+a la configuración de impresión que ya guarda) y puede rechazar el recibo en vez de
+aceptarlo mal atribuido.
+
+Es el mismo criterio que con el cálculo: el dato puede vivir en el teléfono, pero la
+discrepancia no puede pasar en silencio.
+
+**4. Validación.** Con productor genérico, nombre e identificación son obligatorios. Un
+recibo impreso sin nadie identificado es peor que el estado actual: hoy al menos se sabe
+que el dato está en el papel del recibidor.
+
+**5. Tipo de identidad: conviene conservarlo aunque no se imprima.** Es una
+recomendación, no una objeción. Cuando esa persona se regularice como productor, saber si
+aquello era cédula, DIMEX o pasaporte ahorra el trabajo de averiguarlo; almacenarlo
+cuesta una columna. Si se prefiere no capturarlo, no bloquea nada.
+
+---
+
 ## 8. Remedida — falta definir
 
 En beneficios principales se reciben recibos de clientes **y** camiones que vienen de
