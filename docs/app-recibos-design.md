@@ -584,10 +584,28 @@ discrepancia no puede pasar en silencio.
 recibo impreso sin nadie identificado es peor que el estado actual: hoy al menos se sabe
 que el dato está en el papel del recibidor.
 
-**5. Tipo de identidad: conviene conservarlo aunque no se imprima.** Es una
-recomendación, no una objeción. Cuando esa persona se regularice como productor, saber si
-aquello era cédula, DIMEX o pasaporte ahorra el trabajo de averiguarlo; almacenarlo
-cuesta una columna. Si se prefiere no capturarlo, no bloquea nada.
+**5. Sin tipo de identificación.** Se evaluó conservarlo para cuando la persona se
+regularice, pero no se imprime y se decidió no capturarlo.
+
+### El ciclo se cierra en la oficina, no en el campo
+
+**El productor genérico nunca cambia.** Ni el registro ni su nombre: el móvil no escribe
+una sola fila en `productores`. "PENDIENTE" se reutiliza tal cual, recibo tras recibo,
+porque no tiene efecto sobre los datos base.
+
+Lo que capturó el teléfono es **un puente, no un destino**. Después, con el recibo ya
+sincronizado y el productor creado en regla —con su revisión fiscal y sus datos
+completos—, la oficina **reasigna el recibo al productor real**. Eso es lo que llena los
+datos correctos.
+
+Vale entenderlo porque sin esa pieza el diseño parecería dejar recibos huérfanos para
+siempre. No es así: el genérico marca "falta identificar a esta persona", el nombre y la
+identificación en el recibo dicen **a quién hay que crear**, y la corrección ocurre donde
+se puede hacer bien.
+
+⚠️ Al reasignar, el `nombre` del recibo **no se toca**. El papel que firmó la persona
+dice ese nombre, y una copia tiene que reproducir el original. Queda como el registro de
+lo que se imprimió, aunque el `idsocio` ya apunte al productor definitivo.
 
 ---
 
