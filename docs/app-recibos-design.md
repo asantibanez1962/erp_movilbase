@@ -526,12 +526,28 @@ identificación, nombre y apellidos, **sólo para imprimir**.
 
 ### El plan
 
-**1. El recibo guarda a quién se le recibió.** Columnas nuevas en `recibos`: `nombre`,
-`apellido1`, `apellido2`. `cedula` ya existe y pasa a contener la identificación de quien
-entregó — la del productor cuando está registrado, la de la persona cuando es genérico.
+**1. El recibo guarda a quién se le recibió.** Una sola columna nueva en `recibos`:
+`nombre`, con el nombre completo ya armado. `cedula` ya existe y pasa a contener la
+identificación de quien entregó — la del productor cuando está registrado, la de la
+persona cuando es genérico.
+
+**Un solo campo y no tres.** El legacy los separa, pero el recibo imprime una línea: no
+hay razón para arrastrar la separación hasta acá. El orden —nombre primero o apellidos
+primero— es indiferente para el papel.
 
 Esto no inventa un patrón: **el recibo ya guarda una foto de la cédula del productor**.
 Sólo se completa lo que faltaba.
+
+⚠️ **El nombre hay que ARMARLO, no copiarlo de una columna.** `dbo.productores.nombre`
+es sólo el nombre de pila para personas físicas —"DESEADO", "JOSE ARNOLDO"—, con los
+apellidos aparte. El único campo completo es `ge_Socio.Nombre`, en orden de listado.
+
+Se descubrió al registrar la colección: la primera versión mandaba `nombre` tal cual, y
+el recibo habría impreso "DESEADO" en lugar de "DESEADO ABARCA MORA". El error no da
+ningún aviso — aparece en el papel, ya entregado. La proyección lo arma con
+`CONCAT_WS + NULLIF`, que resuelve de una vez los tres casos: dos apellidos, uno solo, y
+persona jurídica (donde el nombre completo ya viene en `nombre` y los apellidos están
+vacíos).
 
 **2. Impresión: siempre desde los campos del recibo** (la opción *a*). Se descarta el
 `if` que elige entre productor y recibo según el código.
