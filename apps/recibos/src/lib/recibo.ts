@@ -276,6 +276,31 @@ export async function precioDe(opts: {
   );
 }
 
+/**
+ * Corrige un recibo que TODAVÍA NO SE IMPRIMIÓ.
+ *
+ * Es la política `hasta-evento` con `impreso` como campo de cierre: mientras no salga en
+ * papel, el recibo es trabajo en curso y se corrige; al imprimirse queda firme. La misma
+ * condición que lo retiene en el teléfono es la que lo deja editar, y por eso no hay
+ * forma de que un recibo ya sincronizado se pueda cambiar acá.
+ *
+ * El número NO se recalcula: se asignó al crearlo y es lo único que no cambia.
+ */
+export async function actualizarRecibo(recibo: Recibo, d: DatosRecibo): Promise<void> {
+  if ((recibo.impreso ?? 0) >= 1) {
+    throw new Error(
+      "Este recibo ya se imprimió y no se puede modificar: el papel está en manos del " +
+        "productor. Si hay que dejarlo sin efecto, se anula."
+    );
+  }
+
+  await database.write(async () => {
+    await recibo.update((r) => {
+      aplicarDatos(r, d);
+    });
+  });
+}
+
 // ─── Anular ─────────────────────────────────────────────────────────────────
 
 /**
@@ -406,64 +431,77 @@ export async function crearRecibo(d: DatosRecibo): Promise<Recibo> {
       r.fecha = ahora;
       r.recibidor = recibidor!;
       r.cosecha = cosecha!;
-      r.calidad = d.calidad;
-      r.tipoCafe = d.tipoCafe;
-      r.nivel = d.nivel;
-
-      r.idSocio = d.productor ? Number(d.productor.id) : cliente.idSocioGenerico;
-      if (r.idSocio == null) {
-        throw new Error(
-          "Este APK se compiló sin el productor genérico, así que no puede recibirle a " +
-            "alguien no registrado."
-        );
-      }
-      r.codigo = d.productor?.codigo ?? null;
-      // El nombre se guarda EN EL RECIBO y la impresión sale siempre de acá, nunca del
-      // maestro: una copia impresa meses después tiene que reproducir el original que
-      // firmó la persona, aunque el productor se haya corregido desde entonces.
-      r.nombre = d.nombre;
-      r.cedula = d.cedula;
-      r.idFinca = d.idFinca;
-      r.idCertificado = d.idCertificado;
-      r.cldd = d.cldd;
-      r.observaciones = d.observaciones ?? null;
-
-      r.cantidadinicial = d.medida.cantidadinicial;
-      r.cuartillosinicial = d.medida.cuartillosinicial;
-      r.granosbrocados = d.medida.granosbrocados;
-      r.verdes = d.medida.verdes;
-      r.flotemaduro = d.medida.flotemaduro;
-      r.floteseco = d.medida.floteseco;
-
-      r.broca = d.calculo.broca;
-      r.cuartillosbroca = d.calculo.cuartillosbroca;
-      r.rebajoverde = d.calculo.rebajoverde;
-      r.cuartillosrebajoverde = d.calculo.cuartillosrebajoverde;
-      r.rebajoflote = d.calculo.rebajoflote;
-      r.cuartillosrebajoflote = d.calculo.cuartillosrebajoflote;
-      r.rebajofloteseco = d.calculo.rebajofloteseco;
-      r.cuartillosrebajofloteseco = d.calculo.cuartillosrebajofloteseco;
-      r.cantidad = d.calculo.cantidad;
-      r.rcantidad = d.calculo.rcantidad;
-      r.rcantidadcuartillos = d.calculo.rcantidadcuartillos;
-
-      // El precio y el valor NO se muestran ni se imprimen —el recibo del móvil no es un
-      // documento de pago, eso se resuelve en el servidor— pero se guardan con la fila
-      // para que el dato exista desde el origen.
-      //
-      // `valor = cantidad × precio`, la misma fórmula del servidor: se comprobó contra
-      // los recibos de la cosecha (6 cajuelas × ₡6450 = ₡38 700). Ojo que multiplica
-      // `cantidad` —el neto decimal— y no `rcantidad`, que son sólo las cajuelas enteras.
-      r.idreprecio = d.precio?.idreprecio ?? null;
-      r.precio = d.precio?.monto ?? null;
-      r.imoneda = d.precio?.moneda ?? null;
-      r.flete = d.precio?.flete ?? null;
-      r.valor = d.precio ? Number((d.calculo.cantidad * d.precio.monto).toFixed(2)) : null;
-
+      // Nace SIN IMPRIMIR, y eso es lo que lo retiene en el teléfono: `impreso` es el
+      // campo de cierre de la colección. Lo pone en 1 la impresión del ORIGINAL.
       r.impreso = 0;
       // origen=1 ⇒ vino del móvil. Lo usa la oficina para distinguirlo de un digitado.
       r.origen = 1;
       r.agregado = ahora;
+      aplicarDatos(r, d);
     })
   );
+}
+
+/**
+ * Los campos que crear y actualizar escriben IGUAL.
+ *
+ * Están en una sola función a propósito: cuando estaban duplicados, cualquier campo nuevo
+ * había que acordarse de agregarlo en los dos lados, y olvidarlo del lado de la edición
+ * no da error — simplemente ese dato deja de guardarse al corregir.
+ */
+function aplicarDatos(r: Recibo, d: DatosRecibo): void {
+  r.idBitacora = d.bitacora.id;
+  r.calidad = d.calidad;
+  r.tipoCafe = d.tipoCafe;
+  r.nivel = d.nivel;
+
+  r.idSocio = d.productor ? Number(d.productor.id) : cliente.idSocioGenerico;
+  if (r.idSocio == null) {
+    throw new Error(
+      "Este APK se compiló sin el productor genérico, así que no puede recibirle a " +
+        "alguien no registrado."
+    );
+  }
+  r.codigo = d.productor?.codigo ?? null;
+  // El nombre se guarda EN EL RECIBO y la impresión sale siempre de acá, nunca del
+  // maestro: una copia impresa meses después tiene que reproducir el original que firmó
+  // la persona, aunque el productor se haya corregido desde entonces.
+  r.nombre = d.nombre;
+  r.cedula = d.cedula;
+  r.idFinca = d.idFinca;
+  r.idCertificado = d.idCertificado;
+  r.cldd = d.cldd;
+  r.observaciones = d.observaciones ?? null;
+
+  r.cantidadinicial = d.medida.cantidadinicial;
+  r.cuartillosinicial = d.medida.cuartillosinicial;
+  r.granosbrocados = d.medida.granosbrocados;
+  r.verdes = d.medida.verdes;
+  r.flotemaduro = d.medida.flotemaduro;
+  r.floteseco = d.medida.floteseco;
+
+  r.broca = d.calculo.broca;
+  r.cuartillosbroca = d.calculo.cuartillosbroca;
+  r.rebajoverde = d.calculo.rebajoverde;
+  r.cuartillosrebajoverde = d.calculo.cuartillosrebajoverde;
+  r.rebajoflote = d.calculo.rebajoflote;
+  r.cuartillosrebajoflote = d.calculo.cuartillosrebajoflote;
+  r.rebajofloteseco = d.calculo.rebajofloteseco;
+  r.cuartillosrebajofloteseco = d.calculo.cuartillosrebajofloteseco;
+  r.cantidad = d.calculo.cantidad;
+  r.rcantidad = d.calculo.rcantidad;
+  r.rcantidadcuartillos = d.calculo.rcantidadcuartillos;
+
+  // El precio y el valor NO se muestran ni se imprimen —el recibo del móvil no es un
+  // documento de pago, eso se resuelve en el servidor— pero se guardan con la fila para
+  // que el dato exista desde el origen.
+  //
+  // `valor = cantidad × precio`, la misma fórmula del servidor: se comprobó contra los
+  // recibos de la cosecha (6 cajuelas × ₡6450 = ₡38 700). Ojo que multiplica `cantidad`
+  // —el neto decimal— y no `rcantidad`, que son sólo las cajuelas enteras.
+  r.idreprecio = d.precio?.idreprecio ?? null;
+  r.precio = d.precio?.monto ?? null;
+  r.imoneda = d.precio?.moneda ?? null;
+  r.flete = d.precio?.flete ?? null;
+  r.valor = d.precio ? Number((d.calculo.cantidad * d.precio.monto).toFixed(2)) : null;
 }

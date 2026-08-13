@@ -6,6 +6,7 @@ import { cliente } from "../branding";
 import { todasLasBitacoras, recibosDe } from "../lib/bitacora";
 import { useSesion } from "../lib/sesion";
 import { colores, estilos, fmtFecha } from "./estilos";
+import { useCatalogos, type Catalogos } from "./useCatalogos";
 
 /**
  * Las jornadas del recibidor: la de hoy arriba, las anteriores debajo.
@@ -25,6 +26,7 @@ export function BitacorasScreen({
   // últimos ~48dp. Sin esto el botón queda debajo de los controles del sistema y no se
   // puede tocar.
   const insets = useSafeAreaInsets();
+  const catalogos = useCatalogos();
   const recibidor = useSesion((s) => s.recibidorNombre ?? s.recibidor);
   const cosecha = useSesion((s) => s.cosecha);
   const [bitacoras, setBitacoras] = useState<Bitacora[] | null>(null);
@@ -68,6 +70,7 @@ export function BitacorasScreen({
           <Fila
             bitacora={item}
             recibos={conteos[item.id] ?? 0}
+            catalogos={catalogos}
             onPress={() => onEntrar(item)}
           />
         )}
@@ -110,8 +113,14 @@ export function BitacorasScreen({
 function Fila({
   bitacora,
   recibos,
+  catalogos,
   onPress,
-}: Readonly<{ bitacora: Bitacora; recibos: number; onPress: () => void }>) {
+}: Readonly<{
+  bitacora: Bitacora;
+  recibos: number;
+  catalogos: Catalogos;
+  onPress: () => void;
+}>) {
   const abierta = bitacora.estaAbierta;
   return (
     <TouchableOpacity onPress={onPress} style={estilos.fila}>
@@ -122,7 +131,11 @@ function Fila({
         </Text>
       </View>
       <Text style={estilos.filaSubtitulo}>
-        {[bitacora.tipocafe, bitacora.transportista, bitacora.placacamion]
+        {[
+          bitacora.tipocafe ? catalogos.tipoCafe(bitacora.tipocafe) : null,
+          bitacora.transportista ? catalogos.transportista(bitacora.transportista) : null,
+          bitacora.placacamion,
+        ]
           .filter(Boolean)
           .join(" · ") || "Sin transportista"}
       </Text>

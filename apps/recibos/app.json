@@ -3,14 +3,16 @@
     "name": "Recibos",
     "slug": "recibos",
     "version": "0.1.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "userInterfaceStyle": "automatic",
     "newArchEnabled": true,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#0f172a"
     },
-    "assetBundlePatterns": ["**/*"],
+    "assetBundlePatterns": [
+      "**/*"
+    ],
     "android": {
       "package": "cr.confeldan.recibos",
       "versionCode": 1,
@@ -21,7 +23,8 @@
         "BLUETOOTH_ADMIN",
         "BLUETOOTH_CONNECT",
         "BLUETOOTH_SCAN"
-      ]
+      ],
+      "softwareKeyboardLayoutMode": "pan"
     },
     "extra": {
       "apiBaseUrl": "http://10.0.2.2:5249"

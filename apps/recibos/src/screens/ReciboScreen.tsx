@@ -8,6 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useWindowDimensions } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { Q } from "@nozbe/watermelondb";
@@ -15,18 +16,22 @@ import type { Catalogos, ResultadoCalculo } from "@erp/recibos-calc";
 import { cliente } from "../branding";
 import { database } from "../lib/db";
 import {
+  actualizarRecibo,
   calcular,
   catalogosDelCalculo,
   crearRecibo,
   defaultsDeProductor,
+  esGenerico,
   idSocioGenerico,
   nivelDelRecibidor,
   precioDe,
   proximoNumero,
   type MedidaCapturada,
 } from "../lib/recibo";
+import { bitacorasAbiertas } from "../lib/bitacora";
 import type {
   Bitacora,
+  Recibo,
   Calidad,
   Certificado,
   Finca,
@@ -58,12 +63,44 @@ import { colores, estilos, fmtCajuelas, fmtFecha } from "./estilos";
  * recibos reales de la cosecha.
  */
 export function ReciboScreen({
-  bitacora,
+  bitacora: bitacoraInicial,
+  recibo,
   onListo,
   onCancelar,
-}: Readonly<{ bitacora: Bitacora; onListo: () => void; onCancelar: () => void }>) {
+}: Readonly<{
+  /** Jornada preseleccionada. Si falta, se elige acá. */
+  bitacora?: Bitacora;
+  /**
+   * Presente ⇒ se EDITA un recibo que todavía no se imprimió.
+   *
+   * Un recibo sin imprimir es trabajo en curso: no salió en papel ni subió al servidor,
+   * así que corregirlo es lo correcto. Al imprimirse queda firme — la misma condición
+   * que lo retiene en el teléfono es la que lo deja editar.
+   */
+  recibo?: Recibo;
+  onListo: () => void;
+  onCancelar: () => void;
+}>) {
+  const editando = recibo != null;
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+
+  /**
+   * Dos columnas cuando el ancho alcanza; una cuando no.
+   *
+   * El corte es por ANCHO DISPONIBLE y no por "es tableta": el mismo umbral sirve para la
+   * tableta acostada (~1000dp) y para un teléfono acostado (~740dp), que es donde el alto
+   * escasea más y las dos columnas más ayudan. Preguntar por el tipo de equipo dejaría al
+   * teléfono horizontal con el layout equivocado.
+   *
+   * 700dp: la tableta DE PIE mide ~600dp (10,4" a 2000×1200 ⇒ 600×1000dp) y se lee mejor
+   * en una columna; acostada llega a ~1000 y entra el recibo entero sin scroll.
+   */
+  const { width } = useWindowDimensions();
+  const dosColumnas = width >= 700;
+  // En una sola columna se limita el ancho: estirar un formulario a lo largo de una
+  // tableta deja los campos como bandas con el texto perdido a la izquierda.
+  const anchoMaximo = dosColumnas ? undefined : 560;
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -77,6 +114,10 @@ export function ReciboScreen({
   const [certificados, setCertificados] = useState<Certificado[]>([]);
   const [niveles, setNiveles] = useState<Nivel[]>([]);
   const [tiposCafe, setTiposCafe] = useState<TipoCafe[]>([]);
+  /** Jornadas abiertas del recibidor. Puede haber varias: hay clientes que separan el
+   *  día por categoría de café. */
+  const [jornadas, setJornadas] = useState<Bitacora[]>([]);
+  const [bitacora, setBitacora] = useState<Bitacora | null>(bitacoraInicial ?? null);
 
   // Quién entrega
   const [productor, setProductor] = useState<Productor | null>(null);
@@ -100,7 +141,7 @@ export function ReciboScreen({
   // pantalla que se usa decenas de veces al día.
   const [calidad, setCalidad] = useState<string | null>("M");
   const [picker, setPicker] = useState<
-    "productor" | "finca" | "calidad" | "certificado" | "tipocafe" | null
+    "productor" | "finca" | "calidad" | "certificado" | "tipocafe" | "jornada" | null
   >(null);
 
   const [medida, setMedida] = useState<MedidaCapturada>({
@@ -115,7 +156,9 @@ export function ReciboScreen({
   // Arranca con el de la jornada y se puede cambiar: la jornada dice qué se está
   // recibiendo hoy, pero un recibo puntual puede ser de otro tipo. Entra al criterio del
   // precio, así que no es una etiqueta.
-  const [tipoCafe, setTipoCafe] = useState<string>(bitacora.tipocafe ?? "");
+  const [tipoCafe, setTipoCafe] = useState<string>(
+    recibo?.tipoCafe ?? bitacoraInicial?.tipocafe ?? ""
+  );
 
   useEffect(() => {
     void (async () => {
@@ -143,6 +186,23 @@ export function ReciboScreen({
         setError((e as Error)?.message ?? "No se pudieron leer los catálogos.");
       }
 
+      // La jornada: si hay UNA sola abierta se asigna sola —es el caso normal— y si hay
+      // varias se elige en el formulario. Es el único momento en que la app puede pedirle
+      // al recibidor que decida algo que no puede deducir.
+      try {
+        const abiertas = await bitacorasAbiertas().fetch();
+        setJornadas(abiertas);
+        if (recibo) {
+          const suya = abiertas.find((b) => b.id === recibo.idBitacora);
+          setBitacora(suya ?? null);
+        } else if (bitacoraInicial == null && abiertas.length === 1) {
+          setBitacora(abiertas[0]!);
+        }
+      } catch {
+        // Sin jornadas no se puede grabar, y `listo` ya lo impide. No vale romper la
+        // pantalla entera por esto.
+      }
+
       try {
         const nv = await nivelDelRecibidor();
         setNivel(nv);
@@ -156,15 +216,64 @@ export function ReciboScreen({
         setError((e as Error)?.message ?? "No se pudo resolver el nivel.");
       }
 
-      try {
-        setNumero(await proximoNumero());
-      } catch (e) {
-        setError((e as Error)?.message ?? "No se pudo asignar el número.");
+      // El número: el del recibo si se está editando —ya se asignó y es lo único que no
+      // cambia— o el próximo de la secuencia si es nuevo.
+      if (recibo) {
+        setNumero(recibo.recibo);
+      } else {
+        try {
+          setNumero(await proximoNumero());
+        } catch (e) {
+          setError((e as Error)?.message ?? "No se pudo asignar el número.");
+        }
       }
 
       setCargando(false);
     })();
   }, []);
+
+  /**
+   * Carga el formulario con lo que ya tiene el recibo que se edita.
+   *
+   * Espera a que estén los productores: el formulario trabaja con el modelo del productor
+   * —de él salen el código y el tipo, que entran al criterio del precio— y no sólo con su
+   * id. Sin la espera, editar un recibo dejaría el productor en blanco y al grabar se
+   * perdería.
+   */
+  useEffect(() => {
+    if (!recibo || productores.length === 0) return;
+    const p = productores.find((x) => Number(x.id) === recibo.idSocio) ?? null;
+    const generico = esGenerico(recibo.idSocio);
+    setProductor(generico ? null : p);
+    setNoRegistrado(generico);
+    setEditandoPersona(false);
+    setNombre(recibo.nombre ?? "");
+    setCedula(recibo.cedula ?? "");
+    setIdFinca(recibo.idFinca);
+    setCldd(recibo.cldd ?? 0);
+    setIdCertificado(recibo.idCertificado);
+    setCalidad(recibo.calidad);
+    setObservaciones(recibo.observaciones ?? "");
+    setMedida({
+      cantidadinicial: recibo.cantidadinicial,
+      cuartillosinicial: recibo.cuartillosinicial,
+      granosbrocados: recibo.granosbrocados,
+      verdes: recibo.verdes,
+      flotemaduro: recibo.flotemaduro,
+      floteseco: recibo.floteseco,
+    });
+    if (!generico && p) {
+      void (async () => {
+        const [d, fs] = await Promise.all([
+          defaultsDeProductor(Number(p.id)),
+          database.get<Finca>("fincas").query(Q.where("id_socio", Number(p.id))).fetch(),
+        ]);
+        setFincas(fs);
+        setCertificadosDelProductor(d.certificados);
+      })();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [recibo, productores]);
 
   const elegirProductor = async (id: string) => {
     setPicker(null);
@@ -239,6 +348,7 @@ export function ReciboScreen({
 
   const hayProductor = productor != null || noRegistrado;
   const listo =
+    bitacora != null &&
     hayProductor &&
     calidad != null &&
     numero != null &&
@@ -286,8 +396,8 @@ export function ReciboScreen({
     setGuardando(true);
     setError(null);
     try {
-      await crearRecibo({
-        bitacora,
+      const datos = {
+        bitacora: bitacora!,
         productor,
         nombre: nombre.trim(),
         cedula: cedula.trim(),
@@ -301,7 +411,9 @@ export function ReciboScreen({
         calculo: calculo!,
         precio,
         observaciones: observaciones.trim() || null,
-      });
+      };
+      if (recibo) await actualizarRecibo(recibo, datos);
+      else await crearRecibo(datos);
 
       // El recibo queda con `impreso = 0`, que es el campo de cierre de la colección: sin
       // imprimir NO sincroniza. Cuando entre ESC/POS, `opts.imprimir` dispara la impresión
@@ -376,7 +488,12 @@ export function ReciboScreen({
   return (
     <ScrollView
       style={estilos.root}
-      contentContainerStyle={{ paddingBottom: 32 + insets.bottom }}
+      contentContainerStyle={{
+        paddingBottom: 32 + insets.bottom,
+        maxWidth: anchoMaximo,
+        width: "100%",
+        alignSelf: "center",
+      }}
       keyboardShouldPersistTaps="handled"
     >
       {/* Encabezado de UNA línea: fecha, nivel y número.
@@ -392,7 +509,6 @@ export function ReciboScreen({
           gap: 6,
         }}
       >
-        <Chip texto={fmtFecha(bitacora.fecha)} />
         <Chip texto={nombreNivel(niveles, nivel)} />
         <View style={{ flex: 1 }} />
         <Text style={{ fontSize: 20, fontWeight: "700", color: colores.texto }}>
@@ -419,6 +535,375 @@ export function ReciboScreen({
       </View>
 
       {error ? <Text style={estilos.error}>⚠ {error}</Text> : null}
+
+      {/* DOS COLUMNAS cuando el ancho alcanza: identificación a la izquierda, medida y
+          defectos a la derecha, igual que la pantalla legacy de tableta. Así el recibo
+          entero entra sin scroll, que es lo que importa cuando se captura de pie con el
+          productor enfrente.
+
+          Los dos bloques son EXACTAMENTE los mismos en las dos formas — sólo cambia cómo
+          se acomodan. Duplicarlos habría hecho que cualquier campo nuevo tuviera que
+          agregarse dos veces, y olvidarse de uno no da error: simplemente ese campo no
+          existe en tabletas. */}
+      {dosColumnas ? (
+        <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
+          <View style={{ flex: 1 }}>
+          {/* La jornada a la que se cuelga el recibo. Con una sola abierta viene puesta y no
+              hay nada que decidir; con varias —hay clientes que separan el día por categoría
+              de café— el recibidor elige, y es lo único que la app no puede deducir. */}
+          {jornadas.length > 1 || bitacora == null ? (
+            <Campo
+              etiqueta="Jornada"
+              valor={
+                bitacora
+                  ? `${fmtFecha(bitacora.fecha)}${
+                      bitacora.tipocafe ? ` · ${nombreTipoCafe(tiposCafe, bitacora.tipocafe)}` : ""
+                    }`
+                  : "Elegir jornada"
+              }
+              vacio={bitacora == null}
+              onPress={() => setPicker("jornada")}
+            />
+          ) : null}
+
+          {/* CLDD acompaña al productor: no se edita —es un atributo de la finca— así que no
+              necesita fila propia, y ahí libera una entera. */}
+          <View
+            style={{
+              flexDirection: "row",
+              alignItems: "flex-end",
+              gap: 8,
+              paddingHorizontal: 14,
+            }}
+          >
+            <View style={{ flex: 1 }}>
+              <Campo
+                etiqueta="Productor"
+                valor={noRegistrado ? "PENDIENTE" : (productor?.nombre ?? "Elegir productor")}
+                vacio={!hayProductor}
+                sinMargen
+                onPress={() => setPicker("productor")}
+              />
+            </View>
+            <Casilla marcada={productor != null && cldd === 1} etiqueta="CLDD" />
+          </View>
+
+          {noRegistrado && !editandoPersona ? (
+            // Colapsado: una línea con lo capturado y la puerta de vuelta. Ocupa 48px en vez
+            // de los ~200 del bloque abierto, que era lo que empujaba el resto fuera de
+            // pantalla justo cuando falta capturar la medida.
+            <TouchableOpacity
+              onPress={() => setEditandoPersona(true)}
+              style={{
+                marginHorizontal: 14,
+                marginTop: 12,
+                paddingHorizontal: 12,
+                paddingVertical: 10,
+                borderRadius: 8,
+                backgroundColor: FONDO_AVISO,
+                borderLeftWidth: 3,
+                borderLeftColor: colores.error,
+                flexDirection: "row",
+                justifyContent: "space-between",
+                alignItems: "center",
+                gap: 10,
+              }}
+            >
+              <View style={{ flexShrink: 1 }}>
+                <Text style={{ fontWeight: "700", color: colores.texto }} numberOfLines={1}>
+                  {nombre}
+                </Text>
+                <Text style={{ color: colores.textoTenue, fontSize: 12 }}>
+                  {cedula} · no está en el padrón
+                </Text>
+              </View>
+              <Text style={{ color: colores.error, fontWeight: "600", fontSize: 13 }}>
+                Editar
+              </Text>
+            </TouchableOpacity>
+          ) : null}
+
+          {noRegistrado && editandoPersona ? (
+            <View
+              style={{
+                marginHorizontal: 14,
+                marginTop: 12,
+                padding: 12,
+                borderRadius: 10,
+                backgroundColor: FONDO_AVISO,
+                borderLeftWidth: 3,
+                borderLeftColor: colores.error,
+                gap: 4,
+              }}
+            >
+              <Text style={{ color: colores.error, fontWeight: "700", fontSize: 13 }}>
+                No está en el padrón — se pide para el papel
+              </Text>
+              <Entrada
+                etiqueta="Nombre completo"
+                valor={nombre}
+                onChange={setNombre}
+                mayusculas
+                fondoEtiqueta={FONDO_AVISO}
+              />
+              <Entrada
+                etiqueta="Identificación"
+                valor={cedula}
+                onChange={setCedula}
+                teclado="number-pad"
+                fondoEtiqueta={FONDO_AVISO}
+              />
+              <TouchableOpacity
+                onPress={() => setEditandoPersona(false)}
+                // Los dos son OBLIGATORIOS: un recibo impreso sin nadie identificado es peor
+                // que el estado actual, donde al menos el dato queda en el papel del
+                // recibidor. Sin ellos tampoco se puede guardar (ver `listo`).
+                disabled={nombre.trim().length === 0 || cedula.trim().length === 0}
+                style={{
+                  marginTop: 8,
+                  minHeight: 42,
+                  borderRadius: 8,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  backgroundColor:
+                    nombre.trim() && cedula.trim() ? colores.error : colores.borde,
+                }}
+              >
+                <Text
+                  style={{
+                    color: nombre.trim() && cedula.trim() ? "#fff" : colores.textoTenue,
+                    fontWeight: "700",
+                    fontSize: 14,
+                  }}
+                >
+                  Listo
+                </Text>
+              </TouchableOpacity>
+            </View>
+          ) : null}
+
+          {/* Finca y certificado SIEMPRE ocupan su lugar, aunque todavía no haya productor.
+              Antes aparecían al elegirlo y el formulario CRECÍA justo en el peor momento: lo
+              que se estaba por tocar se corría de sitio. Un formulario de altura fija se
+              aprende con el pulgar; uno que salta, no. */}
+          <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
+            <View style={{ flex: 1 }}>
+              <Campo
+                etiqueta="Finca"
+                valor={
+                  productor
+                    ? (fincas.find((f) => Number(f.id) === idFinca)?.nombre ?? "Sin finca")
+                    : "—"
+                }
+                vacio={idFinca == null}
+                sinMargen
+                onPress={() => productor && setPicker("finca")}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Campo
+                etiqueta="Certificado"
+                nota={
+                  productor && certificadosDelProductor.length === 0 ? "sin cuota" : undefined
+                }
+                valor={productor ? (nombreCertificado ?? "Ninguno") : "—"}
+                vacio={idCertificado == null}
+                sinMargen
+                onPress={() => productor && setPicker("certificado")}
+              />
+            </View>
+          </View>
+
+          <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
+            <View style={{ flex: 1 }}>
+              <Campo
+                etiqueta="Calidad"
+                valor={calidades.find((c) => c.calidad === calidad)?.nombre ?? "Elegir"}
+                vacio={calidad == null}
+                sinMargen
+                onPress={() => setPicker("calidad")}
+              />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Campo
+                etiqueta="Tipo de café"
+                valor={nombreTipoCafe(tiposCafe, tipoCafe)}
+                vacio={!tipoCafe}
+                sinMargen
+                onPress={() => setPicker("tipocafe")}
+              />
+            </View>
+          </View>
+          </View>
+          <View style={{ flex: 1 }}>
+          {/* Sin rótulo de sección: "Cajuelas" y "Cuartillos" ya dicen que esto es la medida,
+              y cada rótulo cuesta una línea de scroll durante la captura. */}
+          <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
+            <View style={{ flex: 1 }}>
+              <Entrada
+                etiqueta="Cajuelas"
+                valor={String(medida.cantidadinicial)}
+                onChange={(t) => setMedida((m) => ({ ...m, cantidadinicial: entero(t) }))}
+                teclado="number-pad"
+                grande
+              />
+            </View>
+            <View style={{ flex: 1.3 }}>
+              {/* Segmentado y no un stepper: son cuatro valores posibles y sólo cuatro. Un
+                  cuartillo es 0,25 de cajuela, así que en 4 ya es una cajuela más. */}
+              <Segmentado
+                etiqueta="Cuartillos"
+                opciones={[0, 1, 2, 3]}
+                valor={medida.cuartillosinicial}
+                onChange={(v) => setMedida((m) => ({ ...m, cuartillosinicial: v }))}
+              />
+            </View>
+          </View>
+
+          {/* ── Defectos ─────────────────────────────────────────────────────── */}
+          {/* Cada castigo AL LADO de su defecto y no todos juntos al final: cada línea es una
+              relación causa→efecto, y es la conversación que el recibidor tiene con el
+              productor enfrente — "por los verdes se le rebaja esto". */}
+          <Defecto
+            etiqueta="% Verdes"
+            valor={medida.verdes}
+            decimal
+            castigo={
+              calculo ? fmtCajuelas(calculo.rebajoverde, calculo.cuartillosrebajoverde) : null
+            }
+            onChange={(v) => setMedida((m) => ({ ...m, verdes: v }))}
+          />
+          <Defecto
+            etiqueta="% Flote maduro"
+            valor={medida.flotemaduro}
+            decimal
+            castigo={
+              calculo ? fmtCajuelas(calculo.rebajoflote, calculo.cuartillosrebajoflote) : null
+            }
+            onChange={(v) => setMedida((m) => ({ ...m, flotemaduro: v }))}
+          />
+          <Defecto
+            etiqueta="% Flote seco"
+            valor={medida.floteseco}
+            decimal
+            castigo={
+              calculo
+                ? fmtCajuelas(calculo.rebajofloteseco, calculo.cuartillosrebajofloteseco)
+                : null
+            }
+            onChange={(v) => setMedida((m) => ({ ...m, floteseco: v }))}
+          />
+          {/* Éste NO es porcentaje: la broca sale de una matriz de granos × cantidad bruta. */}
+          <Defecto
+            etiqueta="Granos brocados"
+            valor={medida.granosbrocados}
+            castigo={calculo ? fmtCajuelas(calculo.broca, calculo.cuartillosbroca) : null}
+            onChange={(v) => setMedida((m) => ({ ...m, granosbrocados: v }))}
+          />
+
+          {/* ── Total ────────────────────────────────────────────────────────── */}
+          {/* Sólo la cantidad. El valor se calcula y se guarda, pero no se muestra ni se
+              imprime: el recibo del móvil no es un documento de pago. */}
+          {calculo ? (
+            <View
+              style={{
+                backgroundColor: cliente.chrome,
+                marginHorizontal: 14,
+                marginTop: 12,
+                borderRadius: 10,
+                paddingHorizontal: 16,
+                paddingVertical: 12,
+                flexDirection: "row",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <View>
+                <Text
+                  style={{
+                    color: "#f1f5f9",
+                    fontSize: 14,
+                    fontWeight: "700",
+                    letterSpacing: 0.5,
+                  }}
+                >
+                  TOTAL RECIBO
+                </Text>
+                <Text style={{ color: "#cbd5e1", fontSize: 12 }}>cajuelas · cuartillos</Text>
+              </View>
+              <Text style={{ color: "#f1f5f9", fontSize: 30, fontWeight: "700" }}>
+                {fmtCajuelas(calculo.rcantidad, calculo.rcantidadcuartillos)}
+              </Text>
+            </View>
+          ) : (
+            <View style={estilos.vacio}>
+              <Text style={estilos.vacioTexto}>
+                {nivel == null
+                  ? "Falta el nivel del recibidor."
+                  : "Ingresá la medida para ver el total."}
+              </Text>
+            </View>
+          )}
+
+          <View style={{ paddingHorizontal: 14 }}>
+            <Entrada etiqueta="Observaciones" valor={observaciones} onChange={setObservaciones} />
+          </View>
+
+          <PickerModal
+            visible={picker === "productor"}
+            titulo="Productor"
+            opciones={opcionesProductor}
+            onSeleccionar={(v) => void elegirProductor(v)}
+            onCerrar={() => setPicker(null)}
+          />
+          <PickerModal
+            visible={picker === "finca"}
+            titulo="Finca"
+            opciones={fincas.map((f) => ({ valor: f.id, titulo: f.nombre ?? f.id }))}
+            onSeleccionar={(v) => {
+              const f = fincas.find((x) => x.id === v);
+              setIdFinca(f ? Number(f.id) : null);
+              // El CLdd sigue a la finca elegida; no queda con el de la anterior.
+              setCldd(f?.cldd ?? 0);
+              setPicker(null);
+            }}
+            onCerrar={() => setPicker(null)}
+          />
+          <PickerModal
+            visible={picker === "calidad"}
+            titulo="Calidad"
+            opciones={calidades.map((c) => ({
+              valor: c.calidad,
+              titulo: c.nombre ?? c.calidad,
+              subtitulo: c.calidad,
+            }))}
+            onSeleccionar={(v) => {
+              setCalidad(v);
+              setPicker(null);
+            }}
+            onCerrar={() => setPicker(null)}
+          />
+          </View>
+        </View>
+      ) : (
+        <>
+      {/* La jornada a la que se cuelga el recibo. Con una sola abierta viene puesta y no
+          hay nada que decidir; con varias —hay clientes que separan el día por categoría
+          de café— el recibidor elige, y es lo único que la app no puede deducir. */}
+      {jornadas.length > 1 || bitacora == null ? (
+        <Campo
+          etiqueta="Jornada"
+          valor={
+            bitacora
+              ? `${fmtFecha(bitacora.fecha)}${
+                  bitacora.tipocafe ? ` · ${nombreTipoCafe(tiposCafe, bitacora.tipocafe)}` : ""
+                }`
+              : "Elegir jornada"
+          }
+          vacio={bitacora == null}
+          onPress={() => setPicker("jornada")}
+        />
+      ) : null}
 
       {/* CLDD acompaña al productor: no se edita —es un atributo de la finca— así que no
           necesita fila propia, y ahí libera una entera. */}
@@ -588,7 +1073,6 @@ export function ReciboScreen({
           />
         </View>
       </View>
-
       {/* Sin rótulo de sección: "Cajuelas" y "Cuartillos" ya dicen que esto es la medida,
           y cada rótulo cuesta una línea de scroll durante la captura. */}
       <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
@@ -732,6 +1216,28 @@ export function ReciboScreen({
         }))}
         onSeleccionar={(v) => {
           setCalidad(v);
+          setPicker(null);
+        }}
+        onCerrar={() => setPicker(null)}
+      />
+        </>
+      )}
+
+      <PickerModal
+        visible={picker === "jornada"}
+        titulo="Jornada"
+        opciones={jornadas.map((b) => ({
+          valor: b.id,
+          titulo: fmtFecha(b.fecha),
+          subtitulo: [nombreTipoCafe(tiposCafe, b.tipocafe ?? ""), b.transportista]
+            .filter((x) => x && x !== "—")
+            .join(" · "),
+        }))}
+        onSeleccionar={(v) => {
+          const b = jornadas.find((x) => x.id === v) ?? null;
+          setBitacora(b);
+          // El tipo de café sigue a la jornada elegida, salvo que ya se haya tocado.
+          if (b?.tipocafe && !recibo) setTipoCafe(b.tipocafe);
           setPicker(null);
         }}
         onCerrar={() => setPicker(null)}

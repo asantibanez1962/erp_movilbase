@@ -26,6 +26,7 @@ import { AbrirBitacoraScreen } from "./AbrirBitacoraScreen";
 import { BitacoraScreen } from "./BitacoraScreen";
 import { ReciboScreen } from "./ReciboScreen";
 import { ReciboDetalleScreen } from "./ReciboDetalleScreen";
+import { RecibosScreen } from "./RecibosScreen";
 import { ServidorScreen } from "./ServidorScreen";
 
 /**
@@ -57,7 +58,8 @@ export type StackParams = {
   // que la pantalla se entera sola cuando se le agrega un recibo o se cierra. Con un id
   // habría que volver a buscarla y suscribirse a mano en cada entrada.
   Jornada: { bitacora: Bitacora };
-  Recibo: { bitacora: Bitacora };
+  Recibos: undefined;
+  Recibo: { bitacora?: Bitacora; recibo?: Recibo };
   ReciboDetalle: { recibo: Recibo };
   EditarJornada: { bitacora: Bitacora };
 };
@@ -120,7 +122,12 @@ function JornadasStack() {
             onNuevoRecibo={() =>
               navigation.navigate("Recibo", { bitacora: route.params.bitacora })
             }
-            onVerRecibo={(r) => navigation.navigate("ReciboDetalle", { recibo: r })}
+            // Misma regla que en la lista: sin imprimir se EDITA, impreso sólo se mira.
+            onVerRecibo={(r) =>
+              (r.impreso ?? 0) === 0
+                ? navigation.navigate("Recibo", { recibo: r })
+                : navigation.navigate("ReciboDetalle", { recibo: r })
+            }
             onEditar={() =>
               navigation.navigate("EditarJornada", { bitacora: route.params.bitacora })
             }
@@ -147,12 +154,75 @@ function JornadasStack() {
         )}
       </Stack.Screen>
 
-      <Stack.Screen name="Recibo" options={{ title: "Nuevo recibo" }}>
+      <Stack.Screen name="Recibo" options={{ title: "Recibo" }}>
         {({ navigation, route }) => (
           <ReciboScreen
-            bitacora={route.params.bitacora}
+            bitacora={route.params?.bitacora}
+            recibo={route.params?.recibo}
             onListo={() => navigation.goBack()}
             onCancelar={() => navigation.goBack()}
+          />
+        )}
+      </Stack.Screen>
+    </Stack.Navigator>
+  );
+}
+
+/**
+ * Recibos tiene su propio stack, hermano del de jornadas.
+ *
+ * Se separaron porque son dos formas distintas de trabajar: la jornada es la contabilidad
+ * del día —se abre, se le cuelgan recibos, se cierra e imprime— y el recibo es lo que se
+ * busca de verdad, por número o por productor, sin acordarse de en qué bitácora quedó.
+ * Tenerlo colgando de la jornada obligaba a recorrer el día entero para llegar a uno.
+ */
+function RecibosStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: cliente.chrome },
+        headerTintColor: "#f1f5f9",
+        headerTitleStyle: { fontWeight: "700" },
+      }}
+    >
+      <Stack.Screen
+        name="Recibos"
+        options={({ navigation }) => ({
+          title: "Recibos",
+          headerLeft: () => <BotonMenu navigation={navigation} />,
+        })}
+      >
+        {({ navigation }) => (
+          <RecibosScreen
+            onNuevo={() => navigation.navigate("Recibo", {})}
+            // Sin imprimir se EDITA; impreso, sólo se mira y se puede anular. Es la misma
+            // condición que lo retiene en el teléfono: mientras no salga en papel es
+            // trabajo en curso.
+            onAbrir={(r) =>
+              (r.impreso ?? 0) === 0
+                ? navigation.navigate("Recibo", { recibo: r })
+                : navigation.navigate("ReciboDetalle", { recibo: r })
+            }
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name="Recibo" options={{ title: "Recibo" }}>
+        {({ navigation, route }) => (
+          <ReciboScreen
+            bitacora={route.params?.bitacora}
+            recibo={route.params?.recibo}
+            onListo={() => navigation.goBack()}
+            onCancelar={() => navigation.goBack()}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name="ReciboDetalle" options={{ title: "Recibo" }}>
+        {({ navigation, route }) => (
+          <ReciboDetalleScreen
+            recibo={route.params.recibo}
+            onVolver={() => navigation.goBack()}
           />
         )}
       </Stack.Screen>
@@ -174,7 +244,8 @@ export function Navegacion() {
           drawerStyle: { backgroundColor: cliente.chrome },
         }}
       >
-        <Drawer.Screen name="Main" component={JornadasStack} />
+        <Drawer.Screen name="Jornadas" component={JornadasStack} />
+        <Drawer.Screen name="Recibos" component={RecibosStack} />
         <Drawer.Screen
           name="Servidor"
           component={ServidorScreen}
@@ -288,6 +359,21 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
           <Text style={estilosDrawer.error}>⚠ {ultimoError}</Text>
         </View>
       ) : null}
+
+      <DrawerItem
+        label="Jornadas"
+        onPress={() => props.navigation.navigate("Jornadas")}
+        labelStyle={estilosDrawer.label}
+      />
+      <DrawerItem
+        label="Recibos"
+        onPress={() => props.navigation.navigate("Recibos")}
+        labelStyle={estilosDrawer.label}
+      />
+
+      <View style={estilosDrawer.separador}>
+        <Text style={estilosDrawer.seccion}>Datos</Text>
+      </View>
 
       <DrawerItem
         label={sincronizando ? "Sincronizando..." : "Sincronizar"}

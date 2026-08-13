@@ -5,6 +5,7 @@ import type { Bitacora, Recibo } from "../db/models";
 import { cliente } from "../branding";
 import { cerrarBitacora, recibosDe } from "../lib/bitacora";
 import { colores, estilos, fmtCajuelas, fmtFecha } from "./estilos";
+import { useCatalogos } from "./useCatalogos";
 
 /**
  * Una jornada: sus datos, sus recibos, y el cierre.
@@ -29,14 +30,25 @@ export function BitacoraScreen({
 }>) {
   // Los botones fijos de abajo tienen que despejar la barra de navegación de Android.
   const insets = useSafeAreaInsets();
+  const catalogos = useCatalogos();
   const [recibos, setRecibos] = useState<Recibo[] | null>(null);
   const [cerrando, setCerrando] = useState(false);
+  // Fuerza el re-render cuando la bitácora cambia. Sin esto, editar el transportista o la
+  // placa no se veía al volver: el modelo es el mismo objeto y React no tiene cómo
+  // enterarse de que sus campos cambiaron. Había que salir hasta la lista y volver a
+  // entrar, que es justo el síntoma que uno atribuye a "no se guardó".
+  const [, setTick] = useState(0);
   const abierta = bitacora.estaAbierta;
 
   useEffect(() => {
     const sub = recibosDe(bitacora.id).observe().subscribe(setRecibos);
     return () => sub.unsubscribe();
   }, [bitacora.id]);
+
+  useEffect(() => {
+    const sub = bitacora.observe().subscribe(() => setTick((n) => n + 1));
+    return () => sub.unsubscribe();
+  }, [bitacora]);
 
   const cerrar = async (simulada: boolean) => {
     if (cerrando) return;
@@ -97,8 +109,11 @@ export function BitacoraScreen({
             </View>
 
             <Dato etiqueta="Medidor" valor={bitacora.medidor ?? "—"} />
-            <Dato etiqueta="Tipo de café" valor={bitacora.tipocafe ?? "—"} />
-            <Dato etiqueta="Transportista" valor={bitacora.transportista ?? "—"} />
+            <Dato etiqueta="Tipo de café" valor={catalogos.tipoCafe(bitacora.tipocafe)} />
+            <Dato
+              etiqueta="Transportista"
+              valor={catalogos.transportista(bitacora.transportista)}
+            />
             <Dato etiqueta="Placa" valor={bitacora.placacamion ?? "—"} />
             {bitacora.observaciones ? (
               <Dato etiqueta="Observaciones" valor={bitacora.observaciones} />
