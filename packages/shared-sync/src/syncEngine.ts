@@ -56,6 +56,24 @@ export interface SyncOptions {
    * Sin la función, se envía todo (comportamiento de `automatica` y `hasta-sync`).
    */
   puedeEnviar?: (coleccion: string, fila: Record<string, unknown>) => boolean;
+  /**
+   * Última pasada sobre la fila antes de mandarla. Devuelve lo que viaja.
+   *
+   * Existe por las FECHAS Y HORAS LOCALES. El teléfono guarda instantes en milisegundos
+   * —cómodo para ordenar y mostrar— pero varias columnas del servidor son `date` o
+   * `time`, que no llevan zona horaria. El BE convierte los milisegundos como UTC, y en
+   * Costa Rica (UTC−6) eso corre seis horas: una jornada abierta a las 20:13 se guardaba
+   * con la fecha del DÍA SIGUIENTE, en una columna `date` donde el error ya no se puede
+   * distinguir de un dato bueno.
+   *
+   * El arreglo es mandar lo que el modelo espera —una fecha local y una hora local— y no
+   * un instante. Va acá y no en cada pantalla porque es una regla del transporte, no del
+   * dominio: quien crea la fila sigue trabajando con timestamps.
+   */
+  prepararEnvio?: (
+    coleccion: string,
+    fila: Record<string, unknown>
+  ) => Record<string, unknown>;
 }
 
 type ChangeBucket = {
@@ -258,9 +276,17 @@ export async function runSync(
             [collName]: {
               // Los creados van completos: la fila no existe en el servidor, así que
               // todo lo que trae es información nueva.
-              created: bucket.created.map((f) => limpiarMetadatos(f)),
+              created: bucket.created.map((f) =>
+                opts.prepararEnvio
+                  ? opts.prepararEnvio(collName, limpiarMetadatos(f))
+                  : limpiarMetadatos(f)
+              ),
               // Los modificados van MÍNIMOS — sólo lo que cambió. Ver soloLoCambiado.
-              updated: bucket.updated.map((f) => soloLoCambiado(f)),
+              updated: bucket.updated.map((f) =>
+                opts.prepararEnvio
+                  ? opts.prepararEnvio(collName, soloLoCambiado(f))
+                  : soloLoCambiado(f)
+              ),
               deleted: bucket.deleted,
             },
           },

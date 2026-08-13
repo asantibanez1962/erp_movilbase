@@ -3,9 +3,11 @@ import { runSync, type FalloPull } from "@erp/shared-sync";
 import { database } from "./db";
 import { getSyncClient } from "./api";
 import { COLLECTIONS } from "../db/schema";
+import type { Remedida } from "../db/models";
 import { config } from "./config";
 import { useSesion } from "./sesion";
 import { cargarPoliticas, puedeEnviarse } from "./politicas";
+import { prepararFechas } from "./fechas";
 
 /** Las dos colecciones que el teléfono origina, y por lo tanto pueden tener pendientes. */
 const ESCRIBIBLES = ["bitacoras", "recibos"] as const;
@@ -32,13 +34,43 @@ export async function syncNow(): Promise<FalloPull[]> {
   }
   const politicas = useSesion.getState().politicas;
 
+  /**
+   * Las remedidas que TODAVÍA no pueden salir, para retener también sus rutas.
+   *
+   * ⚠️ UN HIJO NO PUEDE VIAJAR SIN SU PADRE. La remedida espera a estar impresa
+   * (`hasta-evento`), pero sus rutas no tienen campo de cierre propio y salían solas: el
+   * BE las rechazaba con UNRESOLVED_PARENT una y otra vez, en cada sync, hasta que la
+   * remedida se imprimiera. Ruido permanente en el log por algo que no es un error.
+   *
+   * La retención de `puedeEnviar` es por fila y sólo ve sus propios campos, así que la
+   * condición del padre hay que traerla de afuera. Se arma acá, una vez por sync.
+   */
+  const remedidasRetenidas = new Set(
+    (
+      await database
+        .get<Remedida>("remedidas")
+        .query(Q.where("impreso", 0))
+        .fetch()
+    ).map((r) => r.id)
+  );
+
   const { fallos } = await runSync(database, {
     api,
     collections: [...COLLECTIONS],
     schemaVersion: config.schemaVersion,
     // Retiene las filas que todavía no cumplen su condición de cierre. Para los recibos
     // esa condición es `impreso`: un recibo sin imprimir es trabajo a medio hacer.
-    puedeEnviar: (coleccion, fila) => puedeEnviarse(politicas, coleccion, fila),
+    puedeEnviar: (coleccion, fila) => {
+      // La ruta espera a su remedida: sin ella el servidor no tiene a qué colgarla.
+      if (coleccion === "remedida_rutas") {
+        return !remedidasRetenidas.has(String(fila.id_remedida ?? ""));
+      }
+      return puedeEnviarse(politicas, coleccion, fila);
+    },
+    // Fechas y horas LOCALES, no instantes: varias columnas del servidor son `date` o
+    // `time` y el BE interpreta los milisegundos como UTC. Con UTC-6, una jornada de
+    // la tarde se archivaba en el día siguiente. Ver lib/fechas.ts.
+    prepararEnvio: prepararFechas,
   });
 
   return fallos;
@@ -58,6 +90,26 @@ export async function resumenPendientes(): Promise<{
   total: number;
 }> {
   const politicas = useSesion.getState().politicas;
+
+  /**
+   * Las remedidas que TODAVÍA no pueden salir, para retener también sus rutas.
+   *
+   * ⚠️ UN HIJO NO PUEDE VIAJAR SIN SU PADRE. La remedida espera a estar impresa
+   * (`hasta-evento`), pero sus rutas no tienen campo de cierre propio y salían solas: el
+   * BE las rechazaba con UNRESOLVED_PARENT una y otra vez, en cada sync, hasta que la
+   * remedida se imprimiera. Ruido permanente en el log por algo que no es un error.
+   *
+   * La retención de `puedeEnviar` es por fila y sólo ve sus propios campos, así que la
+   * condición del padre hay que traerla de afuera. Se arma acá, una vez por sync.
+   */
+  const remedidasRetenidas = new Set(
+    (
+      await database
+        .get<Remedida>("remedidas")
+        .query(Q.where("impreso", 0))
+        .fetch()
+    ).map((r) => r.id)
+  );
   let porEnviar = 0;
   let retenidas = 0;
 
