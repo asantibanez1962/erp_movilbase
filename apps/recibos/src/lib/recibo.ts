@@ -276,6 +276,74 @@ export async function precioDe(opts: {
   );
 }
 
+// ─── Anular ─────────────────────────────────────────────────────────────────
+
+/**
+ * Anula un recibo YA IMPRESO: pone las cantidades en cero y escribe `ANULADO`.
+ *
+ * ⚠️ SÓLO SI ESTÁ IMPRESO, y la restricción es lo que le da sentido. Un recibo sin
+ * imprimir no salió del teléfono ni existe en papel: ése se corrige o se descarta, sin
+ * dejar rastro. Anular es para cuando el papel YA está en manos del productor y hay que
+ * dejar constancia de que ese número no vale.
+ *
+ * POR QUÉ SE ANULA EN VEZ DE BORRAR. Lo que importa es **preservar el número en la
+ * secuencia**. Un recibo borrado deja un hueco imposible de distinguir de uno perdido, y
+ * ésa es justo la duda cara: alguien tendría que salir a buscar un papel que nunca
+ * existió. No es un caso raro — hay entre 900 y 1.250 anulados por cosecha.
+ *
+ * `recibos` NO tiene columna de anulación: sólo `observaciones` e `impreso`. Un recibo
+ * anulado *es* uno con las cantidades en cero.
+ *
+ * El texto lo pone la app y no el recibidor, y eso es lo que hace la regla utilizable: la
+ * oficina filtra por un valor conocido en vez de interpretar lo que tecleó cada quien.
+ * Sin eso, un anulado y un cero legítimo son indistinguibles en la base.
+ *
+ * `impreso` NO se toca: el recibo se imprimió de verdad, y como sigue en 1 o más el sync
+ * lo envía sin necesitar ninguna excepción a la retención.
+ */
+export const TEXTO_ANULADO = "ANULADO";
+
+export async function anularRecibo(recibo: Recibo, motivo?: string): Promise<void> {
+  if ((recibo.impreso ?? 0) < 1) {
+    throw new Error(
+      "Este recibo todavía no se imprimió, así que no hay nada que anular: se puede " +
+        "descartar sin dejar rastro."
+    );
+  }
+  if (esAnulado(recibo)) throw new Error("Este recibo ya está anulado.");
+
+  await database.write(async () => {
+    await recibo.update((r) => {
+      r.cantidadinicial = 0;
+      r.cuartillosinicial = 0;
+      r.granosbrocados = 0;
+      r.verdes = 0;
+      r.flotemaduro = 0;
+      r.floteseco = 0;
+      r.broca = 0;
+      r.cuartillosbroca = 0;
+      r.rebajoverde = 0;
+      r.cuartillosrebajoverde = 0;
+      r.rebajoflote = 0;
+      r.cuartillosrebajoflote = 0;
+      r.rebajofloteseco = 0;
+      r.cuartillosrebajofloteseco = 0;
+      r.cantidad = 0;
+      r.rcantidad = 0;
+      r.rcantidadcuartillos = 0;
+      // El valor también: un recibo anulado no puede quedar con monto.
+      r.valor = 0;
+      r.pagado = 0;
+      r.saldo = 0;
+      r.observaciones = [TEXTO_ANULADO, motivo?.trim()].filter(Boolean).join(" · ");
+    });
+  });
+}
+
+export function esAnulado(recibo: Recibo): boolean {
+  return (recibo.observaciones ?? "").trim().toUpperCase().startsWith(TEXTO_ANULADO);
+}
+
 // ─── El productor genérico ──────────────────────────────────────────────────
 
 /**
@@ -316,6 +384,8 @@ export interface DatosRecibo {
   nivel: number;
   medida: MedidaCapturada;
   calculo: ResultadoCalculo;
+  /** Texto libre del recibidor. Va impreso, así que se guarda con el recibo. */
+  observaciones?: string | null;
   precio: { idreprecio: number; monto: number; moneda: number; flete: number } | null;
 }
 
@@ -356,6 +426,7 @@ export async function crearRecibo(d: DatosRecibo): Promise<Recibo> {
       r.idFinca = d.idFinca;
       r.idCertificado = d.idCertificado;
       r.cldd = d.cldd;
+      r.observaciones = d.observaciones ?? null;
 
       r.cantidadinicial = d.medida.cantidadinicial;
       r.cuartillosinicial = d.medida.cuartillosinicial;

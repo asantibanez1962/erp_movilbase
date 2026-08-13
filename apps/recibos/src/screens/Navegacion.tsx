@@ -16,7 +16,7 @@ import {
 } from "@react-navigation/drawer";
 import { useAuthStore } from "@erp/shared-api";
 import { describirFallos } from "@erp/shared-sync";
-import type { Bitacora } from "../db/models";
+import type { Bitacora, Recibo } from "../db/models";
 import { cliente } from "../branding";
 import { cerrarSesion, cambiarRecibidor } from "../lib/alcance";
 import { describirPendientes, resumenPendientes, syncNow } from "../lib/sync";
@@ -25,6 +25,7 @@ import { BitacorasScreen } from "./BitacorasScreen";
 import { AbrirBitacoraScreen } from "./AbrirBitacoraScreen";
 import { BitacoraScreen } from "./BitacoraScreen";
 import { ReciboScreen } from "./ReciboScreen";
+import { ReciboDetalleScreen } from "./ReciboDetalleScreen";
 import { ServidorScreen } from "./ServidorScreen";
 
 /**
@@ -57,6 +58,7 @@ export type StackParams = {
   // habría que volver a buscarla y suscribirse a mano en cada entrada.
   Jornada: { bitacora: Bitacora };
   Recibo: { bitacora: Bitacora };
+  ReciboDetalle: { recibo: Recibo };
   EditarJornada: { bitacora: Bitacora };
 };
 
@@ -118,9 +120,19 @@ function JornadasStack() {
             onNuevoRecibo={() =>
               navigation.navigate("Recibo", { bitacora: route.params.bitacora })
             }
+            onVerRecibo={(r) => navigation.navigate("ReciboDetalle", { recibo: r })}
             onEditar={() =>
               navigation.navigate("EditarJornada", { bitacora: route.params.bitacora })
             }
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name="ReciboDetalle" options={{ title: "Recibo" }}>
+        {({ navigation, route }) => (
+          <ReciboDetalleScreen
+            recibo={route.params.recibo}
+            onVolver={() => navigation.goBack()}
           />
         )}
       </Stack.Screen>

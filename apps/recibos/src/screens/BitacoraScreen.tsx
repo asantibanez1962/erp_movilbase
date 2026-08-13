@@ -19,11 +19,13 @@ export function BitacoraScreen({
   onVolver,
   onNuevoRecibo,
   onEditar,
+  onVerRecibo,
 }: Readonly<{
   bitacora: Bitacora;
   onVolver: () => void;
   onNuevoRecibo: () => void;
   onEditar: () => void;
+  onVerRecibo: (r: Recibo) => void;
 }>) {
   // Los botones fijos de abajo tienen que despejar la barra de navegación de Android.
   const insets = useSafeAreaInsets();
@@ -118,7 +120,9 @@ export function BitacoraScreen({
             </Text>
           </View>
         }
-        renderItem={({ item }) => <FilaRecibo recibo={item} />}
+        renderItem={({ item }) => (
+          <FilaRecibo recibo={item} onPress={() => onVerRecibo(item)} />
+        )}
         ListEmptyComponent={
           recibos == null ? null : (
             <View style={estilos.vacio}>
@@ -198,9 +202,12 @@ async function imprimirPendiente(): Promise<void> {
   );
 }
 
-function FilaRecibo({ recibo }: Readonly<{ recibo: Recibo }>) {
+function FilaRecibo({
+  recibo,
+  onPress,
+}: Readonly<{ recibo: Recibo; onPress: () => void }>) {
   return (
-    <View style={estilos.fila}>
+    <TouchableOpacity onPress={onPress} style={estilos.fila}>
       <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
         <Text style={estilos.filaTitulo}>{recibo.recibo}</Text>
         {/* La cantidad final descompuesta: `rcantidad` son las cajuelas enteras y
@@ -216,7 +223,7 @@ function FilaRecibo({ recibo }: Readonly<{ recibo: Recibo }>) {
           <Text style={estilos.badgeTexto}>SIN IMPRIMIR</Text>
         </View>
       ) : null}
-    </View>
+    </TouchableOpacity>
   );
 }
 

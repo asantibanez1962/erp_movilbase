@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { useNavigation } from "@react-navigation/native";
 import { Q } from "@nozbe/watermelondb";
 import type { Catalogos, ResultadoCalculo } from "@erp/recibos-calc";
 import { cliente } from "../branding";
@@ -24,7 +25,6 @@ import {
   proximoNumero,
   type MedidaCapturada,
 } from "../lib/recibo";
-import { useSesion } from "../lib/sesion";
 import type {
   Bitacora,
   Calidad,
@@ -32,6 +32,7 @@ import type {
   Finca,
   Nivel,
   Productor,
+  TipoCafe,
 } from "../db/models";
 import { PickerModal, type OpcionPicker } from "./Picker";
 import { colores, estilos, fmtCajuelas, fmtFecha } from "./estilos";
@@ -62,8 +63,7 @@ export function ReciboScreen({
   onCancelar,
 }: Readonly<{ bitacora: Bitacora; onListo: () => void; onCancelar: () => void }>) {
   const insets = useSafeAreaInsets();
-  const recibidorNombre = useSesion((s) => s.recibidorNombre ?? s.recibidor);
-  const cosecha = useSesion((s) => s.cosecha);
+  const navigation = useNavigation();
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -76,12 +76,17 @@ export function ReciboScreen({
   const [calidades, setCalidades] = useState<Calidad[]>([]);
   const [certificados, setCertificados] = useState<Certificado[]>([]);
   const [niveles, setNiveles] = useState<Nivel[]>([]);
+  const [tiposCafe, setTiposCafe] = useState<TipoCafe[]>([]);
 
   // Quién entrega
   const [productor, setProductor] = useState<Productor | null>(null);
   const [noRegistrado, setNoRegistrado] = useState(false);
   const [nombre, setNombre] = useState("");
   const [cedula, setCedula] = useState("");
+  /** El bloque del no registrado se colapsa una vez completo: son dos campos que sólo se
+   *  llenan una vez y dejan la pantalla sin espacio para lo que falta capturar. */
+  const [editandoPersona, setEditandoPersona] = useState(true);
+  const [observaciones, setObservaciones] = useState("");
 
   // Lo que se deriva del productor
   const [fincas, setFincas] = useState<Finca[]>([]);
@@ -95,7 +100,7 @@ export function ReciboScreen({
   // pantalla que se usa decenas de veces al día.
   const [calidad, setCalidad] = useState<string | null>("M");
   const [picker, setPicker] = useState<
-    "productor" | "finca" | "calidad" | "certificado" | null
+    "productor" | "finca" | "calidad" | "certificado" | "tipocafe" | null
   >(null);
 
   const [medida, setMedida] = useState<MedidaCapturada>({
@@ -107,7 +112,10 @@ export function ReciboScreen({
     floteseco: 0,
   });
 
-  const tipoCafe = bitacora.tipocafe ?? "";
+  // Arranca con el de la jornada y se puede cambiar: la jornada dice qué se está
+  // recibiendo hoy, pero un recibo puntual puede ser de otro tipo. Entra al criterio del
+  // precio, así que no es una etiqueta.
+  const [tipoCafe, setTipoCafe] = useState<string>(bitacora.tipocafe ?? "");
 
   useEffect(() => {
     void (async () => {
@@ -117,18 +125,20 @@ export function ReciboScreen({
       // mandaba a revisar el sync, que estaba perfecto. Un problema de numeración no puede
       // vaciar la pantalla entera.
       try {
-        const [c, prods, cals, certs, nivs] = await Promise.all([
+        const [c, prods, cals, certs, nivs, tcs] = await Promise.all([
           catalogosDelCalculo(),
           database.get<Productor>("productores").query(Q.sortBy("nombre", Q.asc)).fetch(),
           database.get<Calidad>("calidades").query(Q.sortBy("calidad", Q.asc)).fetch(),
           database.get<Certificado>("certificados").query(Q.sortBy("nombre", Q.asc)).fetch(),
           database.get<Nivel>("niveles").query().fetch(),
+          database.get<TipoCafe>("tipos_cafe").query().fetch(),
         ]);
         setCat(c);
         setProductores(prods);
         setCalidades(cals);
         setCertificados(certs);
         setNiveles(nivs);
+        setTiposCafe(tcs);
       } catch (e) {
         setError((e as Error)?.message ?? "No se pudieron leer los catálogos.");
       }
@@ -168,6 +178,7 @@ export function ReciboScreen({
       setCertificadosDelProductor([]);
       setNombre("");
       setCedula("");
+      setEditandoPersona(true);
       return;
     }
 
@@ -239,7 +250,38 @@ export function ReciboScreen({
     // anotado en el papel del recibidor.
     (!noRegistrado || (nombre.trim().length > 0 && cedula.trim().length > 0));
 
-  const guardar = async () => {
+  /**
+   * Las acciones viven en el HEADER, como en la pantalla legacy.
+   *
+   * No es sólo estética: el bloque de botones al pie ocupaba ~120px, y con él la pantalla
+   * no cerraba sin scroll en un teléfono. Además quedan siempre a mano — no hay que
+   * desplazarse hasta el final para grabar.
+   */
+  const menuAcciones = () => {
+    const opciones: Array<{ text: string; style?: "cancel" | "destructive"; onPress?: () => void }> = [];
+    if (listo) {
+      opciones.push({ text: "Imprimir recibo", onPress: () => void guardar({ imprimir: true }) });
+      opciones.push({ text: "Guardar sin imprimir", onPress: () => void guardar({ imprimir: false }) });
+    }
+    opciones.push({
+      text: "Descartar",
+      style: "destructive",
+      onPress: () =>
+        Alert.alert("Descartar el recibo", "Se pierde lo capturado. ¿Seguro?", [
+          { text: "No", style: "cancel" },
+          { text: "Descartar", style: "destructive", onPress: onCancelar },
+        ]),
+    });
+    opciones.push({ text: "Cancelar", style: "cancel" });
+
+    Alert.alert(
+      numero ?? "Recibo",
+      listo ? undefined : "Faltan datos para poder grabar: productor, calidad y medida.",
+      opciones
+    );
+  };
+
+  const guardar = async (opts: { imprimir: boolean }) => {
     if (!listo || guardando) return;
     setGuardando(true);
     setError(null);
@@ -258,15 +300,19 @@ export function ReciboScreen({
         medida,
         calculo: calculo!,
         precio,
+        observaciones: observaciones.trim() || null,
       });
 
-      // La impresión ESC/POS todavía no existe. El recibo queda con `impreso = 0`, que es
-      // el campo de cierre de la colección: sin imprimir NO sincroniza. Se dice tal cual,
-      // en vez de dar por impreso algo que no salió en papel.
+      // El recibo queda con `impreso = 0`, que es el campo de cierre de la colección: sin
+      // imprimir NO sincroniza. Cuando entre ESC/POS, `opts.imprimir` dispara la impresión
+      // y sólo entonces pasa a 1 — nunca se da por impreso algo que no salió en papel.
       Alert.alert(
-        "Recibo guardado, sin imprimir",
-        "La impresión por Bluetooth es el paso siguiente. Un recibo sin imprimir no " +
-          "sincroniza — queda esperando en el teléfono."
+        "Recibo guardado",
+        opts.imprimir
+          ? "La impresión por Bluetooth todavía no está implementada, así que quedó sin " +
+              "imprimir. Un recibo sin imprimir no sincroniza: espera en el teléfono."
+          : "Queda sin imprimir, esperando en el teléfono. No sincroniza hasta que salga " +
+              "en papel."
       );
       onListo();
     } catch (e) {
@@ -274,6 +320,25 @@ export function ReciboScreen({
       setGuardando(false);
     }
   };
+
+  // El botón de acciones vive en el header del Stack. Se re-registra cuando cambia algo
+  // que el menú necesita leer: sin las dependencias, el closure guardaría el estado del
+  // primer render y grabaría un recibo vacío.
+  useEffect(() => {
+    navigation.setOptions({
+      headerRight: () => (
+        <TouchableOpacity
+          onPress={menuAcciones}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          style={{ paddingHorizontal: 10 }}
+        >
+          <Text style={{ color: "#f1f5f9", fontSize: 22, fontWeight: "700" }}>⋮</Text>
+        </TouchableOpacity>
+      ),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [navigation, listo, guardando, numero, productor, noRegistrado, nombre, cedula,
+      calidad, tipoCafe, medida, idFinca, idCertificado, cldd, observaciones]);
 
   if (cargando) {
     return (
@@ -314,80 +379,118 @@ export function ReciboScreen({
       contentContainerStyle={{ paddingBottom: 32 + insets.bottom }}
       keyboardShouldPersistTaps="handled"
     >
-      {/* Contexto del recibo: dónde, cuándo y en qué jornada. Sin esto, dos teléfonos
-          trabajando recibidores distintos se ven exactamente igual. */}
+      {/* Encabezado de UNA línea: fecha, nivel y número.
+          Fuera el recibidor y la cosecha — el recibidor sabe dónde está, y sólo hay una
+          cosecha a la vez, así que ninguno de los dos informa nada y los dos cobraban una
+          línea de scroll. El tipo de café tampoco: ahora es un campo del recibo. */}
       <View
         style={{
           paddingHorizontal: 14,
-          paddingTop: 12,
+          paddingTop: 8,
           flexDirection: "row",
-          flexWrap: "wrap",
+          alignItems: "center",
           gap: 6,
         }}
       >
-        <Chip texto={recibidorNombre ?? "—"} />
-        <Chip texto={cosecha ?? "—"} />
-        <Chip
-          texto={`Jornada ${fmtFecha(bitacora.fecha)}${tipoCafe ? ` · ${tipoCafe}` : ""}`}
-        />
-      </View>
-
-      <View
-        style={{
-          paddingHorizontal: 16,
-          paddingTop: 10,
-          flexDirection: "row",
-          justifyContent: "space-between",
-          alignItems: "flex-end",
-        }}
-      >
-        <Text
-          style={{
-            fontSize: 12,
-            color: colores.textoTenue,
-            fontWeight: "700",
-            letterSpacing: 0.6,
-          }}
-        >
-          NIVEL {nombreNivel(niveles, nivel).toUpperCase()}
-        </Text>
-        <Text
-          style={{
-            fontSize: 22,
-            fontWeight: "700",
-            color: colores.texto,
-            letterSpacing: 0.5,
-          }}
-        >
+        <Chip texto={fmtFecha(bitacora.fecha)} />
+        <Chip texto={nombreNivel(niveles, nivel)} />
+        <View style={{ flex: 1 }} />
+        <Text style={{ fontSize: 20, fontWeight: "700", color: colores.texto }}>
           {numero ?? "—"}
         </Text>
+        {/* Mientras diga SIN IMPRIMIR el recibo no sincroniza: `impreso` es el campo de
+            cierre de la colección. */}
+        <View
+          style={{
+            backgroundColor: colores.advertencia,
+            borderRadius: 4,
+            paddingHorizontal: 5,
+            paddingVertical: 1,
+          }}
+        >
+          <Text
+            style={{ fontSize: 8, fontWeight: "700", color: "#fff", lineHeight: 10 }}
+          >
+            {"SIN"}
+            {"\n"}
+            {"IMPRIMIR"}
+          </Text>
+        </View>
       </View>
 
       {error ? <Text style={estilos.error}>⚠ {error}</Text> : null}
 
-      {/* ── Quién entrega ────────────────────────────────────────────────── */}
-      <Rotulo texto="Quién entrega" />
-      <Campo
-        etiqueta="Productor"
-        valor={noRegistrado ? "PENDIENTE" : (productor?.nombre ?? "Elegir productor")}
-        vacio={!hayProductor}
-        onPress={() => setPicker("productor")}
-      />
+      {/* CLDD acompaña al productor: no se edita —es un atributo de la finca— así que no
+          necesita fila propia, y ahí libera una entera. */}
+      <View
+        style={{
+          flexDirection: "row",
+          alignItems: "flex-end",
+          gap: 8,
+          paddingHorizontal: 14,
+        }}
+      >
+        <View style={{ flex: 1 }}>
+          <Campo
+            etiqueta="Productor"
+            valor={noRegistrado ? "PENDIENTE" : (productor?.nombre ?? "Elegir productor")}
+            vacio={!hayProductor}
+            sinMargen
+            onPress={() => setPicker("productor")}
+          />
+        </View>
+        <Casilla marcada={productor != null && cldd === 1} etiqueta="CLDD" />
+      </View>
 
-      {noRegistrado ? (
-        <View
+      {noRegistrado && !editandoPersona ? (
+        // Colapsado: una línea con lo capturado y la puerta de vuelta. Ocupa 48px en vez
+        // de los ~200 del bloque abierto, que era lo que empujaba el resto fuera de
+        // pantalla justo cuando falta capturar la medida.
+        <TouchableOpacity
+          onPress={() => setEditandoPersona(true)}
           style={{
             marginHorizontal: 14,
-            marginTop: 10,
-            padding: 14,
-            borderRadius: 10,
-            backgroundColor: "#fef2f2",
+            marginTop: 12,
+            paddingHorizontal: 12,
+            paddingVertical: 10,
+            borderRadius: 8,
+            backgroundColor: FONDO_AVISO,
             borderLeftWidth: 3,
             borderLeftColor: colores.error,
+            flexDirection: "row",
+            justifyContent: "space-between",
+            alignItems: "center",
             gap: 10,
           }}
         >
-          <Text style={{ color: colores.error, fontWeight: "700", fontSize: 14 }}>
+          <View style={{ flexShrink: 1 }}>
+            <Text style={{ fontWeight: "700", color: colores.texto }} numberOfLines={1}>
+              {nombre}
+            </Text>
+            <Text style={{ color: colores.textoTenue, fontSize: 12 }}>
+              {cedula} · no está en el padrón
+            </Text>
+          </View>
+          <Text style={{ color: colores.error, fontWeight: "600", fontSize: 13 }}>
+            Editar
+          </Text>
+        </TouchableOpacity>
+      ) : null}
+
+      {noRegistrado && editandoPersona ? (
+        <View
+          style={{
+            marginHorizontal: 14,
+            marginTop: 12,
+            padding: 12,
+            borderRadius: 10,
+            backgroundColor: FONDO_AVISO,
+            borderLeftWidth: 3,
+            borderLeftColor: colores.error,
+            gap: 4,
+          }}
+        >
+          <Text style={{ color: colores.error, fontWeight: "700", fontSize: 13 }}>
             No está en el padrón — se pide para el papel
           </Text>
           <Entrada
@@ -395,62 +498,77 @@ export function ReciboScreen({
             valor={nombre}
             onChange={setNombre}
             mayusculas
+            fondoEtiqueta={FONDO_AVISO}
           />
           <Entrada
             etiqueta="Identificación"
             valor={cedula}
             onChange={setCedula}
             teclado="number-pad"
+            fondoEtiqueta={FONDO_AVISO}
           />
-          <Text style={{ color: colores.textoTenue, fontSize: 12 }}>
-            Sin CLdd ni certificado — no hay padrón todavía. La oficina reasigna el recibo
-            cuando la persona quede registrada en regla.
-          </Text>
+          <TouchableOpacity
+            onPress={() => setEditandoPersona(false)}
+            // Los dos son OBLIGATORIOS: un recibo impreso sin nadie identificado es peor
+            // que el estado actual, donde al menos el dato queda en el papel del
+            // recibidor. Sin ellos tampoco se puede guardar (ver `listo`).
+            disabled={nombre.trim().length === 0 || cedula.trim().length === 0}
+            style={{
+              marginTop: 8,
+              minHeight: 42,
+              borderRadius: 8,
+              alignItems: "center",
+              justifyContent: "center",
+              backgroundColor:
+                nombre.trim() && cedula.trim() ? colores.error : colores.borde,
+            }}
+          >
+            <Text
+              style={{
+                color: nombre.trim() && cedula.trim() ? "#fff" : colores.textoTenue,
+                fontWeight: "700",
+                fontSize: 14,
+              }}
+            >
+              Listo
+            </Text>
+          </TouchableOpacity>
         </View>
       ) : null}
 
-      {productor ? (
-        <View
-          style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14, marginTop: 10 }}
-        >
-          <View style={{ flex: 1 }}>
-            <Campo
-              etiqueta="Finca"
-              valor={fincas.find((f) => Number(f.id) === idFinca)?.nombre ?? "Sin finca"}
-              vacio={idFinca == null}
-              sinMargen
-              onPress={() => setPicker("finca")}
-            />
-          </View>
-          <View style={{ flex: 1 }}>
-            {/* CLdd es de sólo lectura: es un atributo de la FINCA, no un dato del recibo.
-                Digitarlo sería inventar algo del maestro. */}
-            <Lectura
-              etiqueta="CLdd"
-              valor={cldd ? "Cumple" : "No"}
-              nota={idFinca == null ? "sin finca" : "de la finca"}
-            />
-          </View>
+      {/* Finca y certificado SIEMPRE ocupan su lugar, aunque todavía no haya productor.
+          Antes aparecían al elegirlo y el formulario CRECÍA justo en el peor momento: lo
+          que se estaba por tocar se corría de sitio. Un formulario de altura fija se
+          aprende con el pulgar; uno que salta, no. */}
+      <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
+        <View style={{ flex: 1 }}>
+          <Campo
+            etiqueta="Finca"
+            valor={
+              productor
+                ? (fincas.find((f) => Number(f.id) === idFinca)?.nombre ?? "Sin finca")
+                : "—"
+            }
+            vacio={idFinca == null}
+            sinMargen
+            onPress={() => productor && setPicker("finca")}
+          />
         </View>
-      ) : null}
+        <View style={{ flex: 1 }}>
+          <Campo
+            etiqueta="Certificado"
+            nota={
+              productor && certificadosDelProductor.length === 0 ? "sin cuota" : undefined
+            }
+            valor={productor ? (nombreCertificado ?? "Ninguno") : "—"}
+            vacio={idCertificado == null}
+            sinMargen
+            onPress={() => productor && setPicker("certificado")}
+          />
+        </View>
+      </View>
 
-      {productor ? (
-        <Campo
-          etiqueta="Certificado"
-          nota={
-            certificadosDelProductor.length > 0
-              ? `${certificadosDelProductor.length} cuota${
-                  certificadosDelProductor.length === 1 ? "" : "s"
-                } — se puede cambiar o quitar`
-              : "el productor no tiene cuota en esta cosecha"
-          }
-          valor={nombreCertificado ?? "Ninguno"}
-          vacio={idCertificado == null}
-          onPress={() => setPicker("certificado")}
-        />
-      ) : null}
-
-      <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14, marginTop: 10 }}>
+      <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
         <View style={{ flex: 1 }}>
           <Campo
             etiqueta="Calidad"
@@ -461,14 +579,18 @@ export function ReciboScreen({
           />
         </View>
         <View style={{ flex: 1 }}>
-          {/* El tipo de café es de la JORNADA, no del recibo: cambiarlo a mitad del día
-              cambiaría el precio de unos recibos y no de otros. */}
-          <Lectura etiqueta="Tipo de café" valor={tipoCafe || "—"} nota="de la jornada" />
+          <Campo
+            etiqueta="Tipo de café"
+            valor={nombreTipoCafe(tiposCafe, tipoCafe)}
+            vacio={!tipoCafe}
+            sinMargen
+            onPress={() => setPicker("tipocafe")}
+          />
         </View>
       </View>
 
-      {/* ── Medida ───────────────────────────────────────────────────────── */}
-      <Rotulo texto="Medida" />
+      {/* Sin rótulo de sección: "Cajuelas" y "Cuartillos" ya dicen que esto es la medida,
+          y cada rótulo cuesta una línea de scroll durante la captura. */}
       <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
         <View style={{ flex: 1 }}>
           <Entrada
@@ -495,7 +617,6 @@ export function ReciboScreen({
       {/* Cada castigo AL LADO de su defecto y no todos juntos al final: cada línea es una
           relación causa→efecto, y es la conversación que el recibidor tiene con el
           productor enfrente — "por los verdes se le rebaja esto". */}
-      <Rotulo texto="Defectos" />
       <Defecto
         etiqueta="% Verdes"
         valor={medida.verdes}
@@ -541,10 +662,10 @@ export function ReciboScreen({
           style={{
             backgroundColor: cliente.chrome,
             marginHorizontal: 14,
-            marginTop: 18,
-            borderRadius: 12,
-            paddingHorizontal: 18,
-            paddingVertical: 16,
+            marginTop: 12,
+            borderRadius: 10,
+            paddingHorizontal: 16,
+            paddingVertical: 12,
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "space-between",
@@ -577,35 +698,8 @@ export function ReciboScreen({
         </View>
       )}
 
-      <View style={{ padding: 16, gap: 12 }}>
-        <TouchableOpacity
-          onPress={guardar}
-          disabled={!listo || guardando}
-          style={{
-            backgroundColor: listo ? cliente.chrome : colores.borde,
-            borderRadius: 10,
-            minHeight: 54,
-            alignItems: "center",
-            justifyContent: "center",
-            opacity: guardando ? 0.6 : 1,
-          }}
-        >
-          <Text
-            style={{
-              color: listo ? "#f1f5f9" : colores.textoTenue,
-              fontWeight: "700",
-              fontSize: 16,
-            }}
-          >
-            {guardando ? "Guardando..." : "Imprimir recibo"}
-          </Text>
-        </TouchableOpacity>
-        <TouchableOpacity
-          onPress={onCancelar}
-          style={{ minHeight: 44, alignItems: "center", justifyContent: "center" }}
-        >
-          <Text style={{ color: colores.textoTenue, fontSize: 14 }}>Cancelar</Text>
-        </TouchableOpacity>
+      <View style={{ paddingHorizontal: 14 }}>
+        <Entrada etiqueta="Observaciones" valor={observaciones} onChange={setObservaciones} />
       </View>
 
       <PickerModal
@@ -638,6 +732,20 @@ export function ReciboScreen({
         }))}
         onSeleccionar={(v) => {
           setCalidad(v);
+          setPicker(null);
+        }}
+        onCerrar={() => setPicker(null)}
+      />
+      <PickerModal
+        visible={picker === "tipocafe"}
+        titulo="Tipo de café"
+        opciones={tiposCafe.map((t) => ({
+          valor: t.tipocafe,
+          titulo: t.nombre ?? t.tipocafe,
+          subtitulo: t.tipocafe,
+        }))}
+        onSeleccionar={(v) => {
+          setTipoCafe(v);
           setPicker(null);
         }}
         onCerrar={() => setPicker(null)}
@@ -679,7 +787,54 @@ function nombreNivel(niveles: Nivel[], nivel: number | null): string {
   return niveles.find((n) => n.nivel === nivel)?.nombre ?? String(nivel);
 }
 
+/** Fondo del aviso del no registrado. Las etiquetas montadas sobre el borde lo necesitan
+ *  para tapar el tramo de borde que cruzan. */
+const FONDO_AVISO = "#fef2f2";
+
+/** El nombre del tipo de café; el código sólo si el catálogo todavía no bajó. */
+function nombreTipoCafe(tipos: TipoCafe[], codigo: string): string {
+  if (!codigo) return "—";
+  return tipos.find((t) => t.tipocafe.trim() === codigo.trim())?.nombre ?? codigo;
+}
+
 const entero = (t: string) => Math.max(0, Number.parseInt(t, 10) || 0);
+
+/** Casilla de sólo lectura. Para un sí/no derivado, un cajón con texto es puro ruido. */
+function Casilla({ marcada, etiqueta }: Readonly<{ marcada: boolean; etiqueta: string }>) {
+  return (
+    <View
+      style={{
+        flexDirection: "row",
+        alignItems: "center",
+        gap: 8,
+        paddingHorizontal: 4,
+        minHeight: 42,
+      }}
+    >
+      <View
+        style={{
+          width: 22,
+          height: 22,
+          borderRadius: 4,
+          borderWidth: 2,
+          borderColor: marcada ? cliente.chrome : colores.borde,
+          backgroundColor: marcada ? cliente.chrome : "transparent",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        {marcada ? (
+          <Text style={{ color: "#fff", fontSize: 14, fontWeight: "900", lineHeight: 16 }}>
+            ✓
+          </Text>
+        ) : null}
+      </View>
+      <Text style={{ fontSize: 13, fontWeight: "700", color: colores.textoTenue }}>
+        {etiqueta}
+      </Text>
+    </View>
+  );
+}
 
 function Chip({ texto }: Readonly<{ texto: string }>) {
   return (
@@ -698,17 +853,14 @@ function Chip({ texto }: Readonly<{ texto: string }>) {
   );
 }
 
-function Rotulo({ texto }: Readonly<{ texto: string }>) {
-  return <Text style={estilos.seccion}>{texto}</Text>;
-}
-
-/** Campo que abre un selector. Cajón con la etiqueta arriba, como el resto del form. */
+/** Campo que abre un selector. */
 function Campo({
   etiqueta,
   valor,
   nota,
   vacio,
   sinMargen,
+  fondoEtiqueta,
   onPress,
 }: Readonly<{
   etiqueta: string;
@@ -716,29 +868,26 @@ function Campo({
   nota?: string;
   vacio?: boolean;
   sinMargen?: boolean;
+  fondoEtiqueta?: string;
   onPress: () => void;
 }>) {
   return (
-    <View style={{ paddingHorizontal: sinMargen ? 0 : 14, marginTop: 10 }}>
-      <Text style={etiquetaEstilo}>
-        {etiqueta}
-        {nota ? (
-          <Text style={{ color: colores.textoTenue, fontWeight: "400" }}>{`  ${nota}`}</Text>
-        ) : null}
-      </Text>
-      <TouchableOpacity onPress={onPress} style={cajonEstilo}>
-        <Text
-          style={{
-            fontSize: 16,
-            color: vacio ? colores.textoTenue : colores.texto,
-            flexShrink: 1,
-          }}
-          numberOfLines={1}
-        >
-          {valor}
-        </Text>
-        <Text style={{ color: colores.textoTenue, fontSize: 16 }}>▾</Text>
-      </TouchableOpacity>
+    <View style={{ paddingHorizontal: sinMargen ? 0 : 14, marginTop: 9 }}>
+      <Marco etiqueta={etiqueta} nota={nota} fondoEtiqueta={fondoEtiqueta}>
+        <TouchableOpacity onPress={onPress} style={interiorEstilo}>
+          <Text
+            style={{
+              fontSize: 16,
+              color: vacio ? colores.textoTenue : colores.texto,
+              flexShrink: 1,
+            }}
+            numberOfLines={1}
+          >
+            {valor}
+          </Text>
+          <Text style={{ color: colores.textoTenue, fontSize: 16 }}>▾</Text>
+        </TouchableOpacity>
+      </Marco>
     </View>
   );
 }
@@ -750,14 +899,14 @@ function Lectura({
   nota,
 }: Readonly<{ etiqueta: string; valor: string; nota?: string }>) {
   return (
-    <View style={{ marginTop: 10 }}>
-      <Text style={etiquetaEstilo}>{etiqueta}</Text>
-      <View style={[cajonEstilo, { backgroundColor: colores.fondo }]}>
-        <Text style={{ fontSize: 16, color: colores.texto, fontWeight: "600" }}>
-          {valor}
-        </Text>
-        {nota ? <Text style={{ color: colores.textoTenue, fontSize: 11 }}>{nota}</Text> : null}
-      </View>
+    <View style={{ marginTop: 9 }}>
+      <Marco etiqueta={etiqueta} nota={nota} tenue>
+        <View style={interiorEstilo}>
+          <Text style={{ fontSize: 16, color: colores.texto, fontWeight: "600" }}>
+            {valor}
+          </Text>
+        </View>
+      </Marco>
     </View>
   );
 }
@@ -769,6 +918,7 @@ function Entrada({
   teclado,
   mayusculas,
   grande,
+  fondoEtiqueta,
 }: Readonly<{
   etiqueta: string;
   valor: string;
@@ -776,25 +926,27 @@ function Entrada({
   teclado?: "number-pad" | "decimal-pad";
   mayusculas?: boolean;
   grande?: boolean;
+  fondoEtiqueta?: string;
 }>) {
   return (
-    <View style={{ marginTop: 2 }}>
-      <Text style={etiquetaEstilo}>{etiqueta}</Text>
-      <TextInput
-        value={valor}
-        onChangeText={onChange}
-        keyboardType={teclado}
-        autoCapitalize={mayusculas ? "characters" : "none"}
-        selectTextOnFocus={teclado != null}
-        style={[
-          cajonEstilo,
-          {
-            fontSize: grande ? 24 : 16,
-            fontWeight: grande ? "700" : "400",
-            color: colores.texto,
-          },
-        ]}
-      />
+    <View style={{ marginTop: 9 }}>
+      <Marco etiqueta={etiqueta} fondoEtiqueta={fondoEtiqueta}>
+        <TextInput
+          value={valor}
+          onChangeText={onChange}
+          keyboardType={teclado}
+          autoCapitalize={mayusculas ? "characters" : "none"}
+          selectTextOnFocus={teclado != null}
+          style={[
+            interiorEstilo,
+            {
+              fontSize: grande ? 24 : 16,
+              fontWeight: grande ? "700" : "400",
+              color: colores.texto,
+            },
+          ]}
+        />
+      </Marco>
     </View>
   );
 }
@@ -815,39 +967,40 @@ function Segmentado({
   onChange: (v: number) => void;
 }>) {
   return (
-    <View style={{ marginTop: 2 }}>
-      <Text style={etiquetaEstilo}>{etiqueta}</Text>
-      <View style={{ flexDirection: "row", gap: 6 }}>
-        {opciones.map((o) => {
-          const activo = o === valor;
-          return (
-            <TouchableOpacity
-              key={o}
-              onPress={() => onChange(o)}
-              style={{
-                flex: 1,
-                minHeight: 50,
-                borderRadius: 8,
-                borderWidth: 1,
-                borderColor: activo ? cliente.chrome : colores.borde,
-                backgroundColor: activo ? cliente.chrome : colores.superficie,
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-            >
-              <Text
+    <View style={{ marginTop: 9 }}>
+      <Marco etiqueta={etiqueta} sinBorde>
+        <View style={{ flexDirection: "row", gap: 6 }}>
+          {opciones.map((o) => {
+            const activo = o === valor;
+            return (
+              <TouchableOpacity
+                key={o}
+                onPress={() => onChange(o)}
                 style={{
-                  fontSize: 17,
-                  fontWeight: "700",
-                  color: activo ? "#f1f5f9" : colores.textoTenue,
+                  flex: 1,
+                  minHeight: 42,
+                  borderRadius: 8,
+                  borderWidth: 1,
+                  borderColor: activo ? cliente.chrome : colores.borde,
+                  backgroundColor: activo ? cliente.chrome : colores.superficie,
+                  alignItems: "center",
+                  justifyContent: "center",
                 }}
               >
-                {o}
-              </Text>
-            </TouchableOpacity>
-          );
-        })}
-      </View>
+                <Text
+                  style={{
+                    fontSize: 17,
+                    fontWeight: "700",
+                    color: activo ? "#f1f5f9" : colores.textoTenue,
+                  }}
+                >
+                  {o}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </View>
+      </Marco>
     </View>
   );
 }
@@ -881,34 +1034,37 @@ function Defecto({
     <View
       style={{
         flexDirection: "row",
-        alignItems: "flex-end",
+        alignItems: "center",
         gap: 10,
         paddingHorizontal: 14,
-        marginTop: 10,
+        marginTop: 9,
       }}
     >
       <View style={{ flex: 1 }}>
-        <Text style={etiquetaEstilo}>{etiqueta}</Text>
-        <TextInput
-          value={texto ?? formatear(valor)}
-          onFocus={() => setTexto(formatear(valor))}
-          onBlur={() => setTexto(null)}
-          onChangeText={(t) => {
-            setTexto(t);
-            const n = decimal
-              ? Number.parseFloat(t.replace(",", "."))
-              : Number.parseInt(t, 10);
-            onChange(Number.isFinite(n) && n > 0 ? n : 0);
-          }}
-          keyboardType={decimal ? "decimal-pad" : "number-pad"}
-          selectTextOnFocus
-          style={[cajonEstilo, { fontSize: 17, color: colores.texto }]}
-        />
+        <Marco etiqueta={etiqueta}>
+          <TextInput
+            value={texto ?? formatear(valor)}
+            onFocus={() => setTexto(formatear(valor))}
+            onBlur={() => setTexto(null)}
+            onChangeText={(t) => {
+              setTexto(t);
+              const n = decimal
+                ? Number.parseFloat(t.replace(",", "."))
+                : Number.parseInt(t, 10);
+              onChange(Number.isFinite(n) && n > 0 ? n : 0);
+            }}
+            keyboardType={decimal ? "decimal-pad" : "number-pad"}
+            selectTextOnFocus
+            style={[interiorEstilo, { fontSize: 17, color: colores.texto }]}
+          />
+        </Marco>
       </View>
+      {/* El castigo pegado a su defecto: cada línea es una relación causa→efecto, y es la
+          conversación que el recibidor tiene con el productor enfrente. */}
       <View
         style={{
-          minWidth: 96,
-          minHeight: 48,
+          minWidth: 88,
+          height: 42,
           borderRadius: 8,
           backgroundColor: colores.fondo,
           borderWidth: 1,
@@ -918,7 +1074,7 @@ function Defecto({
           paddingHorizontal: 8,
         }}
       >
-        <Text style={{ fontSize: 10, color: colores.textoTenue, letterSpacing: 0.4 }}>
+        <Text style={{ fontSize: 9, color: colores.textoTenue, letterSpacing: 0.4 }}>
           CASTIGO
         </Text>
         <Text style={{ fontSize: 15, fontWeight: "700", color: colores.advertencia }}>
@@ -929,20 +1085,75 @@ function Defecto({
   );
 }
 
-const etiquetaEstilo = {
-  fontSize: 12.5,
-  color: colores.textoTenue,
-  fontWeight: "600" as const,
-  marginBottom: 4,
-};
+/**
+ * Marco con la etiqueta MONTADA SOBRE EL BORDE.
+ *
+ * Ahorra una línea de texto por campo, y con doce campos eso es la diferencia entre que la
+ * pantalla entre en el teléfono o no. La etiqueta lleva el color de fondo detrás para
+ * tapar el tramo de borde que cruza; por eso `fondoEtiqueta` es un parámetro y no una
+ * constante: dentro del bloque rojo del no registrado el fondo es otro, y con el color
+ * fijo se vería un recorte blanco.
+ */
+function Marco({
+  etiqueta,
+  nota,
+  tenue,
+  sinBorde,
+  fondoEtiqueta,
+  children,
+}: Readonly<{
+  etiqueta: string;
+  nota?: string;
+  tenue?: boolean;
+  sinBorde?: boolean;
+  fondoEtiqueta?: string;
+  children: React.ReactNode;
+}>) {
+  return (
+    <View style={{ position: "relative" }}>
+      <View
+        style={
+          sinBorde
+            ? undefined
+            : {
+                borderWidth: 1,
+                borderColor: colores.borde,
+                borderRadius: 8,
+                backgroundColor: tenue ? colores.fondo : colores.superficie,
+              }
+        }
+      >
+        {children}
+      </View>
+      <Text
+        style={{
+          position: "absolute",
+          top: -7,
+          left: 10,
+          paddingHorizontal: 4,
+          backgroundColor: fondoEtiqueta ?? colores.fondo,
+          fontSize: 11,
+          fontWeight: "600",
+          color: colores.textoTenue,
+        }}
+        numberOfLines={1}
+      >
+        {etiqueta}
+        {nota ? (
+          <Text style={{ fontWeight: "400", color: colores.textoTenue }}>{`  ${nota}`}</Text>
+        ) : null}
+      </Text>
+    </View>
+  );
+}
 
-const cajonEstilo = {
-  backgroundColor: colores.superficie,
-  borderWidth: 1,
-  borderColor: colores.borde,
-  borderRadius: 8,
-  paddingHorizontal: 12,
-  minHeight: 48,
+/** Interior del marco: sin borde ni fondo propios — los pone el Marco. */
+const interiorEstilo = {
+  paddingHorizontal: 10,
+  // 42 y no 48: la fila del legacy mide ~44 con su etiqueta al lado, y ahí está la
+  // diferencia que hacía que la pantalla no cerrara sin scroll. Sigue por encima del
+  // mínimo táctil cómodo y el número no se achica — se achica el aire, no el dato.
+  minHeight: 42,
   flexDirection: "row" as const,
   alignItems: "center" as const,
   justifyContent: "space-between" as const,
