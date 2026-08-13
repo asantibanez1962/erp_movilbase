@@ -61,6 +61,17 @@ export function RemedidaScreen({
   const { width } = useWindowDimensions();
   const dosColumnas = width >= 700;
   const cosecha = useSesion((s) => s.cosecha);
+  /**
+   * ⚠️ EL SIFÓN NO SE ELIGE: es el que el usuario tiene asignado, igual que el
+   * recibidor en el recibo. En un sifón se hacen las dos cosas —recibos de quien
+   * entrega en planta y remedidas de los camiones que llegan de los recibidores— y en
+   * los dos casos el lugar lo fija la asignación, no la pantalla.
+   *
+   * De él sale además el prefijo del número, así que digitarlo sería poder emitir
+   * documentos con el número de otro sitio.
+   */
+  const sifonSesion = useSesion((s) => s.recibidor);
+  const sifonNombre = useSesion((s) => s.recibidorNombre ?? s.recibidor);
 
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,7 +82,7 @@ export function RemedidaScreen({
   const [transportistas, setTransportistas] = useState<Transportista[]>([]);
   const [recibidores, setRecibidores] = useState<Recibidor[]>([]);
 
-  const [sifon, setSifon] = useState(remedida?.sifon ?? "");
+  const sifon = remedida?.sifon ?? sifonSesion ?? "";
   const [numero, setNumero] = useState<string | null>(remedida?.recibo ?? null);
   const [calidad, setCalidad] = useState<string | null>(remedida?.calidad ?? "M");
   const [tipocafe, setTipocafe] = useState<string | null>(remedida?.tipocafe ?? null);
@@ -132,6 +143,9 @@ export function RemedidaScreen({
       .catch((e: Error) => setError(e.message));
   }, [sifon, remedida]);
 
+  // Sin sifón asignado no se puede emitir: el número sale de él.
+  const sinSifon = !sifon.trim();
+
   const datos = (): DatosRemedida => ({
     sifon: sifon.trim(),
     calidad,
@@ -150,7 +164,7 @@ export function RemedidaScreen({
   });
 
   const listo =
-    sifon.trim().length > 0 &&
+    !sinSifon &&
     numero != null &&
     calidad != null &&
     // Sin recibidores la remedida no dice de dónde vino el café, que es justamente para
@@ -231,32 +245,14 @@ export function RemedidaScreen({
 
   const identificacion = (
     <>
-      <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
-        <View style={{ flex: 1 }}>
-          <Campo etiqueta="Sifón" sinMargen>
-            <TextInput
-              value={sifon}
-              onChangeText={setSifon}
-              placeholder="001"
-              placeholderTextColor={colores.textoTenue}
-              keyboardType="number-pad"
-              maxLength={3}
-              editable={remedida == null}
-              style={[interior, { fontSize: 17, color: colores.texto }]}
-            />
-          </Campo>
-        </View>
-        <View style={{ flex: 1 }}>
-          <Campo etiqueta="Calidad" sinMargen>
-            <TouchableOpacity onPress={() => setPicker("calidad")} style={interior}>
-              <Text style={{ fontSize: 16, color: colores.texto }}>
-                {nombreDe(calidades, (c) => c.calidad === calidad, (c) => c.nombre)}
-              </Text>
-              <Text style={{ color: colores.textoTenue }}>▾</Text>
-            </TouchableOpacity>
-          </Campo>
-        </View>
-      </View>
+      <Campo etiqueta="Calidad">
+        <TouchableOpacity onPress={() => setPicker("calidad")} style={interior}>
+          <Text style={{ fontSize: 16, color: colores.texto }}>
+            {nombreDe(calidades, (c) => c.calidad === calidad, (c) => c.nombre)}
+          </Text>
+          <Text style={{ color: colores.textoTenue }}>▾</Text>
+        </TouchableOpacity>
+      </Campo>
 
       <View style={{ flexDirection: "row", gap: 10, paddingHorizontal: 14 }}>
         <View style={{ flex: 1 }}>
@@ -455,6 +451,7 @@ export function RemedidaScreen({
         }}
       >
         <Chip texto={fmtFecha(remedida?.fecha ?? Date.now())} />
+        <Chip texto={sifonNombre ?? "sin sifón"} />
         <Chip texto={cosecha ?? "—"} />
         <View style={{ flex: 1 }} />
         <Text style={{ fontSize: 20, fontWeight: "700", color: colores.texto }}>
@@ -463,6 +460,12 @@ export function RemedidaScreen({
       </View>
 
       {error ? <Text style={estilos.error}>⚠ {error}</Text> : null}
+      {sinSifon ? (
+        <Text style={estilos.error}>
+          Tu usuario no tiene un sifón asignado. La remedida se hace EN un sifón, y de
+          él sale el número del documento — hay que asignarlo desde el web.
+        </Text>
+      ) : null}
 
       {dosColumnas ? (
         <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
@@ -517,11 +520,15 @@ export function RemedidaScreen({
       <SelectorMultiple
         visible={picker === "recibidores"}
         titulo="Recibidores del camión"
-        opciones={recibidores.map((r) => ({
-          valor: r.recibidor.trim(),
-          titulo: r.nombre ?? r.recibidor,
-          subtitulo: r.recibidor.trim(),
-        }))}
+        // Sólo los de campo (tipo R): el sifón es DONDE se recibe, no de dónde viene
+        // el camión, y ofrecerlo acá invita a marcarse a sí mismo.
+        opciones={recibidores
+          .filter((r) => (r.tipo ?? "").trim().toUpperCase() !== "S")
+          .map((r) => ({
+            valor: r.recibidor.trim(),
+            titulo: r.nombre ?? r.recibidor,
+            subtitulo: r.recibidor.trim(),
+          }))}
         elegidos={elegidos}
         onListo={(v) => {
           setElegidos(v);
