@@ -7,17 +7,17 @@ import { useAuthStore } from "@erp/shared-api";
 import { cliente } from "./src/branding";
 import { bootstrapApi } from "./src/lib/api";
 import { useSesion } from "./src/lib/sesion";
+import { LoginScreen } from "./src/screens/LoginScreen";
+import { ContextoScreen } from "./src/screens/ContextoScreen";
 
 /**
- * Andamiaje de la app de recibos.
+ * Raíz de la app de recibos.
  *
- * Por ahora sólo arranca el cliente HTTP, hidrata la sesión y muestra en qué estado
- * está. Las pantallas —login, contexto, bitácora, recibo— entran en los pasos
- * siguientes; esto existe para que el proyecto compile y arranque de punta a punta
- * antes de construir nada encima.
- *
- * El chrome usa `cliente.chrome`, el color de marca oscurecido hasta 4.5:1 de contraste
- * contra el texto claro. Ver src/branding.
+ * Tres puertas antes de trabajar, en este orden y por esta razón:
+ *   1. sesión — las credenciales se validan contra el servidor, así que el primer
+ *      ingreso de cada usuario en cada teléfono necesita señal. De ahí en adelante no.
+ *   2. contexto — empresa, recibidor y cosecha. Sin eso el pull no sabe qué recortar.
+ *   3. la app.
  */
 export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
@@ -25,8 +25,11 @@ export default function App() {
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const hidratandoSesion = useSesion((s) => s.hidratando);
-  const recibidor = useSesion((s) => s.recibidorNombre ?? s.recibidor);
+  const reseteando = useSesion((s) => s.reseteando);
+  const generacion = useSesion((s) => s.generacion);
+  const recibidor = useSesion((s) => s.recibidor);
   const cosecha = useSesion((s) => s.cosecha);
+  const recibidorNombre = useSesion((s) => s.recibidorNombre);
   const hidratarSesion = useSesion((s) => s.hidratar);
 
   useEffect(() => {
@@ -40,41 +43,60 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  const cargando = !bootDone || isInitializing || hidratandoSesion;
-
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="light" />
-        <View style={[styles.root, { backgroundColor: cliente.chrome }]}>
-          {cargando ? (
-            <>
-              <ActivityIndicator size="large" color={cliente.acento} />
-              <Text style={styles.texto}>Iniciando...</Text>
-            </>
-          ) : (
-            <>
-              <Text style={styles.titulo}>{cliente.nombre}</Text>
-              {bootError ? (
+        {(() => {
+          if (!bootDone || isInitializing || hidratandoSesion) {
+            return <Espera texto="Iniciando..." />;
+          }
+          if (bootError) {
+            return (
+              <View style={[styles.centro, { backgroundColor: cliente.chrome }]}>
                 <Text style={styles.error}>⚠ {bootError}</Text>
-              ) : (
-                <Text style={styles.texto}>
-                  {isAuthenticated
-                    ? `${recibidor ?? "sin recibidor"} · ${cosecha ?? "sin cosecha"}`
-                    : "Sin sesión"}
-                </Text>
-              )}
-            </>
-          )}
-        </View>
+              </View>
+            );
+          }
+          // Mientras se borra la base, NADA que consulte WatermelonDB puede estar
+          // montado: si quedaran suscripciones vivas, el reset las mata y las pantallas
+          // seguirían mostrando datos que ya no existen. Ver lib/alcance.ts.
+          if (reseteando) return <Espera texto="Preparando..." />;
+
+          if (!isAuthenticated) return <LoginScreen />;
+          if (recibidor == null || !cosecha) return <ContextoScreen />;
+
+          // `key`: después de borrar la base hay que recrear todas las queries contra la
+          // base nueva. Remontar el árbol es la forma limpia de lograrlo sin obligar a
+          // cerrar y abrir la app.
+          return (
+            <View key={generacion} style={[styles.centro, { backgroundColor: cliente.chrome }]}>
+              <Text style={styles.titulo}>{cliente.nombre}</Text>
+              <Text style={styles.texto}>
+                {recibidorNombre ?? recibidor} · {cosecha}
+              </Text>
+              <Text style={styles.pie}>Las pantallas de bitácora y recibo entran acá.</Text>
+            </View>
+          );
+        })()}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }
 
+function Espera({ texto }: Readonly<{ texto: string }>) {
+  return (
+    <View style={[styles.centro, { backgroundColor: cliente.chrome }]}>
+      <ActivityIndicator size="large" color={cliente.acento} />
+      <Text style={styles.texto}>{texto}</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
-  root: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 10 },
+  centro: { flex: 1, alignItems: "center", justifyContent: "center", padding: 24, gap: 10 },
   titulo: { color: "#f1f5f9", fontSize: 22, fontWeight: "700" },
   texto: { color: "#cbd5e1", fontSize: 14 },
+  pie: { color: "#94a3b8", fontSize: 12, marginTop: 12 },
   error: { color: "#fca5a5", fontSize: 14, textAlign: "center" },
 });

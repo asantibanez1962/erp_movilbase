@@ -76,3 +76,20 @@ export async function resumenPendientes(): Promise<{
   }
   return { porEnviar, retenidas, total: porEnviar + retenidas };
 }
+
+/**
+ * El resumen en palabras, para un aviso que alguien lee antes de decidir si descarta.
+ *
+ * Un número solo no alcanza: "3 pendientes" no dice si son tres recibos del día o tres
+ * bitácoras cerradas que no subieron, y esa diferencia cambia la decisión.
+ */
+export function describirPendientes(p: {
+  porEnviar: number;
+  retenidas: number;
+  total: number;
+}): string {
+  const partes: string[] = [];
+  if (p.porEnviar > 0) partes.push(`${p.porEnviar} sin enviar`);
+  if (p.retenidas > 0) partes.push(`${p.retenidas} sin imprimir`);
+  return partes.length > 0 ? partes.join(" y ") : "nada";
+}

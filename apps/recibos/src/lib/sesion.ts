@@ -35,6 +35,9 @@ export interface SesionState {
   recibidorNombre: string | null;
   politicas: MapaPoliticas;
   hidratando: boolean;
+  /** Mientras esté en true el árbol se desmonta: sin suscripciones vivas se puede
+   *  borrar la base sin dejar pantallas con observadores muertos. Ver alcance.ts. */
+  reseteando: boolean;
 
   hidratar: () => Promise<void>;
   elegir: (v: {
@@ -52,6 +55,7 @@ export interface SesionState {
    */
   generacion: number;
   remontar: () => void;
+  setReseteando: (v: boolean) => void;
   setPoliticas: (p: MapaPoliticas) => void;
   limpiar: () => Promise<void>;
 }
@@ -64,6 +68,7 @@ export const useSesion = create<SesionState>((set) => ({
   politicas: {},
   generacion: 0,
   hidratando: true,
+  reseteando: false,
 
   hidratar: async () => {
     try {
@@ -98,6 +103,7 @@ export const useSesion = create<SesionState>((set) => ({
   },
 
   remontar: () => set((e) => ({ generacion: e.generacion + 1 })),
+  setReseteando: (reseteando) => set({ reseteando }),
   setPoliticas: (politicas) => set({ politicas }),
 
   limpiar: async () => {
