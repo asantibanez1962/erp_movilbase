@@ -7,6 +7,7 @@ import {
   type ResultadoCalculo,
 } from "@erp/recibos-calc";
 import { database } from "./db";
+import { crearConUuid } from "./crear";
 import { useSesion } from "./sesion";
 import { cliente } from "../branding";
 import type {
@@ -425,7 +426,8 @@ export async function crearRecibo(d: DatosRecibo): Promise<Recibo> {
   const ahora = Date.now();
 
   return database.write(async () =>
-    database.get<Recibo>("recibos").create((r) => {
+    crearConUuid<Recibo>("recibos", (r, uuid) => {
+      r.clientUuid = uuid;
       r.idBitacora = d.bitacora.id;
       r.recibo = numero;
       r.fecha = ahora;

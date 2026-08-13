@@ -2,6 +2,7 @@ import { Q } from "@nozbe/watermelondb";
 import { useAuthStore } from "@erp/shared-api";
 import { describirFallos } from "@erp/shared-sync";
 import { database } from "./db";
+import { crearConUuid } from "./crear";
 import { useSesion } from "./sesion";
 import { syncNow } from "./sync";
 import type { Bitacora, Recibo } from "../db/models";
@@ -78,7 +79,8 @@ export async function abrirBitacora(datos: DatosApertura): Promise<Bitacora> {
   const ahora = Date.now();
 
   return database.write(async () =>
-    database.get<Bitacora>("bitacoras").create((b) => {
+    crearConUuid<Bitacora>("bitacoras", (b, uuid) => {
+      b.clientUuid = uuid;
       b.recibidor = recibidor;
       b.cosecha = cosecha;
       b.fecha = ahora;

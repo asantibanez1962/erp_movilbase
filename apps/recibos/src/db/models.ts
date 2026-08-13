@@ -205,6 +205,8 @@ export class CuotaEntregador extends Model {
 export class Remedida extends Model {
   static readonly table = "remedidas";
   @field("server_id") serverId!: string | null;
+  /** Igual al id local: así la fila que vuelve del servidor se reconoce. */
+  @field("client_uuid") clientUuid!: string;
   /** sifón(3) + 6 dígitos, con los ceros de relleno. */
   @field("recibo") recibo!: string;
   @field("sifon") sifon!: string;
@@ -232,6 +234,8 @@ export class Remedida extends Model {
 export class RemedidaRuta extends Model {
   static readonly table = "remedida_rutas";
   @field("server_id") serverId!: string | null;
+  /** Igual al id local: así la fila que vuelve del servidor se reconoce. */
+  @field("client_uuid") clientUuid!: string;
   @field("id_remedida") idRemedida!: string;
   @field("recibidor") recibidor!: string;
 }
@@ -239,6 +243,8 @@ export class RemedidaRuta extends Model {
 export class Bitacora extends Model {
   static readonly table = "bitacoras";
   @field("server_id") serverId!: string | null;
+  /** Igual al id local: así la fila que vuelve del servidor se reconoce. */
+  @field("client_uuid") clientUuid!: string;
   @field("recibidor") recibidor!: string;
   @field("cosecha") cosecha!: string;
   @field("tipocafe") tipocafe!: string | null;
@@ -260,6 +266,8 @@ export class Bitacora extends Model {
 export class Recibo extends Model {
   static readonly table = "recibos";
   @field("server_id") serverId!: string | null;
+  /** Igual al id local: así la fila que vuelve del servidor se reconoce. */
+  @field("client_uuid") clientUuid!: string;
   @field("id_bitacora") idBitacora!: string;
   @field("recibo") recibo!: string;
   @field("fecha") fecha!: number | null;

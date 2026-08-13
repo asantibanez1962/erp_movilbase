@@ -1,6 +1,7 @@
 import { Q } from "@nozbe/watermelondb";
 import { useAuthStore } from "@erp/shared-api";
 import { database } from "./db";
+import { crearConUuid } from "./crear";
 import { useSesion } from "./sesion";
 import { TEXTO_ANULADO } from "./recibo";
 import type { Remedida, RemedidaRuta } from "../db/models";
@@ -113,7 +114,8 @@ export async function crearRemedida(d: DatosRemedida): Promise<Remedida> {
 
   let creada!: Remedida;
   await database.write(async () => {
-    creada = await database.get<Remedida>("remedidas").create((r) => {
+    creada = await crearConUuid<Remedida>("remedidas", (r, uuid) => {
+      r.clientUuid = uuid;
       r.recibo = numero;
       r.sifon = d.sifon.trim();
       // El recibidor del contexto queda como referencia de quién capturó; los del camión
@@ -131,7 +133,8 @@ export async function crearRemedida(d: DatosRemedida): Promise<Remedida> {
 
     await Promise.all(
       d.recibidores.map((codigo) =>
-        database.get<RemedidaRuta>("remedida_rutas").create((x) => {
+        crearConUuid<RemedidaRuta>("remedida_rutas", (x, uuid) => {
+          x.clientUuid = uuid;
           x.idRemedida = creada.id;
           x.recibidor = codigo;
         })
@@ -170,7 +173,8 @@ export async function actualizarRemedida(
     await Promise.all(previas.map((x) => x.destroyPermanently()));
     await Promise.all(
       d.recibidores.map((codigo) =>
-        database.get<RemedidaRuta>("remedida_rutas").create((x) => {
+        crearConUuid<RemedidaRuta>("remedida_rutas", (x, uuid) => {
+          x.clientUuid = uuid;
           x.idRemedida = remedida.id;
           x.recibidor = codigo;
         })

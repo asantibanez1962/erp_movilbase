@@ -19,6 +19,30 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // `client_uuid` en las cuatro que el teléfono origina. Sin él la fila que vuelve del
+      // servidor no se reconoce y se duplica — y eso no se ve al guardar ni en el primer
+      // sync, sino en el segundo.
+      toVersion: 5,
+      steps: [
+        addColumns({
+          table: "bitacoras",
+          columns: [{ name: "client_uuid", type: "string", isIndexed: true }],
+        }),
+        addColumns({
+          table: "recibos",
+          columns: [{ name: "client_uuid", type: "string", isIndexed: true }],
+        }),
+        addColumns({
+          table: "remedidas",
+          columns: [{ name: "client_uuid", type: "string", isIndexed: true }],
+        }),
+        addColumns({
+          table: "remedida_rutas",
+          columns: [{ name: "client_uuid", type: "string", isIndexed: true }],
+        }),
+      ],
+    },
+    {
       // La remedida del sitio del camión. Ver v1.71/RC/39 y /40.
       toVersion: 4,
       steps: [

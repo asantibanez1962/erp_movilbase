@@ -39,8 +39,11 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *        por su número. Ver v1.71/RC/36.
  *   4 → `remedidas` y `remedida_rutas`: la remedida se captura en el sitio del camión,
  *        que no tiene PC ni red. Ver v1.71/RC/39 y /40.
+ *   5 → `client_uuid` en las cuatro que el teléfono origina. Estaba documentado desde
+ *        el principio y nunca se implementó: la primera jornada subió con ClientUuid
+ *        en NULL y el push la dio por aceptada.
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -315,6 +318,9 @@ export const schema = appSchema({
       name: "remedidas",
       columns: [
         { name: "server_id", type: "string", isOptional: true },
+        // Igual al id local. Es lo que permite que la fila que vuelve del
+        // servidor se reconozca en vez de duplicarse. Ver lib/crear.ts.
+        { name: "client_uuid", type: "string", isIndexed: true },
         // sifón(3) + 6 dígitos. En el servidor es numérico; acá va como texto para no
         // perder los ceros de relleno al mostrarlo e imprimirlo.
         { name: "recibo", type: "string", isIndexed: true },
@@ -345,6 +351,9 @@ export const schema = appSchema({
       name: "remedida_rutas",
       columns: [
         { name: "server_id", type: "string", isOptional: true },
+        // Igual al id local. Es lo que permite que la fila que vuelve del
+        // servidor se reconozca en vez de duplicarse. Ver lib/crear.ts.
+        { name: "client_uuid", type: "string", isIndexed: true },
         { name: "id_remedida", type: "string", isIndexed: true },
         { name: "recibidor", type: "string" },
       ],
@@ -357,6 +366,9 @@ export const schema = appSchema({
       name: "bitacoras",
       columns: [
         { name: "server_id", type: "string", isOptional: true },
+        // Igual al id local. Es lo que permite que la fila que vuelve del
+        // servidor se reconozca en vez de duplicarse. Ver lib/crear.ts.
+        { name: "client_uuid", type: "string", isIndexed: true },
         { name: "recibidor", type: "string", isIndexed: true },
         { name: "cosecha", type: "string" },
         { name: "tipocafe", type: "string", isOptional: true },
@@ -378,6 +390,9 @@ export const schema = appSchema({
       name: "recibos",
       columns: [
         { name: "server_id", type: "string", isOptional: true },
+        // Igual al id local. Es lo que permite que la fila que vuelve del
+        // servidor se reconozca en vez de duplicarse. Ver lib/crear.ts.
+        { name: "client_uuid", type: "string", isIndexed: true },
         { name: "id_bitacora", type: "string", isIndexed: true },
         { name: "recibo", type: "string", isIndexed: true },
         { name: "fecha", type: "number", isOptional: true },
