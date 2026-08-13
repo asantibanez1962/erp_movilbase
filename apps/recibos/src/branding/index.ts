@@ -29,6 +29,8 @@ interface ClienteExtra {
   /** Fijo en clientes.json; si viene null se deriva del color de marca. */
   acento?: string | null;
   tieneLogo: boolean;
+  /** `idsocio` del productor genérico ("PENDIENTE") de este cliente. */
+  idSocioGenerico?: number;
 }
 
 /**
@@ -167,4 +169,11 @@ export const cliente = {
       ? extra.acento
       : aclararHastaContraste(extra.color, chrome, 3),
   logo: LOGOS[extra.id] ?? null,
+  /**
+   * El productor genérico de este cliente. `null` si el APK se compiló sin el dato: la
+   * app entonces NO ofrece recibir a un no registrado, en vez de mandar el recibo a un
+   * idsocio inventado. Un recibo mal atribuido no da error y se descubre tarde.
+   */
+  idSocioGenerico:
+    typeof extra.idSocioGenerico === "number" ? extra.idSocioGenerico : null,
 };

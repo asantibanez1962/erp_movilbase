@@ -1,4 +1,8 @@
-import { schemaMigrations } from "@nozbe/watermelondb/Schema/migrations";
+import {
+  schemaMigrations,
+  addColumns,
+  createTable,
+} from "@nozbe/watermelondb/Schema/migrations";
 
 /**
  * Migraciones del esquema local.
@@ -7,7 +11,62 @@ import { schemaMigrations } from "@nozbe/watermelondb/Schema/migrations";
  * migración, WMDB no tiene cómo actualizar la base del teléfono y **la borra** — con los
  * recibos del día adentro si la bitácora todavía no cerró, que es cuando el teléfono es
  * el único lugar donde existen.
- *
- * Vacío mientras la versión sea 1: no hay nada de dónde migrar.
  */
-export const migrations = schemaMigrations({ migrations: [] });
+export const migrations = schemaMigrations({
+  // ⚠️ EL ORDEN ES DESCENDENTE Y CADA VERSIÓN VA EN SU PROPIO PASO. Agregarle un step a
+  // una versión que los teléfonos YA corrieron no hace nada: WatermelonDB guarda en qué
+  // versión está cada base y sólo aplica las que faltan. La tabla nunca se crearía y las
+  // consultas fallarían en runtime, no al compilar.
+  migrations: [
+    {
+      // Los tramos de la cosecha —Inicios, Centro, Finales— para mostrar el nivel por su
+      // nombre. Ver v1.71/RC/36.
+      toVersion: 3,
+      steps: [
+        createTable({
+          name: "niveles",
+          columns: [
+            { name: "nivel", type: "number", isIndexed: true },
+            { name: "nombre", type: "string", isOptional: true },
+          ],
+        }),
+      ],
+    },
+    {
+      // Lo que le faltaba al teléfono para resolver offline los defaults que el web saca
+      // de sp_rc_recibo_finca_default: el `cldd` sale de la finca, y el certificado sólo
+      // de una cuota ACTIVA. Ver v1.71/RC/34.
+      toVersion: 2,
+      steps: [
+        addColumns({
+          table: "fincas",
+          columns: [{ name: "cldd", type: "number" }],
+        }),
+        addColumns({
+          table: "cuotas",
+          columns: [
+            { name: "id_cuota", type: "number", isIndexed: true },
+            { name: "activo", type: "number" },
+          ],
+        }),
+        addColumns({
+          table: "cuota_entregadores",
+          columns: [{ name: "activo", type: "number" }],
+        }),
+        // El contador del servidor, que es la mitad de `próximo = MAX(local, servidor)`.
+        // Sin él un teléfono reinstalado repite números ya entregados en papel.
+        createTable({
+          name: "talonarios",
+          columns: [
+            { name: "recibidor", type: "string", isIndexed: true },
+            { name: "cosecha", type: "string" },
+            { name: "inicio", type: "string" },
+            { name: "final", type: "string" },
+            { name: "ultimo", type: "string" },
+            { name: "tipo", type: "number" },
+          ],
+        }),
+      ],
+    },
+  ],
+});

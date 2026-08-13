@@ -18,7 +18,13 @@ export function BitacoraScreen({
   bitacora,
   onVolver,
   onNuevoRecibo,
-}: Readonly<{ bitacora: Bitacora; onVolver: () => void; onNuevoRecibo: () => void }>) {
+  onEditar,
+}: Readonly<{
+  bitacora: Bitacora;
+  onVolver: () => void;
+  onNuevoRecibo: () => void;
+  onEditar: () => void;
+}>) {
   // Los botones fijos de abajo tienen que despejar la barra de navegación de Android.
   const insets = useSafeAreaInsets();
   const [recibos, setRecibos] = useState<Recibo[] | null>(null);
@@ -94,6 +100,17 @@ export function BitacoraScreen({
             <Dato etiqueta="Placa" valor={bitacora.placacamion ?? "—"} />
             {bitacora.observaciones ? (
               <Dato etiqueta="Observaciones" valor={bitacora.observaciones} />
+            ) : null}
+
+            {/* El camión y su placa se saben al FINAL del día, no al abrir. Sin esta
+                entrada la jornada quedaba con los campos vacíos para siempre. */}
+            {abierta ? (
+              <TouchableOpacity onPress={onEditar} style={estilos.detalleFila}>
+                <Text style={estilos.detalleEtiqueta}>Completar datos del camión</Text>
+                <Text style={[estilos.detalleValor, { color: cliente.chrome }]}>
+                  Editar ›
+                </Text>
+              </TouchableOpacity>
             ) : null}
 
             <Text style={estilos.seccion}>

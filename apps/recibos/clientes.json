@@ -12,9 +12,14 @@
     "de compilar, el recibos puede corregirla desde el drawer → 'Servidor'.",
     "",
     "Para compilar un cliente:  EXPO_PUBLIC_CLIENTE=altura npx expo prebuild ...",
-    "Sin la variable se compila el perfil 'dev', que es el de siempre."
+    "Sin la variable se compila el perfil 'dev', que es el de siempre.",
+    "",
+    "idSocioGenerico: el productor \"PENDIENTE\" al que se le cargan los recibos de",
+    "quien todavía no está registrado. Se identifica por idsocio y NO por código,",
+    "porque el formato del código varía por cliente (C00000 en unos, 00-00000 en",
+    "otros). Hoy ese valor vive en un .ini del legacy. 5109 es el de Altura; hay que",
+    "confirmarlo cliente por cliente antes de generar su APK."
   ],
-
   "dev": {
     "nombre": "Recibos",
     "nombreLargo": "Recibos (desarrollo)",
@@ -24,51 +29,52 @@
     "acento": "#3b82f6",
     "package": "cr.confeldan.recibos",
     "apiBaseUrl": "http://10.0.2.2:5249",
-    "logo": null
+    "logo": null,
+    "idSocioGenerico": 5109
   },
-
   "altura": {
     "nombre": "Recibos Altura",
     "nombreLargo": "Café Altura de San Ramón Especial S.A.",
     "color": "#5caa3b",
     "package": "cr.confeldan.recibos.altura",
     "apiBaseUrl": "http://192.168.100.10:5249",
-    "logo": "altura.png"
+    "logo": "altura.png",
+    "idSocioGenerico": 5109
   },
-
   "laeva": {
     "nombre": "Recibos La Eva",
     "nombreLargo": "Beneficio La Eva",
     "color": "#095ee9",
     "package": "cr.confeldan.recibos.laeva",
     "apiBaseUrl": "http://192.168.100.10:5249",
-    "logo": "laeva.png"
+    "logo": "laeva.png",
+    "idSocioGenerico": 5109
   },
-
   "diamante": {
     "nombre": "Recibos Diamante",
     "nombreLargo": "Montañas del Diamante",
     "color": "#095ee9",
     "package": "cr.confeldan.recibos.diamante",
     "apiBaseUrl": "http://192.168.100.10:5249",
-    "logo": "diamante.png"
+    "logo": "diamante.png",
+    "idSocioGenerico": 5109
   },
-
   "santacruz": {
     "nombre": "Recibos Santa Cruz",
     "nombreLargo": "Beneficio Santa Cruz",
     "color": "#5d52ba",
     "package": "cr.confeldan.recibos.santacruz",
     "apiBaseUrl": "http://192.168.100.10:5249",
-    "logo": "santacruz.png"
+    "logo": "santacruz.png",
+    "idSocioGenerico": 5109
   },
-
   "marespi": {
     "nombre": "Recibos Marespi",
     "nombreLargo": "Marespi S.A.",
     "color": "#5a7443",
     "package": "cr.confeldan.recibos.marespi",
     "apiBaseUrl": "http://192.168.100.10:5249",
-    "logo": "marespi.png"
+    "logo": "marespi.png",
+    "idSocioGenerico": 5109
   }
 }

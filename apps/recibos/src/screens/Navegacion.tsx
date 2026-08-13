@@ -24,6 +24,7 @@ import { useSesion } from "../lib/sesion";
 import { BitacorasScreen } from "./BitacorasScreen";
 import { AbrirBitacoraScreen } from "./AbrirBitacoraScreen";
 import { BitacoraScreen } from "./BitacoraScreen";
+import { ReciboScreen } from "./ReciboScreen";
 import { ServidorScreen } from "./ServidorScreen";
 
 /**
@@ -55,6 +56,8 @@ export type StackParams = {
   // que la pantalla se entera sola cuando se le agrega un recibo o se cierra. Con un id
   // habría que volver a buscarla y suscribirse a mano en cada entrada.
   Jornada: { bitacora: Bitacora };
+  Recibo: { bitacora: Bitacora };
+  EditarJornada: { bitacora: Bitacora };
 };
 
 const Stack = createNativeStackNavigator<StackParams>();
@@ -113,12 +116,31 @@ function JornadasStack() {
             bitacora={route.params.bitacora}
             onVolver={() => navigation.navigate("Jornadas")}
             onNuevoRecibo={() =>
-              Alert.alert(
-                "Todavía no",
-                "La pantalla de recibo es el paso siguiente. La jornada ya se puede " +
-                  "abrir, ver y cerrar."
-              )
+              navigation.navigate("Recibo", { bitacora: route.params.bitacora })
             }
+            onEditar={() =>
+              navigation.navigate("EditarJornada", { bitacora: route.params.bitacora })
+            }
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name="EditarJornada" options={{ title: "Datos de la jornada" }}>
+        {({ navigation, route }) => (
+          <AbrirBitacoraScreen
+            bitacora={route.params.bitacora}
+            onListo={() => navigation.goBack()}
+            onCancelar={() => navigation.goBack()}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name="Recibo" options={{ title: "Nuevo recibo" }}>
+        {({ navigation, route }) => (
+          <ReciboScreen
+            bitacora={route.params.bitacora}
+            onListo={() => navigation.goBack()}
+            onCancelar={() => navigation.goBack()}
           />
         )}
       </Stack.Screen>

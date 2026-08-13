@@ -30,8 +30,15 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  * adentro, si todavía no cerraron la bitácora.
  *
  *   1 → schema inicial
+ *   2 → `cldd` en fincas y `activo` en cuotas/entregadores: sin esos tres datos el
+ *        teléfono no puede reproducir offline los defaults que el web resuelve con
+ *        sp_rc_recibo_finca_default. Ver v1.71/RC/34.
+ *        Y la tabla `talonarios`, de donde sale el contador del servidor. Ver
+ *        v1.71/RC/35.
+ *   3 → `niveles`: el nivel se muestra por su nombre (Inicios, Centro, Finales) y no
+ *        por su número. Ver v1.71/RC/36.
  */
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 3;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -42,6 +49,8 @@ export const COLLECTIONS = [
   // Catálogos del cálculo — no tienen pantalla, sólo alimentan a recibos-calc.
   "castigos_broca",
   "castigos_cosecha",
+  "talonarios",
+  "niveles",
   "recibidor_nivel",
   "precios",
   // Catálogos de consulta y selección.
@@ -229,10 +238,37 @@ export const schema = appSchema({
       ],
     }),
     tableSchema({
+      // Los tramos de la cosecha: Inicios, Centro, Finales. Se muestran por nombre —
+      // "Nivel 1" no le dice nada al recibidor e invita a confundirlo con la calidad.
+      name: "niveles",
+      columns: [
+        { name: "nivel", type: "number", isIndexed: true },
+        { name: "nombre", type: "string", isOptional: true },
+      ],
+    }),
+    tableSchema({
+      // Una sola fila por recibidor y cosecha: el talonario activo automático. De acá
+      // sale la mitad de la regla `próximo = MAX(local, servidor)` que impide que un
+      // teléfono reinstalado repita números ya entregados en papel.
+      name: "talonarios",
+      columns: [
+        { name: "recibidor", type: "string", isIndexed: true },
+        { name: "cosecha", type: "string" },
+        { name: "inicio", type: "string" },
+        { name: "final", type: "string" },
+        /** ⚠️ NO es el último usado: es el PRÓXIMO. Ver §4 del design doc. */
+        { name: "ultimo", type: "string" },
+        { name: "tipo", type: "number" },
+      ],
+    }),
+    tableSchema({
       name: "fincas",
       columns: [
         { name: "id_socio", type: "number", isIndexed: true },
         { name: "nombre", type: "string", isOptional: true },
+        // Atributo de la FINCA, no del recibo: no se digita. De acá sale el `cldd` del
+        // recibo al elegir el productor, igual que en el web.
+        { name: "cldd", type: "number" },
       ],
     }),
     // Sin `cuota` ni `premio`: sólo importa que la cuota EXISTA. Bajar el monto
@@ -240,9 +276,16 @@ export const schema = appSchema({
     tableSchema({
       name: "cuotas",
       columns: [
+        // La llave por la que la referencian los entregadores. Se proyecta explícita y
+        // no se usa `id`: son dos columnas distintas de la tabla (`idcuotaprod` legacy e
+        // `Id` nueva) que hoy coinciden por cómo se rellenaron, no por definición.
+        { name: "id_cuota", type: "number", isIndexed: true },
         { name: "id_socio", type: "number", isIndexed: true },
         { name: "id_certificado", type: "number" },
         { name: "cosecha", type: "string" },
+        // El servidor filtra por Activo=1. Sin este dato el teléfono tomaría el
+        // certificado de una cuota dada de baja, sin ningún error.
+        { name: "activo", type: "number" },
       ],
     }),
     // Quién puede entregar contra una cuota. Sin esto, un entregador ajeno pasaría
@@ -252,6 +295,7 @@ export const schema = appSchema({
       columns: [
         { name: "id_cuota", type: "number", isIndexed: true },
         { name: "id_socio", type: "number", isIndexed: true },
+        { name: "activo", type: "number" },
       ],
     }),
 

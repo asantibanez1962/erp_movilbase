@@ -85,6 +85,11 @@ module.exports = ({ config }) => {
         // si fuera un color.
         ...(cliente.acento ? { acento: cliente.acento } : {}),
         tieneLogo: Boolean(logo),
+        // El productor "PENDIENTE" de ESTE cliente. Se hornea en el APK porque hoy vive
+        // en un .ini del legacy y varía por empresa. ⚠️ El servidor lo valida al recibir:
+        // si el del APK y el suyo difieren, los recibos se atribuirían a otro productor
+        // sin ningún error.
+        idSocioGenerico: cliente.idSocioGenerico,
       },
     },
   };

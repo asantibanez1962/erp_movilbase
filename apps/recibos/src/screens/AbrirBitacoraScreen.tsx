@@ -11,7 +11,7 @@ import { Q } from "@nozbe/watermelondb";
 import { useAuthStore } from "@erp/shared-api";
 import { cliente } from "../branding";
 import { database } from "../lib/db";
-import { abrirBitacora } from "../lib/bitacora";
+import { abrirBitacora, editarBitacora } from "../lib/bitacora";
 import type { Bitacora, TipoCafe, Transportista } from "../db/models";
 import { PickerModal, type OpcionPicker } from "./Picker";
 import { colores, estilos } from "./estilos";
@@ -29,18 +29,27 @@ import { colores, estilos } from "./estilos";
  * Nada de esto necesita red. Es una fila local, y sale del teléfono recién al cerrar.
  */
 export function AbrirBitacoraScreen({
+  bitacora,
   onListo,
   onCancelar,
-}: Readonly<{ onListo: (b: Bitacora) => void; onCancelar: () => void }>) {
+}: Readonly<{
+  /** Presente ⇒ se EDITA una jornada abierta en vez de abrir una nueva. */
+  bitacora?: Bitacora;
+  onListo: (b: Bitacora) => void;
+  onCancelar: () => void;
+}>) {
+  const editando = bitacora != null;
   const insets = useSafeAreaInsets();
   const usuario = useAuthStore((s) => s.user?.usuario ?? "—");
   const [tiposCafe, setTiposCafe] = useState<OpcionPicker[]>([]);
   const [transportistas, setTransportistas] = useState<OpcionPicker[]>([]);
 
-  const [tipocafe, setTipocafe] = useState<string | null>(null);
-  const [transportista, setTransportista] = useState<string | null>(null);
-  const [placacamion, setPlaca] = useState("");
-  const [observaciones, setObs] = useState("");
+  const [tipocafe, setTipocafe] = useState<string | null>(bitacora?.tipocafe ?? null);
+  const [transportista, setTransportista] = useState<string | null>(
+    bitacora?.transportista ?? null
+  );
+  const [placacamion, setPlaca] = useState(bitacora?.placacamion ?? "");
+  const [observaciones, setObs] = useState(bitacora?.observaciones ?? "");
   const [picker, setPicker] = useState<"tipo" | "transportista" | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [guardando, setGuardando] = useState(false);
@@ -72,16 +81,17 @@ export function AbrirBitacoraScreen({
   }, []);
 
   const guardar = async () => {
-    if (guardando) return;
+    if (guardando || !tipocafe) return;
     setGuardando(true);
     setError(null);
     try {
-      const b = await abrirBitacora({
+      const datos = {
         tipocafe,
         transportista,
         placacamion: placacamion.trim() || null,
         observaciones: observaciones.trim() || null,
-      });
+      };
+      const b = editando ? await editarBitacora(bitacora, datos) : await abrirBitacora(datos);
       onListo(b);
     } catch (e) {
       setError((e as Error)?.message ?? "No se pudo abrir la jornada.");
@@ -101,22 +111,34 @@ export function AbrirBitacoraScreen({
     >
       <View style={{ padding: 20, gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "700", color: colores.texto }}>
-          Abrir jornada
+          {editando ? "Datos de la jornada" : "Abrir jornada"}
         </Text>
         <Text style={{ color: colores.textoTenue, fontSize: 14 }}>
-          La fecha, la hora y el medidor se llenan solos.
+          {editando
+            ? "El transportista y la placa se pueden completar mientras la jornada esté abierta."
+            : "La fecha, la hora y el medidor se llenan solos."}
         </Text>
       </View>
 
-      <Text style={estilos.seccion}>Automático</Text>
-      <Dato etiqueta="Fecha" valor={new Date().toLocaleDateString("es-CR")} />
-      <Dato
-        etiqueta="Hora de inicio"
-        valor={new Date().toLocaleTimeString("es-CR", { hour: "2-digit", minute: "2-digit" })}
-      />
-      <Dato etiqueta="Medidor" valor={usuario} />
+      {editando ? null : (
+        <>
+          <Text style={estilos.seccion}>Automático</Text>
+          <Dato etiqueta="Fecha" valor={new Date().toLocaleDateString("es-CR")} />
+          <Dato
+            etiqueta="Hora de inicio"
+            valor={new Date().toLocaleTimeString("es-CR", {
+              hour: "2-digit",
+              minute: "2-digit",
+            })}
+          />
+          <Dato etiqueta="Medidor" valor={usuario} />
+        </>
+      )}
 
       <Text style={estilos.seccion}>De la jornada</Text>
+      {/* OBLIGATORIO. El tipo de café decide el PRECIO de todos los recibos de la
+          jornada: buscarPrecio() filtra por él, así que sin tipo ningún recibo del día
+          encuentra precio. Dejar abrir sin esto era abrir un día entero condenado. */}
       <Selector
         etiqueta="Tipo de café"
         valor={nombreDe(tiposCafe, tipocafe)}
@@ -155,9 +177,9 @@ export function AbrirBitacoraScreen({
       <View style={{ padding: 20, gap: 12 }}>
         <TouchableOpacity
           onPress={guardar}
-          disabled={guardando}
+          disabled={guardando || !tipocafe}
           style={{
-            backgroundColor: cliente.chrome,
+            backgroundColor: tipocafe ? cliente.chrome : colores.borde,
             borderRadius: 10,
             minHeight: 50,
             alignItems: "center",
@@ -165,8 +187,14 @@ export function AbrirBitacoraScreen({
             opacity: guardando ? 0.6 : 1,
           }}
         >
-          <Text style={{ color: "#f1f5f9", fontWeight: "700", fontSize: 16 }}>
-            Abrir jornada
+          <Text
+            style={{
+              color: tipocafe ? "#f1f5f9" : colores.textoTenue,
+              fontWeight: "700",
+              fontSize: 16,
+            }}
+          >
+            {editando ? "Guardar" : "Abrir jornada"}
           </Text>
         </TouchableOpacity>
 

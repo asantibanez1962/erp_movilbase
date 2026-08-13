@@ -95,6 +95,33 @@ export async function abrirBitacora(datos: DatosApertura): Promise<Bitacora> {
 }
 
 /**
+ * Completar los datos de una jornada ABIERTA.
+ *
+ * Hace falta por cómo es el día de verdad: **el camión y su placa se saben al final, no
+ * al empezar**. La primera versión pedía todo al abrir y después no dejaba tocar nada, y
+ * el resultado era una jornada que arrancaba a las cinco de la mañana con datos que
+ * todavía no existían y quedaban vacíos para siempre.
+ *
+ * Cerrada no se edita: el papel ya salió con el camión y el envío ya ocurrió.
+ */
+export async function editarBitacora(
+  bitacora: Bitacora,
+  datos: DatosApertura
+): Promise<Bitacora> {
+  if (!bitacora.estaAbierta) throw new Error("Una jornada cerrada ya no se edita.");
+
+  await database.write(async () => {
+    await bitacora.update((b) => {
+      b.tipocafe = datos.tipocafe;
+      b.transportista = datos.transportista;
+      b.placacamion = datos.placacamion;
+      b.observaciones = datos.observaciones;
+    });
+  });
+  return bitacora;
+}
+
+/**
  * Cierra la jornada y la manda al servidor con sus recibos.
  *
  * ⚠️ CERRAR ES IMPRIMIR. No existe un "cerrada pero sin papel": ese estado intermedio es

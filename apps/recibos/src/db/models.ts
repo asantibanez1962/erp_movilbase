@@ -52,6 +52,25 @@ export class Precio extends Model {
   @readonly @field("flete") flete!: number;
 }
 
+export class Nivel extends Model {
+  static readonly table = "niveles";
+  @readonly @field("nivel") nivel!: number;
+  @readonly @field("nombre") nombre!: string | null;
+}
+
+export class Talonario extends Model {
+  static readonly table = "talonarios";
+  @readonly @field("recibidor") recibidor!: string;
+  @readonly @field("cosecha") cosecha!: string;
+  @readonly @field("inicio") inicio!: string;
+  @readonly @field("final") final!: string;
+  /** ⚠️ NO es el último usado: es el PRÓXIMO. Leerlo como "el último" y sumarle uno
+   *  salta un número por recarga, y eso se descubre cuando la oficina ve huecos con los
+   *  papeles ya entregados. */
+  @readonly @field("ultimo") ultimo!: string;
+  @readonly @field("tipo") tipo!: number;
+}
+
 // ─── Catálogos de selección ─────────────────────────────────────────────────
 
 export class Zona extends Model {
@@ -153,19 +172,25 @@ export class Finca extends Model {
   static readonly table = "fincas";
   @readonly @field("id_socio") idSocio!: number;
   @readonly @field("nombre") nombre!: string | null;
+  /** Atributo de la finca. De acá sale el `cldd` del recibo; no se digita. */
+  @readonly @field("cldd") cldd!: number;
 }
 
 export class Cuota extends Model {
   static readonly table = "cuotas";
+  /** `idcuotaprod`: la llave por la que la referencian los entregadores. */
+  @readonly @field("id_cuota") idCuota!: number;
   @readonly @field("id_socio") idSocio!: number;
   @readonly @field("id_certificado") idCertificado!: number;
   @readonly @field("cosecha") cosecha!: string;
+  @readonly @field("activo") activo!: number;
 }
 
 export class CuotaEntregador extends Model {
   static readonly table = "cuota_entregadores";
   @readonly @field("id_cuota") idCuota!: number;
   @readonly @field("id_socio") idSocio!: number;
+  @readonly @field("activo") activo!: number;
 }
 
 // ─── Bidireccionales: las que crea el teléfono ──────────────────────────────
@@ -269,7 +294,7 @@ export class Evento extends Model {
 }
 
 export const MODEL_CLASSES = [
-  CastigoBroca, CastigoCosecha, RecibidorNivel, Precio,
+  CastigoBroca, CastigoCosecha, RecibidorNivel, Precio, Talonario, Nivel,
   Zona, TipoCafe, TipoCastigo, Calidad, Certificado, Cosecha,
   Recibidor, Transportista, Provincia, Canton, Distrito,
   Productor, Finca, Cuota, CuotaEntregador,
