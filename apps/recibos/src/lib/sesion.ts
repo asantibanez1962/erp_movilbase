@@ -122,6 +122,7 @@ export function contextoActual(): {
   companyId: number;
   cosecha?: string | null;
   appId: string;
+  recibidor?: string | null;
 } {
   const s = useSesion.getState();
   return {
@@ -131,5 +132,8 @@ export function contextoActual(): {
     companyId: s.companyId ?? 0,
     cosecha: s.cosecha,
     appId: config.appId,
+    // Acota el pull a la zona de este recibidor. Sin esto un usuario con acceso amplio
+    // se baja el país: el BE, al ver "todas las zonas autorizadas", omite el filtro.
+    recibidor: s.recibidor,
   };
 }

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +19,7 @@ import { syncNow } from "./src/lib/sync";
 import { database } from "./src/lib/db";
 import { COLLECTIONS } from "./src/db/schema";
 import { describirFallos } from "@erp/shared-sync";
+import { cerrarSesion, cambiarRecibidor } from "./src/lib/alcance";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { ContextoScreen } from "./src/screens/ContextoScreen";
 
@@ -146,8 +148,46 @@ function Inicio() {
 
       {resultado ? <Text style={styles.resultado}>{resultado}</Text> : null}
       <Text style={styles.pie}>Las pantallas de bitácora y recibo entran acá.</Text>
+
+      {/* Sin esto no hay forma de salir: la sesión y el contexto quedan en SecureStore y
+          la app reabre directo en el mismo recibidor. Provisional hasta que exista el
+          drawer, pero hace falta desde ya para poder probar con otro usuario. */}
+      <View style={styles.salidas}>
+        <TouchableOpacity onPress={() => salir(cambiarRecibidor)} style={styles.secundario}>
+          <Text style={styles.secundarioTexto}>Cambiar recibidor</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => salir(cerrarSesion)} style={styles.secundario}>
+          <Text style={styles.secundarioTexto}>Cerrar sesión</Text>
+        </TouchableOpacity>
+      </View>
     </ScrollView>
   );
+}
+
+/**
+ * Ejecuta una salida (cerrar sesión o cambiar recibidor) confirmando primero.
+ *
+ * Las dos borran la base local, así que siempre se pregunta. Y si hay trabajo sin
+ * enviar, la función de abajo tira antes de borrar nada: recién ahí se ofrece descartar,
+ * diciendo qué se pierde. Un día de recibos que sólo existe en este teléfono no puede
+ * evaporarse por un toque de más.
+ */
+async function salir(accion: (o: { descartar: boolean }) => Promise<void>) {
+  const confirmar = (mensaje: string, onOk: () => void) =>
+    Alert.alert("Confirmar", mensaje, [
+      { text: "Cancelar", style: "cancel" },
+      { text: "Continuar", style: "destructive", onPress: onOk },
+    ]);
+
+  confirmar("Se borran los datos descargados en este teléfono.", () => {
+    accion({ descartar: false }).catch((e: Error) => {
+      confirmar(`${e.message}`, () => {
+        accion({ descartar: true }).catch((e2: Error) =>
+          Alert.alert("No se pudo", e2.message)
+        );
+      });
+    });
+  });
 }
 
 function Espera({ texto }: Readonly<{ texto: string }>) {
@@ -175,4 +215,10 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   error: { color: "#fca5a5", fontSize: 14, textAlign: "center" },
+  salidas: { flexDirection: "row", gap: 10, marginTop: 20 },
+  secundario: {
+    borderColor: "#64748b", borderWidth: 1, borderRadius: 10,
+    paddingHorizontal: 16, minHeight: 44, alignItems: "center", justifyContent: "center",
+  },
+  secundarioTexto: { color: "#e2e8f0", fontSize: 13 },
 });

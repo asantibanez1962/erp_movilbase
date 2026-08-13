@@ -1,3 +1,4 @@
+import { useAuthStore } from "@erp/shared-api";
 import { database } from "./db";
 import { useSesion } from "./sesion";
 import { resumenPendientes, describirPendientes } from "./sync";
@@ -53,14 +54,39 @@ export async function borrarBaseLocal(): Promise<void> {
  * teléfono.
  */
 export async function cerrarSesion(opts: { descartar: boolean }): Promise<void> {
+  await exigirNadaPendiente(opts.descartar);
+
+  await borrarBaseLocal();
+  await useSesion.getState().limpiar();
+  // ⚠️ SIN ESTO NO SE CIERRA NADA. Borrar el contexto deja las credenciales en
+  // SecureStore, así que la app vuelve a entrar sola con el usuario anterior y sólo
+  // pregunta el recibidor. El síntoma —"no me pide usuario"— no se parece a "faltó
+  // borrar el token", y manda a buscar por el lado de la pantalla de login.
+  await useAuthStore.getState().logout();
+}
+
+/**
+ * Cambiar de recibidor sin cerrar sesión.
+ *
+ * También borra la base, y no es celo: el cache está recortado a la zona del recibidor
+ * anterior. Las filas de la zona vieja no se irían nunca por delta —del lado del
+ * servidor no cambiaron, simplemente dejaron de corresponder— y las de la nueva
+ * llegarían mezcladas con productores que ya no son de acá.
+ */
+export async function cambiarRecibidor(opts: { descartar: boolean }): Promise<void> {
+  await exigirNadaPendiente(opts.descartar);
+
+  await borrarBaseLocal();
+  await useSesion.getState().limpiar();
+}
+
+/** Un día de trabajo sin sincronizar sólo existe en este teléfono. */
+async function exigirNadaPendiente(descartar: boolean): Promise<void> {
   const pendientes = await resumenPendientes();
-  if (pendientes.total > 0 && !opts.descartar) {
+  if (pendientes.total > 0 && !descartar) {
     throw new Error(
       `Quedan sin enviar: ${describirPendientes(pendientes)}. ` +
         "Cerrá la bitácora e imprimila antes de salir, o confirmá que se descarte."
     );
   }
-
-  await borrarBaseLocal();
-  await useSesion.getState().limpiar();
 }
