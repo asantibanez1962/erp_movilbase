@@ -244,8 +244,16 @@ export function Navegacion() {
           drawerStyle: { backgroundColor: cliente.chrome },
         }}
       >
-        <Drawer.Screen name="Jornadas" component={JornadasStack} />
-        <Drawer.Screen name="Recibos" component={RecibosStack} />
+        <Drawer.Screen
+          name="MenuJornadas"
+          component={JornadasStack}
+          options={{ title: "Jornadas" }}
+        />
+        <Drawer.Screen
+          name="MenuRecibos"
+          component={RecibosStack}
+          options={{ title: "Recibos" }}
+        />
         <Drawer.Screen
           name="Servidor"
           component={ServidorScreen}
@@ -261,6 +269,13 @@ export function Navegacion() {
   );
 }
 
+/**
+ * ⚠️ Las rutas del DRAWER llevan otro nombre que las del stack de adentro
+ * (`MenuJornadas` → stack `Jornadas`). Con el mismo nombre, react-navigation avisaba
+ * —"screens with the same name nested inside one another"— y no es cosmético: al navegar
+ * por nombre puede resolver a la pantalla equivocada, y eso aparece como un salto raro
+ * que nadie asocia con el nombre de una ruta.
+ */
 function ContenidoDrawer(props: DrawerContentComponentProps) {
   const user = useAuthStore((s) => s.user);
   const recibidor = useSesion((s) => s.recibidorNombre ?? s.recibidor);
@@ -362,12 +377,12 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
 
       <DrawerItem
         label="Jornadas"
-        onPress={() => props.navigation.navigate("Jornadas")}
+        onPress={() => props.navigation.navigate("MenuJornadas")}
         labelStyle={estilosDrawer.label}
       />
       <DrawerItem
         label="Recibos"
-        onPress={() => props.navigation.navigate("Recibos")}
+        onPress={() => props.navigation.navigate("MenuRecibos")}
         labelStyle={estilosDrawer.label}
       />
 

@@ -275,6 +275,24 @@ export function ReciboScreen({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [recibo, productores]);
 
+  /**
+   * EL TIPO DE CAFÉ SIGUE A LA JORNADA. Una sola regla, y por eso está acá.
+   *
+   * Antes se copiaba en tres lugares —la jornada que llega por parámetro, la que se
+   * autoasigna cuando hay una sola, y la que se elige en el selector— y al recibo creado
+   * desde el menú Recibos no le llegaba por ninguno. Tres copias de una regla es tres
+   * oportunidades de que un camino nuevo se olvide de ella, y el síntoma no es un error:
+   * es un recibo sin precio que aparece cuadrando en la oficina.
+   *
+   * Mirando la jornada VIGENTE da igual cómo se haya fijado.
+   *
+   * Al editar no se toca: manda lo que se guardó con el recibo.
+   */
+  useEffect(() => {
+    if (recibo || !bitacora?.tipocafe) return;
+    setTipoCafe(bitacora.tipocafe);
+  }, [bitacora, recibo]);
+
   const elegirProductor = async (id: string) => {
     setPicker(null);
     if (id === "__generico__") {
@@ -349,6 +367,9 @@ export function ReciboScreen({
   const hayProductor = productor != null || noRegistrado;
   const listo =
     bitacora != null &&
+    // Sin tipo de café no hay precio: buscarPrecio() filtra por él, así que el recibo
+    // quedaría sin monto y eso se descubre en la oficina, no acá.
+    tipoCafe.trim().length > 0 &&
     hayProductor &&
     calidad != null &&
     numero != null &&
@@ -386,7 +407,9 @@ export function ReciboScreen({
 
     Alert.alert(
       numero ?? "Recibo",
-      listo ? undefined : "Faltan datos para poder grabar: productor, calidad y medida.",
+      listo
+        ? undefined
+        : "Faltan datos para poder grabar: jornada, productor, calidad, tipo de café y medida.",
       opciones
     );
   };
@@ -1236,8 +1259,6 @@ export function ReciboScreen({
         onSeleccionar={(v) => {
           const b = jornadas.find((x) => x.id === v) ?? null;
           setBitacora(b);
-          // El tipo de café sigue a la jornada elegida, salvo que ya se haya tocado.
-          if (b?.tipocafe && !recibo) setTipoCafe(b.tipocafe);
           setPicker(null);
         }}
         onCerrar={() => setPicker(null)}
