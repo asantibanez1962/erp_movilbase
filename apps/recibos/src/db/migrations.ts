@@ -19,6 +19,44 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // La remedida del sitio del camión. Ver v1.71/RC/39 y /40.
+      toVersion: 4,
+      steps: [
+        createTable({
+          name: "remedidas",
+          columns: [
+            { name: "server_id", type: "string", isOptional: true },
+            { name: "recibo", type: "string", isIndexed: true },
+            { name: "sifon", type: "string", isIndexed: true },
+            { name: "recibidor", type: "string", isOptional: true },
+            { name: "cosecha", type: "string" },
+            { name: "fecha", type: "number", isOptional: true },
+            { name: "calidad", type: "string", isOptional: true },
+            { name: "tipocafe", type: "string", isOptional: true },
+            { name: "transportista", type: "number", isOptional: true },
+            { name: "placa", type: "string", isOptional: true },
+            { name: "angarilla", type: "number", isOptional: true },
+            { name: "cantidad", type: "number" },
+            { name: "verdes", type: "number" },
+            { name: "flotemaduro", type: "number" },
+            { name: "floteseco", type: "number" },
+            { name: "granosbrocados", type: "number" },
+            { name: "medidor", type: "string", isOptional: true },
+            { name: "observaciones", type: "string", isOptional: true },
+            { name: "impreso", type: "number" },
+          ],
+        }),
+        createTable({
+          name: "remedida_rutas",
+          columns: [
+            { name: "server_id", type: "string", isOptional: true },
+            { name: "id_remedida", type: "string", isIndexed: true },
+            { name: "recibidor", type: "string" },
+          ],
+        }),
+      ],
+    },
+    {
       // Los tramos de la cosecha —Inicios, Centro, Finales— para mostrar el nivel por su
       // nombre. Ver v1.71/RC/36.
       toVersion: 3,

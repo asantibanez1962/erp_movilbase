@@ -195,6 +195,47 @@ export class CuotaEntregador extends Model {
 
 // ─── Bidireccionales: las que crea el teléfono ──────────────────────────────
 
+/**
+ * El camión que llega de los recibidores, medido en el sitio de recepción.
+ *
+ * ⚠️ ACÁ EL MÓVIL NO CALCULA NADA, al revés que el recibo. Los porcentajes se registran y
+ * el servidor recalcula los agregados del día por su cuenta: tr_rc_remedida_remdirty
+ * marca el día como sucio al insertar y un proceso aparte lo recompone.
+ */
+export class Remedida extends Model {
+  static readonly table = "remedidas";
+  @field("server_id") serverId!: string | null;
+  /** sifón(3) + 6 dígitos, con los ceros de relleno. */
+  @field("recibo") recibo!: string;
+  @field("sifon") sifon!: string;
+  @field("recibidor") recibidor!: string | null;
+  @field("cosecha") cosecha!: string;
+  @field("fecha") fecha!: number | null;
+  @field("calidad") calidad!: string | null;
+  @field("tipocafe") tipocafe!: string | null;
+  @field("transportista") transportista!: number | null;
+  @field("placa") placa!: string | null;
+  @field("angarilla") angarilla!: number | null;
+  /** Cajuelas con cuartillos en decimales: 29,50 son 29 cajuelas y 2 cuartillos. */
+  @field("cantidad") cantidad!: number;
+  @field("verdes") verdes!: number;
+  @field("flotemaduro") flotemaduro!: number;
+  @field("floteseco") floteseco!: number;
+  @field("granosbrocados") granosbrocados!: number;
+  @field("medidor") medidor!: string | null;
+  @field("observaciones") observaciones!: string | null;
+  /** 0 sin imprimir · 1 original · 2+ copias. Es el campo de cierre del sync. */
+  @field("impreso") impreso!: number;
+}
+
+/** Un recibidor del que venía el camión. Varios por remedida — de 1 a 17 en la práctica. */
+export class RemedidaRuta extends Model {
+  static readonly table = "remedida_rutas";
+  @field("server_id") serverId!: string | null;
+  @field("id_remedida") idRemedida!: string;
+  @field("recibidor") recibidor!: string;
+}
+
 export class Bitacora extends Model {
   static readonly table = "bitacoras";
   @field("server_id") serverId!: string | null;
@@ -298,5 +339,5 @@ export const MODEL_CLASSES = [
   Zona, TipoCafe, TipoCastigo, Calidad, Certificado, Cosecha,
   Recibidor, Transportista, Provincia, Canton, Distrito,
   Productor, Finca, Cuota, CuotaEntregador,
-  Bitacora, Recibo, Evento,
+  Bitacora, Recibo, Remedida, RemedidaRuta, Evento,
 ];

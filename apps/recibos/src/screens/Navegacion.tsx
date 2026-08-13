@@ -16,7 +16,7 @@ import {
 } from "@react-navigation/drawer";
 import { useAuthStore } from "@erp/shared-api";
 import { describirFallos } from "@erp/shared-sync";
-import type { Bitacora, Recibo } from "../db/models";
+import type { Bitacora, Recibo, Remedida } from "../db/models";
 import { cliente } from "../branding";
 import { cerrarSesion, cambiarRecibidor } from "../lib/alcance";
 import { describirPendientes, resumenPendientes, syncNow } from "../lib/sync";
@@ -27,6 +27,8 @@ import { BitacoraScreen } from "./BitacoraScreen";
 import { ReciboScreen } from "./ReciboScreen";
 import { ReciboDetalleScreen } from "./ReciboDetalleScreen";
 import { RecibosScreen } from "./RecibosScreen";
+import { RemedidasScreen } from "./RemedidasScreen";
+import { RemedidaScreen } from "./RemedidaScreen";
 import { ServidorScreen } from "./ServidorScreen";
 
 /**
@@ -61,6 +63,8 @@ export type StackParams = {
   Recibos: undefined;
   Recibo: { bitacora?: Bitacora; recibo?: Recibo };
   ReciboDetalle: { recibo: Recibo };
+  Remedidas: undefined;
+  Remedida: { remedida?: Remedida };
   EditarJornada: { bitacora: Bitacora };
 };
 
@@ -232,6 +236,51 @@ function RecibosStack() {
 
 const Drawer = createDrawerNavigator();
 
+/**
+ * Remedidas: el camión que llega de los recibidores.
+ *
+ * Menú propio y no colgando de la jornada, porque no pertenece a una: se captura en el
+ * sitio de recepción de camiones, que es otro lugar y otro momento del día.
+ */
+function RemedidasStack() {
+  return (
+    <Stack.Navigator
+      screenOptions={{
+        headerStyle: { backgroundColor: cliente.chrome },
+        headerTintColor: "#f1f5f9",
+        headerTitleStyle: { fontWeight: "700" },
+      }}
+    >
+      <Stack.Screen
+        name="Remedidas"
+        options={({ navigation }) => ({
+          title: "Remedidas",
+          headerLeft: () => <BotonMenu navigation={navigation} />,
+        })}
+      >
+        {({ navigation }) => (
+          <RemedidasScreen
+            onNueva={() => navigation.navigate("Remedida", {})}
+            // Misma regla que el recibo: sin imprimir se EDITA, impresa sólo se mira.
+            onAbrir={(r) => navigation.navigate("Remedida", { remedida: r })}
+          />
+        )}
+      </Stack.Screen>
+
+      <Stack.Screen name="Remedida" options={{ title: "Remedida" }}>
+        {({ navigation, route }) => (
+          <RemedidaScreen
+            remedida={route.params?.remedida}
+            onListo={() => navigation.goBack()}
+            onCancelar={() => navigation.goBack()}
+          />
+        )}
+      </Stack.Screen>
+    </Stack.Navigator>
+  );
+}
+
+
 export function Navegacion() {
   return (
     <NavigationContainer theme={navTheme}>
@@ -253,6 +302,11 @@ export function Navegacion() {
           name="MenuRecibos"
           component={RecibosStack}
           options={{ title: "Recibos" }}
+        />
+        <Drawer.Screen
+          name="MenuRemedidas"
+          component={RemedidasStack}
+          options={{ title: "Remedidas" }}
         />
         <Drawer.Screen
           name="Servidor"
@@ -383,6 +437,11 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
       <DrawerItem
         label="Recibos"
         onPress={() => props.navigation.navigate("MenuRecibos")}
+        labelStyle={estilosDrawer.label}
+      />
+      <DrawerItem
+        label="Remedidas"
+        onPress={() => props.navigation.navigate("MenuRemedidas")}
         labelStyle={estilosDrawer.label}
       />
 

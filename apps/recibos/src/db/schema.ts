@@ -37,8 +37,10 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *        v1.71/RC/35.
  *   3 → `niveles`: el nivel se muestra por su nombre (Inicios, Centro, Finales) y no
  *        por su número. Ver v1.71/RC/36.
+ *   4 → `remedidas` y `remedida_rutas`: la remedida se captura en el sitio del camión,
+ *        que no tiene PC ni red. Ver v1.71/RC/39 y /40.
  */
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -69,9 +71,12 @@ export const COLLECTIONS = [
   "fincas",
   "cuotas",
   "cuota_entregadores",
-  // Bidireccionales. La bitácora ANTES que los recibos.
+  // Bidireccionales. El PADRE antes que sus hijos: el BE resuelve la FK del hijo contra
+  // mt.MobileIdMap, que sólo tiene la entrada del padre si el padre ya subió.
   "bitacoras",
   "recibos",
+  "remedidas",
+  "remedida_rutas",
 ] as const;
 
 export const schema = appSchema({
@@ -296,6 +301,52 @@ export const schema = appSchema({
         { name: "id_cuota", type: "number", isIndexed: true },
         { name: "id_socio", type: "number", isIndexed: true },
         { name: "activo", type: "number" },
+      ],
+    }),
+
+    // ─── Remedida ───────────────────────────────────────────────────────────
+    // El camión que llega de los recibidores, medido en el sitio de recepción. Ese sitio
+    // NO tiene PC ni red, y por eso la remedida vive en el teléfono hasta que se imprime.
+    //
+    // No lleva tarifa, monto ni certificados: el flete lo calcula la oficina, y repartir
+    // por certificado necesita los recibos de certificados de cada recibidor, que en el
+    // sitio no se tienen. Tampoco los seis campos que la cosecha entera tiene en cero.
+    tableSchema({
+      name: "remedidas",
+      columns: [
+        { name: "server_id", type: "string", isOptional: true },
+        // sifón(3) + 6 dígitos. En el servidor es numérico; acá va como texto para no
+        // perder los ceros de relleno al mostrarlo e imprimirlo.
+        { name: "recibo", type: "string", isIndexed: true },
+        { name: "sifon", type: "string", isIndexed: true },
+        { name: "recibidor", type: "string", isOptional: true },
+        { name: "cosecha", type: "string" },
+        { name: "fecha", type: "number", isOptional: true },
+        { name: "calidad", type: "string", isOptional: true },
+        { name: "tipocafe", type: "string", isOptional: true },
+        { name: "transportista", type: "number", isOptional: true },
+        { name: "placa", type: "string", isOptional: true },
+        { name: "angarilla", type: "number", isOptional: true },
+        // Cajuelas con cuartillos en decimales: 29,50 son 29 cajuelas y 2 cuartillos.
+        { name: "cantidad", type: "number" },
+        { name: "verdes", type: "number" },
+        { name: "flotemaduro", type: "number" },
+        { name: "floteseco", type: "number" },
+        { name: "granosbrocados", type: "number" },
+        { name: "medidor", type: "string", isOptional: true },
+        { name: "observaciones", type: "string", isOptional: true },
+        // Campo de cierre: 0 sin imprimir, 1 original, 2+ copias.
+        { name: "impreso", type: "number" },
+      ],
+    }),
+    // De qué recibidores venía el camión. Del móvil viaja SÓLO el recibidor: la hora de
+    // salida no se usa (0 de 5177 filas) y el flete es de la oficina.
+    tableSchema({
+      name: "remedida_rutas",
+      columns: [
+        { name: "server_id", type: "string", isOptional: true },
+        { name: "id_remedida", type: "string", isIndexed: true },
+        { name: "recibidor", type: "string" },
       ],
     }),
 
