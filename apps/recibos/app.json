@@ -27,7 +27,19 @@
       "softwareKeyboardLayoutMode": "pan"
     },
     "extra": {
-      "apiBaseUrl": "http://10.0.2.2:5249"
+      "apiBaseUrl": "http://10.0.2.2:5249",
+      "cliente": {
+        "id": "dev",
+        "nombre": "Recibos",
+        "nombreLargo": "Recibos (desarrollo)",
+        "color": "#0f172a",
+        "acento": "#3b82f6",
+        "tieneLogo": false,
+        "idSocioGenerico": 5109
+      },
+      "eas": {
+        "projectId": "89dd0c5a-95e8-4fc2-90e3-ac5658b9b57e"
+      }
     },
     "plugins": [
       "expo-secure-store",

@@ -777,6 +777,80 @@ remedida (§8).
 
 ---
 
+## 9.bis Lo que cambió al construirlo (13-ago-2026)
+
+Seis decisiones que corrigen o superan lo escrito arriba. Se dejan las originales en su
+sitio para que se vea de dónde salieron.
+
+### Anular exige que el recibo esté IMPRESO
+
+§9 decía que un anulado sube *aunque nunca se haya impreso*, y eso obligaba a una
+excepción en la retención del sync. **Se descartó.** Un recibo sin imprimir no salió del
+teléfono ni existe en papel: ése se descarta y no deja rastro. Anular es para cuando el
+papel ya está en manos del productor.
+
+Con la regla así, **la excepción desaparece**: un recibo impreso ya sincroniza por sí
+solo. Una condición menos que mantener en el motor de sync.
+
+### Los nombres bajan SIN ACENTOS, y la razón es la impresora
+
+Las térmicas ESC/POS no imprimen bien los acentos, y el nombre del productor es lo que va
+en el papel que la persona firma. Se quitan **en el origen** —en la proyección de la
+colección, con `CONVERT(VARCHAR) COLLATE SQL_Latin1_General_CP1253_CI_AI`— así que lo que
+el teléfono guarda es exactamente lo que se imprime. Es lo que hace el legacy.
+
+Normalizar sólo al mostrar habría arreglado la búsqueda y dejado el papel igual de mal.
+
+⚠️ La Ñ pasa a N: "BOLAÑOS" → "BOLANOS". Es un cambio real y se acepta porque el papel
+diría lo mismo de todos modos. La base no se toca. Ver v1.71/RC/38.
+
+### Menú de Jornadas y menú de Recibos, separados
+
+El recibo se busca por número o por productor, no recordando en qué bitácora quedó.
+Colgado de la jornada había que recorrer el día entero para llegar a uno. La jornada
+sigue siendo el padre; eso es contabilidad del día, no la forma de encontrar un recibo.
+
+La jornada pasa a ser un **campo del recibo**: con una sola abierta viene puesta, con
+varias se elige.
+
+### El recibo sin imprimir se EDITA
+
+Es la política `hasta-evento` con `impreso` como campo de cierre, aplicada de verdad:
+mientras no salga en papel es trabajo en curso. Y como es la MISMA condición que lo
+retiene en el teléfono, un recibo ya sincronizado no se puede editar por construcción, sin
+validación aparte.
+
+### Tableta: dos columnas a partir de 700 dp
+
+El corte es por **ancho disponible**, no por "es tableta": el mismo umbral sirve para la
+tableta acostada (~1000 dp) y para un teléfono acostado (~740 dp), que es donde el alto
+escasea más. La tableta de pie mide ~600 dp y se queda en una columna.
+
+⚠️ La rotación la decide el CONTENEDOR. Corriendo dentro del dev client de promotor
+—bloqueado en `portrait`— habilitarla en el `app.json` de recibos no hace nada. Por eso se
+construyó el dev client propio (`cr.confeldan.recibos`), que además es lo único que
+permite probar el Bluetooth: esos permisos van en el manifiesto nativo.
+
+### ⚠️ Una entidad escribible necesita filas en `mt.Fields`
+
+`DynamicCreateService` arma el INSERT desde `mt.Fields`, **no** desde las columnas de la
+tabla. `BitacoraRecibidor` estaba registrada en `mt.Entities` sin un solo campo, y el
+resultado fue el peor modo de falla del sistema: el push devolvió `accepted: 1,
+rejected: 0` y grabó una fila **con todo en NULL**. El teléfono la dio por enviada y borró
+su pendiente.
+
+Que la colección declare `WritableFieldsJson` **no alcanza**: esa lista dice qué campos
+ACEPTA el sync; `mt.Fields` dice qué campos SABE ESCRIBIR la entidad. Ver v1.71/RC/37, que
+además valida que ninguna entidad creable desde el móvil quede sin campos.
+
+### ⚠️ Cambiar una proyección no llega solo
+
+El delta se guía por `SyncUpdatedAt`. Cambiar `ColumnsJson` no toca las filas, así que los
+teléfonos se quedan con el valor viejo indefinidamente. **Toda modificación de proyección
+necesita marcar las filas afectadas.**
+
+---
+
 ## 10. Plan de fases
 
 - **Fase 0 — BE (bloqueante).** Entidad y mapeo de `re_Bitacora_recibos`; ensanchar
