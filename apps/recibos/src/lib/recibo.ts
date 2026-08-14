@@ -370,6 +370,34 @@ export function esAnulado(recibo: Recibo): boolean {
   return (recibo.observaciones ?? "").trim().toUpperCase().startsWith(TEXTO_ANULADO);
 }
 
+// ─── Marcar impreso ─────────────────────────────────────────────────────────
+
+/**
+ * Sube en uno el contador de impresiones. Es lo que suelta el recibo hacia el servidor:
+ * `impreso` es el CampoCierre de la colección, así que hasta acá el recibo vivía sólo en
+ * el teléfono.
+ *
+ * ⚠️ SE MARCA AUNQUE NO SE SEPA SI SALIÓ EL PAPEL, y es deliberado. Android entrega el
+ * documento al driver y devuelve el control de inmediato; no hay confirmación de que la
+ * 3nStar tuviera rollo. Las dos opciones son malas y ésta lo es menos:
+ *
+ *   - No marcar hasta confirmar → el recibo nunca sincroniza, porque la confirmación no
+ *     existe. Se quedaría en el teléfono para siempre.
+ *   - Marcar de una → si el papel no salió, el recibidor ANULA y vuelve a digitar. La
+ *     anulación exige justamente que esté impreso, deja el número en la secuencia y el
+ *     productor se va con su recibo. Es el flujo que la operación ya usa.
+ *
+ * El contador (y no un booleano) es lo que hace que la segunda impresión diga COPIA, igual
+ * que en el web.
+ */
+export async function marcarImpreso(recibo: Recibo): Promise<void> {
+  await database.write(async () => {
+    await recibo.update((r) => {
+      r.impreso = (r.impreso ?? 0) + 1;
+    });
+  });
+}
+
 // ─── El productor genérico ──────────────────────────────────────────────────
 
 /**

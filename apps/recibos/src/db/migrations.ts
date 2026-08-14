@@ -19,6 +19,39 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // Lo que el comprobante necesita para identificar a quién emite y dónde queda el
+      // productor. Ver v1.71/RC/43 y /45.
+      toVersion: 6,
+      steps: [
+        createTable({
+          name: "parametros",
+          columns: [
+            { name: "nombrecompania", type: "string" },
+            { name: "direccion1", type: "string", isOptional: true },
+            { name: "direccion2", type: "string", isOptional: true },
+            { name: "direccion3", type: "string", isOptional: true },
+            { name: "telefono", type: "string", isOptional: true },
+            { name: "email", type: "string", isOptional: true },
+            { name: "codigoicafe", type: "string", isOptional: true },
+          ],
+        }),
+        addColumns({
+          table: "productores",
+          columns: [
+            { name: "id_provincia", type: "number", isOptional: true },
+            { name: "id_canton", type: "number", isOptional: true },
+            { name: "id_distrito", type: "number", isOptional: true },
+            { name: "ubicacion", type: "string", isOptional: true },
+            { name: "direccion", type: "string", isOptional: true },
+          ],
+        }),
+        addColumns({
+          table: "fincas",
+          columns: [{ name: "ubicacion", type: "string", isOptional: true }],
+        }),
+      ],
+    },
+    {
       // `client_uuid` en las cuatro que el teléfono origina. Sin él la fila que vuelve del
       // servidor no se reconoce y se duplica — y eso no se ve al guardar ni en el primer
       // sync, sino en el segundo.

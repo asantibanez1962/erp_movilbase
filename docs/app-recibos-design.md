@@ -496,28 +496,76 @@ no se puede hacer.
 
 Lo que sí lleva el papel es la cantidad neta, en números y en letras.
 
+### El papel es el del WEB, calcado
+
+Se replica `vw_rc_recibo_impreso` + `rc_recibo.frx` —lo que hoy sale en producción— para
+que el productor reciba el **mismo documento** venga del web o del teléfono: mismo orden de
+líneas, misma caja de `CAFE EN FRUTA`, misma nota legal al pie y el mismo logo, extraído
+del propio `.frx`.
+
+El procedimiento WinDev del legacy se descartó **a propósito**: difiere en cosas visibles
+—usa la dirección del productor en vez de provincia/cantón/distrito— y seguirlo habría dado
+dos papeles distintos para el mismo recibo.
+
+De ahí sale también la tipografía: **Verdana 8.25 pt, título a 12 pt en negrita**, página de
+76,2 mm con márgenes 2,03 / 1,78 / 3,81 mm.
+
+⚠️ **Android no trae Verdana** y el WebView cae a Roboto, que es más angosto. Las líneas
+salen algo más cortas que en el web; nada se desborda. Para que fueran idénticas habría que
+empotrar la fuente, y Verdana es de Microsoft.
+
+⚠️ **El ancho del cuerpo va declarado** (72,39 mm = papel menos márgenes). Sin eso las filas
+de dos columnas —que son flex, y un flex no se encoge por debajo de su contenido— empujan la
+página más ancha que el papel: todo lo centrado se descentra y el rollo corta el borde
+derecho. Se descubrió generando el comprobante fuera del teléfono, antes de construir nada.
+
 ### El precio impreso es el GENÉRICO, no el del productor
 
-El comprobante imprime `ADELANTO`, que es **el precio por fanega**: el precio por cajuela
-× 20. Con el precio actual, unos ₡129 000.
+El comprobante imprime `ADELANTO`. Sale de `f_re_precio_recibo_impreso`, portada línea por
+línea, y **el filtro `codigo is null` es explícito en la función del servidor**: aunque el
+productor tenga precio especial, en el papel va el que aplica por tipo de café, recibidor y
+zona.
 
-⚠️ Y se busca **sin el código del productor**. El legacy consulta por
-`cosecha + tipocafe + calidad + codigozona + recibidor`, y si no encuentra cae a
-`cosecha + tipocafe + calidad`. Un productor puede tener precio especial, pero **en el
-papel va el genérico**.
+Los dos parámetros que definen "a quién le aplica" salen del **productor** (su tipo y su
+zona); el recibo aporta cosecha, calidad, recibidor y tipo de café. El desempate es
+`ORDER BY isnull(tipo,' ') DESC, isnull(recibidor,' ') DESC, isnull(zona,' ') DESC` — lo
+concreto gana sobre el genérico, porque cualquier código ordena después del espacio.
 
 Es distinto del precio que se GUARDA con el recibo, donde el código del productor sí entra
-al criterio. Usar la misma función para las dos cosas —lo natural— haría que el papel
+al criterio. Reutilizar aquella búsqueda —lo natural, ya está escrita— haría que el papel
 imprimiera el precio especial: un número plausible y equivocado en el documento que la
 persona firma y se lleva.
 
-**El recibo imprime un precio, nunca un valor.**
+**El recibo imprime un precio, nunca un valor.** Se imprime tal cual viene, sin multiplicar
+por 20: la vista del web no lo hace.
 
 ### Lo que el papel necesita y no bajaba
 
 `re_parametros` (nombre de la empresa, tres líneas de dirección, código ICAFE, teléfono,
-correo), `productores.direccion` para el `UBICACION:` y `rc_Finca.ubicacion` cuando el
-recibo lleva finca. Registrado en v1.71/RC/43, todo sin acentos por la impresora.
+correo) en v1.71/RC/43, y la **geografía del socio** en v1.71/RC/45. Todo sin acentos por la
+impresora.
+
+⚠️ **El `UBICACION:` del móvil no calca al web, y está bien que no.** La vista decodifica el
+código empaquetado `productores.ubicacion` (ocho caracteres, con dos formatos conviviendo:
+`02020100` y `AL020100`). El teléfono usa los tres ids de `ge_Socio` —la estructura nueva—
+que unen directo y no hay nada que interpretar. Mismo resultado por un camino que no se
+puede equivocar. Los ~780 productores sin los ids caen al respaldo: sin ubicación, igual que
+en el web, en vez de imprimir una provincia inventada.
+
+⚠️ **El encabezado va a diferir hasta que se corrija la base.** El `.frx` lo toma de
+`ge_companias.ben_*`, que hoy tiene valores de relleno (`DIRECCION 3`, `EL TELEFONO`,
+`EL EMAIL`); el móvil usa `re_parametros`, que tiene los reales. El papel del teléfono sale
+mejor que el del web, que no es lo que se buscaba: hay que arreglar `ge_companias`.
+
+Dos diferencias menores más, anotadas donde ocurren:
+
+- **El orden del nombre.** La vista arma `APELLIDO1 APELLIDO2 NOMBRE`; el teléfono baja el
+  nombre concatenado como `NOMBRE APELLIDO1 APELLIDO2`. Es la misma persona escrita al
+  revés. Unificarlo es cambiar la proyección de `productores`, que también alimenta la lista
+  y la búsqueda de la app.
+- **Ni CLDD ni observaciones ni finca salen en el papel**, porque el `.frx` no los imprime
+  —aunque la vista ya prepare la línea `SELLO CLDD`. Se replica la ausencia; agregarlos sería
+  apartarse del web.
 
 ### ORIGINAL / COPIA sin tocar el esquema
 
@@ -527,24 +575,39 @@ imprimir, 1 original, 2+ copias. Encaja con la convención de no usar BIT.
 ⚠️ Verificar antes de usarlo así: si el PowerBuilder o el web hacen `WHERE impreso = 1`
 para decir "ya impreso", un recibo con dos copias se les escapa.
 
-### Si la impresión del original falla
+### Se imprime por el diálogo de Android, no por Bluetooth propio
 
-**Decisión tomada: el primer intento manda.** Si falla, las siguientes salen marcadas
-COPIA y se vive con eso. Se documentó la alternativa (confirmar el cierre solo después
-de una impresión exitosa) y se descartó.
+`expo-print` pasa el HTML a PDF y abre el diálogo de impresión, donde el operador elige
+**ESCprint Service**: el driver que traduce a ESC/POS y habla con la 3nStar. Es el camino
+que el POC dejó probado — sin librería Bluetooth, sin emparejar nada, sin permisos que
+pedir.
 
-### Bluetooth ESC/POS directo
+Se había planeado conexión directa para ahorrar toques por recibo. **Se descartó**: el
+driver ya existe y funciona, y escribir un módulo nativo para ganar dos toques no se paga.
+`expo-print` igual es nativo ⇒ APK nuevo, no sale por actualización de JS.
 
-El POC abría el diálogo del sistema y el usuario elegía la impresora en cada recibo —
-tres o cuatro toques extra por recibo, decenas de veces al día. Va conexión directa:
-la app manda los bytes, un toque por recibo.
+**Impresora: 3nStar, papel de 80 mm (3").**
 
-Es módulo nativo nuevo ⇒ APK nuevo, no sale por actualización de JS.
+### Si la impresión falla
 
-**Impresora: 3nStar, papel de 80 mm (3").** ESC/POS ya probado en el POC y en promotor,
-así que el riesgo de hardware está descartado — lo nuevo es sólo la conexión directa en
-vez del diálogo del sistema. Los 80 mm coinciden con lo que ya usaba el POC
-(`@page { size: 80mm }`, ancho 226 pt).
+⚠️ **`Print.printAsync` resuelve al ABRIR el diálogo, no al salir el papel.** Que la promesa
+cumpla no prueba nada: la impresora puede estar apagada o sin rollo. No hay confirmación
+posible, así que la app **marca impreso de una** y la recuperación es operativa:
+
+> el cliente no se va sin su recibo — si no salió, el recibidor **anula y vuelve a
+> digitar**.
+
+La anulación ya exige que el recibo esté impreso y preserva el número en la secuencia, que
+es exactamente lo que hace falta para no dejar un hueco. La alternativa —no marcar hasta
+confirmar— dejaría el recibo atrapado en el teléfono para siempre, porque la confirmación no
+existe.
+
+### La plantilla se puede mirar sin construir el APK
+
+El papel vive en `comprobante.ts`, sin importar WatermelonDB ni nada nativo: se genera y se
+revisa fuera del teléfono, comparándolo contra el del web, sin esperar un build de EAS. Un
+papel que sólo se puede revisar imprimiéndolo se revisa poco — y así apareció el problema
+del ancho.
 
 ---
 

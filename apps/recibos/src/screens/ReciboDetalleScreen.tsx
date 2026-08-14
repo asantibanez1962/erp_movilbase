@@ -3,7 +3,8 @@ import { Alert, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import type { Recibo } from "../db/models";
 import { cliente } from "../branding";
-import { anularRecibo, esAnulado } from "../lib/recibo";
+import { anularRecibo, esAnulado, marcarImpreso } from "../lib/recibo";
+import { imprimirRecibo } from "../lib/imprimir";
 import { colores, estilos, fmtCajuelas, fmtFechaHora } from "./estilos";
 
 /**
@@ -60,14 +61,16 @@ export function ReciboDetalleScreen({
       onPress?: () => void;
     }> = [];
 
+    // La primera sale ORIGINAL y las demás COPIA: lo decide el contador `impreso`, igual
+    // que en el web. Reimprimir uno anulado sigue permitido a propósito — el papel dice
+    // ANULADO y con cantidades en cero, que es justo lo que hay que poder mostrar.
     opciones.push({
-      text: "Imprimir copia",
-      onPress: () =>
-        Alert.alert(
-          "Todavía no",
-          "La impresión por Bluetooth es el paso siguiente. La primera impresión sale " +
-            "como ORIGINAL y las demás como COPIA."
-        ),
+      text: impreso ? "Imprimir copia" : "Imprimir",
+      onPress: () => {
+        imprimirRecibo(recibo)
+          .then(() => marcarImpreso(recibo))
+          .catch((e: Error) => Alert.alert("No se pudo imprimir", e.message));
+      },
     });
 
     // ⚠️ Anular EXIGE que esté impreso. Un recibo sin imprimir no salió del teléfono ni

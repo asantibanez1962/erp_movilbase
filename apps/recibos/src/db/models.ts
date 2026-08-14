@@ -160,6 +160,13 @@ export class Productor extends Model {
   @readonly @field("codigo") codigo!: string;
   @readonly @field("nombre") nombre!: string | null;
   @readonly @field("cedula") cedula!: string | null;
+  /** La UBICACION del comprobante: tres ids contra la geografía. */
+  @readonly @field("id_provincia") idProvincia!: number | null;
+  @readonly @field("id_canton") idCanton!: number | null;
+  @readonly @field("id_distrito") idDistrito!: number | null;
+  /** Código empaquetado legacy (8 chars). Respaldo de los tres ids. */
+  @readonly @field("ubicacion") ubicacion!: string | null;
+  @readonly @field("direccion") direccion!: string | null;
   @readonly @field("email") email!: string | null;
   @readonly @field("telefono") telefono!: string | null;
   /** Entra al criterio del precio, no es informativo. */
@@ -168,10 +175,24 @@ export class Productor extends Model {
   @readonly @field("recibidor") recibidor!: string | null;
 }
 
+/** El encabezado del comprobante: quién lo emite. Una sola fila. */
+export class Parametro extends Model {
+  static readonly table = "parametros";
+  @readonly @field("nombrecompania") nombrecompania!: string;
+  @readonly @field("direccion1") direccion1!: string | null;
+  @readonly @field("direccion2") direccion2!: string | null;
+  @readonly @field("direccion3") direccion3!: string | null;
+  @readonly @field("telefono") telefono!: string | null;
+  @readonly @field("email") email!: string | null;
+  @readonly @field("codigoicafe") codigoicafe!: string | null;
+}
+
 export class Finca extends Model {
   static readonly table = "fincas";
   @readonly @field("id_socio") idSocio!: number;
   @readonly @field("nombre") nombre!: string | null;
+  /** Se imprime debajo del productor cuando el recibo lleva finca. */
+  @readonly @field("ubicacion") ubicacion!: string | null;
   /** Atributo de la finca. De acá sale el `cldd` del recibo; no se digita. */
   @readonly @field("cldd") cldd!: number;
 }
@@ -346,6 +367,6 @@ export const MODEL_CLASSES = [
   CastigoBroca, CastigoCosecha, RecibidorNivel, Precio, Talonario, Nivel,
   Zona, TipoCafe, TipoCastigo, Calidad, Certificado, Cosecha,
   Recibidor, Transportista, Provincia, Canton, Distrito,
-  Productor, Finca, Cuota, CuotaEntregador,
+  Productor, Finca, Cuota, CuotaEntregador, Parametro,
   Bitacora, Recibo, Remedida, RemedidaRuta, Evento,
 ];

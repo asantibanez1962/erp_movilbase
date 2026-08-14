@@ -42,8 +42,10 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *   5 → `client_uuid` en las cuatro que el teléfono origina. Estaba documentado desde
  *        el principio y nunca se implementó: la primera jornada subió con ClientUuid
  *        en NULL y el push la dio por aceptada.
+ *   6 → lo que el comprobante necesita: `parametros` (quién emite), la geografía del
+ *        productor y la ubicación de la finca. Ver v1.71/RC/43 y /45.
  */
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -56,6 +58,7 @@ export const COLLECTIONS = [
   "castigos_cosecha",
   "talonarios",
   "niveles",
+  "parametros",
   "recibidor_nivel",
   "precios",
   // Catálogos de consulta y selección.
@@ -238,6 +241,14 @@ export const schema = appSchema({
         { name: "codigo", type: "string", isIndexed: true },
         { name: "nombre", type: "string", isOptional: true },
         { name: "cedula", type: "string", isOptional: true },
+        // La UBICACION del comprobante sale de estos tres ids contra la geografía.
+        // Es la forma NUEVA (ge_Socio.h_provincia/h_canton/h_distrito); el código
+        // empaquetado `ubicacion` queda de respaldo para los que aún no la tienen.
+        { name: "id_provincia", type: "number", isOptional: true },
+        { name: "id_canton", type: "number", isOptional: true },
+        { name: "id_distrito", type: "number", isOptional: true },
+        { name: "ubicacion", type: "string", isOptional: true },
+        { name: "direccion", type: "string", isOptional: true },
         { name: "email", type: "string", isOptional: true },
         { name: "telefono", type: "string", isOptional: true },
         { name: "tipo", type: "string", isOptional: true },
@@ -269,11 +280,26 @@ export const schema = appSchema({
         { name: "tipo", type: "number" },
       ],
     }),
+    // El encabezado del comprobante: quién lo emite. Es UNA fila.
+    tableSchema({
+      name: "parametros",
+      columns: [
+        { name: "nombrecompania", type: "string" },
+        { name: "direccion1", type: "string", isOptional: true },
+        { name: "direccion2", type: "string", isOptional: true },
+        { name: "direccion3", type: "string", isOptional: true },
+        { name: "telefono", type: "string", isOptional: true },
+        { name: "email", type: "string", isOptional: true },
+        { name: "codigoicafe", type: "string", isOptional: true },
+      ],
+    }),
     tableSchema({
       name: "fincas",
       columns: [
         { name: "id_socio", type: "number", isIndexed: true },
         { name: "nombre", type: "string", isOptional: true },
+        // Se imprime debajo del productor cuando el recibo lleva finca.
+        { name: "ubicacion", type: "string", isOptional: true },
         // Atributo de la FINCA, no del recibo: no se digita. De acá sale el `cldd` del
         // recibo al elegir el productor, igual que en el web.
         { name: "cldd", type: "number" },

@@ -23,11 +23,13 @@ import {
   defaultsDeProductor,
   esGenerico,
   idSocioGenerico,
+  marcarImpreso,
   nivelDelRecibidor,
   precioDe,
   proximoNumero,
   type MedidaCapturada,
 } from "../lib/recibo";
+import { imprimirRecibo } from "../lib/imprimir";
 import { bitacorasAbiertas } from "../lib/bitacora";
 import type {
   Bitacora,
@@ -435,20 +437,30 @@ export function ReciboScreen({
         precio,
         observaciones: observaciones.trim() || null,
       };
-      if (recibo) await actualizarRecibo(recibo, datos);
-      else await crearRecibo(datos);
+      let guardado: Recibo;
+      if (recibo) {
+        await actualizarRecibo(recibo, datos);
+        guardado = recibo;
+      } else {
+        guardado = await crearRecibo(datos);
+      }
 
-      // El recibo queda con `impreso = 0`, que es el campo de cierre de la colección: sin
-      // imprimir NO sincroniza. Cuando entre ESC/POS, `opts.imprimir` dispara la impresión
-      // y sólo entonces pasa a 1 — nunca se da por impreso algo que no salió en papel.
-      Alert.alert(
-        "Recibo guardado",
-        opts.imprimir
-          ? "La impresión por Bluetooth todavía no está implementada, así que quedó sin " +
-              "imprimir. Un recibo sin imprimir no sincroniza: espera en el teléfono."
-          : "Queda sin imprimir, esperando en el teléfono. No sincroniza hasta que salga " +
-              "en papel."
-      );
+      // Nace con `impreso = 0`, que es el campo de cierre de la colección: sin imprimir NO
+      // sincroniza. Sólo la impresión lo suelta.
+      if (!opts.imprimir) {
+        Alert.alert(
+          "Recibo guardado",
+          "Queda sin imprimir, esperando en el teléfono. No sincroniza hasta que salga en papel."
+        );
+        onListo();
+        return;
+      }
+
+      // Primero sale el papel, después se marca. Si el diálogo de impresión ni siquiera
+      // abre, el recibo se queda en 0 y se puede reintentar; el trabajo capturado no se
+      // pierde porque ya quedó guardado arriba.
+      await imprimirRecibo(guardado);
+      await marcarImpreso(guardado);
       onListo();
     } catch (e) {
       setError((e as Error)?.message ?? "No se pudo guardar el recibo.");
