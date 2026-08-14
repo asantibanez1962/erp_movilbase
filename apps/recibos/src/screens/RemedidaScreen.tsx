@@ -21,7 +21,9 @@ import {
   proximoNumero,
   rutasDe,
   type DatosRemedida,
+  marcarRemedidaImpresa,
 } from "../lib/remedida";
+import { imprimirRemedida } from "../lib/imprimirRemedida";
 import { useSesion } from "../lib/sesion";
 import type {
   Calidad,
@@ -172,17 +174,34 @@ export function RemedidaScreen({
     elegidos.length > 0 &&
     (Number.parseInt(cajuelas, 10) || 0) + cuartillos > 0;
 
-  const guardar = async () => {
+  const guardar = async (opts: { imprimir: boolean }) => {
     if (!listo || guardando) return;
     setGuardando(true);
     setError(null);
     try {
-      if (remedida) await actualizarRemedida(remedida, datos());
-      else await crearRemedida(datos());
-      Alert.alert(
-        "Remedida guardada",
-        "Queda SIN IMPRIMIR, esperando en el teléfono: no sincroniza hasta salir en papel."
-      );
+      let guardada: Remedida;
+      if (remedida) {
+        await actualizarRemedida(remedida, datos());
+        guardada = remedida;
+      } else {
+        guardada = await crearRemedida(datos());
+      }
+
+      // Nace con `impreso = 0`, el campo de cierre de la colección: sin imprimir no
+      // sincroniza. Sólo la impresión la suelta.
+      if (!opts.imprimir) {
+        Alert.alert(
+          "Remedida guardada",
+          "Queda SIN IMPRIMIR, esperando en el teléfono: no sincroniza hasta salir en papel."
+        );
+        onListo();
+        return;
+      }
+
+      // Primero el papel, después la marca. Si el diálogo ni siquiera abre, la remedida
+      // queda en cero y se reintenta; lo capturado no se pierde porque ya se guardó.
+      await imprimirRemedida(guardada);
+      await marcarRemedidaImpresa(guardada);
       onListo();
     } catch (e) {
       setError((e as Error)?.message ?? "No se pudo guardar.");
@@ -196,8 +215,16 @@ export function RemedidaScreen({
       style?: "cancel" | "destructive";
       onPress?: () => void;
     }> = [];
-    if (listo) opciones.push({ text: "Imprimir remedida", onPress: () => void guardar() });
-    if (listo) opciones.push({ text: "Guardar sin imprimir", onPress: () => void guardar() });
+    if (listo) {
+      opciones.push({
+        text: "Imprimir remedida",
+        onPress: () => void guardar({ imprimir: true }),
+      });
+      opciones.push({
+        text: "Guardar sin imprimir",
+        onPress: () => void guardar({ imprimir: false }),
+      });
+    }
     opciones.push({
       text: "Descartar",
       style: "destructive",

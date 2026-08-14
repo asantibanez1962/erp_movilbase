@@ -1,5 +1,6 @@
 import { enLetras, cuartillosEnLetras } from "./enletras";
 import { LOGO } from "./logo";
+import { ESTILO_PAPEL } from "./papel";
 
 /**
  * El papel del recibo: sólo la plantilla, sin base de datos.
@@ -109,61 +110,12 @@ export function armarComprobante(c: ComprobanteRecibo): string {
   const certificado =
     c.certificado.trim() === "" ? "" : `<div class="bloque">${esc(c.certificado)}</div>`;
 
-  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>
-  /* ⚠️ TIPOGRAFÍA DEL WEB, TAL CUAL: Verdana 8.25 pt, con el título a 12 pt en negrita.
-     Costó llegar a estos valores contra la impresora y no se tocan sin volver a probar EN
-     PAPEL. Android no trae Verdana y el WebView cae a Roboto, que es más angosto: las
-     líneas salen algo más cortas que en el web y nada se desborda. Para que fueran
-     idénticas habría que empotrar la fuente, y Verdana es de Microsoft. */
-  @page { size: 76.2mm auto; margin: 0; }
-  /* ⚠️ EL ANCHO Y LOS MÁRGENES VAN EN EL BODY, NO EN @page. Android imprime pasando el
-     HTML por su propio framework, que decide el tamaño de página desde el driver e
-     IGNORA los márgenes de la regla @page: el texto salía pegado al borde izquierdo del
-     rollo. Puestos como padding del body, sí se respetan.
-     72 mm es el área imprimible que declara la 3nStar (el driver la lista como
-     "80(72MM)"): 80 mm de papel, 72 de tinta. El border-box hace que el padding entre
-     dentro de esos 72 y no los estire.
-     Y el ancho va FIJO, no heredado: sin declararlo, las filas de dos columnas —que son
-     flex, y un flex no se encoge por debajo de su contenido— empujan la página más ancha
-     que el papel, todo lo centrado se descentra y el rollo corta el borde derecho. */
-  /* ⚠️ LOS 6.35 mm DE ABAJO NO SON RELLENO: son para poder ARRANCAR el papel. La impresora
-     no tiene cuchilla, así que el recibidor lo corta a mano contra el borde, y el cabezal
-     queda un tramo por detrás de ese borde: sin margen, arrancar se lleva la última línea.
-     ⚠️ Se pisa con "Bottom saving paper" del driver, que recorta el blanco final — o sea
-     justamente esto. Si esa opción se activa, el margen lo tiene que poner el driver con
-     "Feed paper at the end of job". Una o la otra, nunca las dos. */
-  body { font-family: Verdana, "DejaVu Sans", Tahoma, Geneva, sans-serif;
-         font-size: 8.25pt; line-height: 1.32; margin: 0; color: #000;
-         box-sizing: border-box; width: 72mm; padding: 0 1mm 6.35mm 4.2mm;
-         overflow-wrap: break-word; }
-  .c { text-align: center; }
-  .m { font-weight: bold; }
-  .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 2.5mm 0 1.5mm; }
-  .estado { font-weight: bold; text-align: center; margin: 0.8mm 0 1.2mm; }
-  .logo { display: block; margin: 0 auto 0.8mm; width: 30mm; }
-  /* Dos columnas: la etiqueta llega hasta los 23 mm, que es donde el .frx pone el valor. */
-  .par { display: flex; }
-  .par > span:first-child { flex: 0 0 23mm; }
-  /* Que el valor pueda partirse en vez de estirar la fila más allá del papel. */
-  .par > span:last-child { min-width: 0; }
-  .bloque { margin-top: 1mm; }
-  /* La caja de CAFE EN FRUTA es lo único con recuadro en todo el comprobante. */
-  .caja { border: 1px solid #000; width: 34.3mm; margin: 1.2mm auto 0.8mm; text-align: center; }
+  return `<!DOCTYPE html><html><head><meta charset="UTF-8"><style>${ESTILO_PAPEL}
+  /* La fila de cajuelas y cuartillos va lado a lado SOLO en el recibo; en la remedida el
+     .frx los pone en renglones separados. */
   .fruta { display: flex; }
   .fruta > .etq { flex: 0 0 20mm; }
   .fruta > .val { flex: 0 0 11mm; }
-  /* ⚠️ EL BLANCO SOBRE LA RAYA ES DONDE FIRMA EL PRODUCTOR, no es margen suelto: si se
-     achica, no hay dónde firmar.
-     El "+ 2.64em" son DOS RENGLONES exactos (2 × la interlínea de 1.32), pedidos así: "como
-     si imprimieras dos textos en blanco". Va en em y no en milímetros a propósito — si
-     algún día cambia el cuerpo de letra o la interlínea, sigue siendo dos renglones.
-     ⚠️ NADA DE BACKTICKS EN ESTE COMENTARIO: todo el CSS vive dentro de un template literal
-     y un backtick lo corta, con lo que el navegador deja de ver estilos y el parser de TS
-     empieza a leer el CSS como código. Ya pasó dos veces.
-     ⚠️ NO SUBIRLO POR CÁLCULO. Se probó con 25 mm y el comprobante volvió a salir en DOS
-     páginas, con la misma impresora y el mismo driver. El margen que parecía haber —el papel
-     sale en 5.5" contra una página de 210 mm— no existe: el driver escala el contenido, así
-     que estos milímetros no son los del rollo. La única medida que vale es imprimir. */
   .firma { margin: calc(8mm + 2.64em) auto 0; width: 58.6mm; border-top: 1px solid #000;
            text-align: center; }
   /* Y el de abajo separa la firma de la nota legal. En pantalla 3 mm parecían

@@ -247,6 +247,22 @@ export async function anularRemedida(remedida: Remedida, motivo?: string): Promi
   });
 }
 
+/**
+ * Sube en uno el contador de impresiones. Es lo que suelta la remedida hacia el servidor:
+ * `impreso` es el CampoCierre de la colección, así que hasta acá vivía sólo en el teléfono.
+ *
+ * ⚠️ Se marca aunque no se sepa si salió el papel — `printAsync` resuelve al abrir el
+ * diálogo, no al imprimir. Es la misma decisión que en el recibo, y la recuperación es la
+ * misma: anular y volver a digitar. Ver `marcarImpreso` en `recibo.ts`.
+ */
+export async function marcarRemedidaImpresa(remedida: Remedida): Promise<void> {
+  await database.write(async () => {
+    await remedida.update((r) => {
+      r.impreso = (r.impreso ?? 0) + 1;
+    });
+  });
+}
+
 export function esAnulada(remedida: Remedida): boolean {
   return (remedida.observaciones ?? "").trim().toUpperCase().startsWith(TEXTO_ANULADO);
 }
