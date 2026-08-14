@@ -4,6 +4,7 @@ import { modoImpresion } from "./modoImpresion";
 import { imprimirTexto } from "./impresoraBt";
 import { armarRemedida } from "./remedidaTexto";
 import { database } from "./db";
+import { defectosDeLaEmpresa } from "./defectos";
 import { LOGO, LOGO_ESCPOS } from "./logo";
 import { rutasDe, partir } from "./remedida";
 import {
@@ -121,6 +122,10 @@ async function reunirDatos(remedida: Remedida): Promise<ComprobanteRemedida> {
     granosbrocados: remedida.granosbrocados,
     recibidores: rutas.map((r) => nombreRecibidor(r.recibidor)),
     observaciones: remedida.observaciones ?? "",
+    defectos: (await defectosDeLaEmpresa()).map((d) => ({
+      etiqueta: d.etiqueta,
+      valor: remedida[d.campo],
+    })),
   };
 }
 

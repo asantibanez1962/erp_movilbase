@@ -72,6 +72,14 @@ export interface ComprobanteRemedida {
   flotemaduro: number;
   floteseco: number;
   granosbrocados: number;
+  /**
+   * Defectos de control de calidad que ESTA empresa registra, ya resueltos a etiqueta y
+   * valor. Vacío ⇒ no se imprime ninguno.
+   *
+   * ⚠️ Viene como lista y no como campos fijos porque cuáles se usan lo decide cada
+   * beneficio. Sólo registran: no castigan, así que no entran al cálculo.
+   */
+  defectos: Array<{ etiqueta: string; valor: number }>;
   /** Los recibidores de la ruta, uno por renglón. De 1 a 15. */
   recibidores: string[];
   observaciones: string;
@@ -90,6 +98,14 @@ export function armarComprobanteRemedida(c: ComprobanteRemedida): string {
   // Una línea vacía igual ocupa renglón, y con el papel contado eso es desperdicio.
   const linea = (texto: string, clase = "") =>
     texto.trim() === "" ? "" : `<div${clase ? ` class="${clase}"` : ""}>${esc(texto)}</div>`;
+
+  // Después de BROCA, en el orden en que la empresa los declaró.
+  const extras = c.defectos
+    .map(
+      (d) =>
+        `<div class="par"><span>${esc(d.etiqueta)}</span><span>${d.valor.toFixed(2)} %</span></div>`
+    )
+    .join("");
 
   const par = (etiqueta: string, valor: string) =>
     valor.trim() === ""
@@ -140,6 +156,7 @@ export function armarComprobanteRemedida(c: ComprobanteRemedida): string {
   <div class="par"><span>FLOTE M.:</span><span>${dec(c.flotemaduro, 2)} %</span></div>
   <div class="par"><span>FLOTE S:</span><span>${dec(c.floteseco, 2)} %</span></div>
   <div class="par"><span>BROCA:</span><span>${c.granosbrocados} (granos)</span></div>
+  ${extras}
 
   <div class="ruta">
     <div class="bloque">RECIBIDORES:</div>

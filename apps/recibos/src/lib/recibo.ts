@@ -10,6 +10,7 @@ import { database } from "./db";
 import { crearConUuid } from "./crear";
 import { useSesion } from "./sesion";
 import { cliente } from "../branding";
+import type { CampoDefecto } from "./defectos";
 import type {
   Bitacora,
   CastigoBroca,
@@ -433,6 +434,14 @@ export interface DatosRecibo {
   idFinca: number | null;
   idCertificado: number | null;
   cldd: number;
+  /**
+   * Defectos de control de calidad, sólo los que la empresa registra.
+   *
+   * ⚠️ APARTE DE `medida`, que es lo que entra al CÁLCULO. Éstos no castigan, y
+   * mezclarlos invitaría a que alguien los pase al motor y cambie números ya
+   * validados contra la cosecha entera. Ver `lib/defectos.ts`.
+   */
+  extras: Partial<Record<CampoDefecto, number>>;
   calidad: string;
   tipoCafe: string;
   nivel: number;
@@ -501,6 +510,10 @@ function aplicarDatos(r: Recibo, d: DatosRecibo): void {
   r.idFinca = d.idFinca;
   r.idCertificado = d.idCertificado;
   r.cldd = d.cldd;
+  // Los que la empresa no usa quedan en cero, que es su valor en la base.
+  r.pinton = d.extras.pinton ?? 0;
+  r.granopasa = d.extras.granopasa ?? 0;
+  r.flotenegro = d.extras.flotenegro ?? 0;
   r.observaciones = d.observaciones ?? null;
 
   r.cantidadinicial = d.medida.cantidadinicial;

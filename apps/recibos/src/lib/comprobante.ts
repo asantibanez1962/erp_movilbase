@@ -88,6 +88,14 @@ export interface ComprobanteRecibo {
   floteseco: number;
   granosbrocados: number;
   /**
+   * Defectos de control de calidad que ESTA empresa registra, ya resueltos a etiqueta y
+   * valor. Vacío ⇒ no se imprime ninguno.
+   *
+   * ⚠️ Viene como lista y no como campos fijos porque cuáles se usan lo decide cada
+   * beneficio. Sólo registran: no castigan, así que no entran al cálculo.
+   */
+  defectos: Array<{ etiqueta: string; valor: number }>;
+  /**
    * La nota legal del pie, con sus saltos de línea. Vacía ⇒ no se imprime.
    *
    * ⚠️ ES TEXTO DEL BENEFICIO, no del sistema: sale de `ge_companias.ben_nota_recibo`. Estaba
@@ -145,6 +153,14 @@ export function armarComprobante(c: ComprobanteRecibo): string {
       : `<div class="nota">${partirParrafos(c.nota)
           .map((parrafo) => `<p>${esc(parrafo)}</p>`)
           .join("")}</div>`;
+
+  // Después de BROCA, en el orden en que la empresa los declaró.
+  const extras = c.defectos
+    .map(
+      (d) =>
+        `<div class="par"><span>${esc(d.etiqueta)}</span><span>${d.valor.toFixed(2)} %</span></div>`
+    )
+    .join("");
 
   const sello = c.cldd.trim() === "" ? "" : `<div class="bloque c m">${esc(c.cldd)}</div>`;
   const certificado =
@@ -219,6 +235,7 @@ export function armarComprobante(c: ComprobanteRecibo): string {
   <div class="par"><span>FLOTE M.:</span><span>${dec(c.flotemaduro, 2)} %</span></div>
   <div class="par"><span>FLOTE S:</span><span>${dec(c.floteseco, 2)} %</span></div>
   <div class="par"><span>BROCA:</span><span>${c.granosbrocados} (granos)</span></div>
+  ${extras}
 
   <div class="firma">FIRMA</div>
 

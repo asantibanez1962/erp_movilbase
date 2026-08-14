@@ -31,6 +31,7 @@ import {
 } from "../lib/recibo";
 import { imprimirRecibo } from "../lib/imprimir";
 import { bitacorasAbiertas } from "../lib/bitacora";
+import { defectosDeLaEmpresa, type CampoDefecto } from "../lib/defectos";
 import type {
   Bitacora,
   Recibo,
@@ -146,6 +147,14 @@ export function ReciboScreen({
     "productor" | "finca" | "calidad" | "certificado" | "tipocafe" | "bitacora" | null
   >(null);
 
+  /**
+   * Los defectos de control de calidad. Van aparte de `medida` a propósito: `MedidaCapturada`
+   * es lo que entra al CÁLCULO, y éstos no castigan — mezclarlos invitaría a que alguien los
+   * pase al motor y cambie números ya validados contra la cosecha entera.
+   */
+  const [defectos, setDefectos] = useState<Array<{ campo: CampoDefecto; etiqueta: string }>>([]);
+  const [extras, setExtras] = useState<Partial<Record<CampoDefecto, number>>>({});
+
   const [medida, setMedida] = useState<MedidaCapturada>({
     cantidadinicial: 0,
     cuartillosinicial: 0,
@@ -179,6 +188,14 @@ export function ReciboScreen({
           database.get<TipoCafe>("tipos_cafe").query().fetch(),
         ]);
         setCat(c);
+        setDefectos([...(await defectosDeLaEmpresa())]);
+        if (recibo) {
+          setExtras({
+            pinton: recibo.pinton,
+            granopasa: recibo.granopasa,
+            flotenegro: recibo.flotenegro,
+          });
+        }
         setProductores(prods);
         setCalidades(cals);
         setCertificados(certs);
@@ -436,6 +453,7 @@ export function ReciboScreen({
         calculo: calculo!,
         precio,
         observaciones: observaciones.trim() || null,
+        extras,
       };
       let guardado: Recibo;
       if (recibo) {
@@ -835,6 +853,18 @@ export function ReciboScreen({
             castigo={calculo ? fmtCajuelas(calculo.broca, calculo.cuartillosbroca) : null}
             onChange={(v) => setMedida((m) => ({ ...m, granosbrocados: v }))}
           />
+          {/* Los de CONTROL DE CALIDAD, después de broca y sólo los que esta empresa
+              declaró. No llevan castigo al lado porque no castigan: se registran y se
+              imprimen. Ver `lib/defectos.ts`. */}
+          {defectos.map((d) => (
+            <Defecto
+              key={d.campo}
+              etiqueta={d.etiqueta}
+              valor={extras[d.campo] ?? 0}
+              castigo={null}
+              onChange={(v) => setExtras((x) => ({ ...x, [d.campo]: v }))}
+            />
+          ))}
 
           {/* ── Total ────────────────────────────────────────────────────────── */}
           {/* Sólo la cantidad. El valor se calcula y se guarda, pero no se muestra ni se

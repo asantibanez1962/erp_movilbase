@@ -57,6 +57,14 @@ export interface RemedidaImpresa {
   flotemaduro: number;
   floteseco: number;
   granosbrocados: number;
+  /**
+   * Defectos de control de calidad que ESTA empresa registra, ya resueltos a etiqueta y
+   * valor. Vacío ⇒ no se imprime ninguno.
+   *
+   * ⚠️ Viene como lista y no como campos fijos porque cuáles se usan lo decide cada
+   * beneficio. Sólo registran: no castigan, así que no entran al cálculo.
+   */
+  defectos: Array<{ etiqueta: string; valor: number }>;
   recibidores: string[];
   observaciones: string;
   /** Quién la hizo. El legacy lo imprime al pie, bajo la firma. */
@@ -128,7 +136,12 @@ export function armarRemedida(r: RemedidaImpresa): string {
   p.push(`          VERDE:     ${dec(r.verdes)}%   ${LF}`);
   p.push(`          FLOTE M:   ${dec(r.flotemaduro)}%   ${LF}`);
   p.push(`          FLOTE S:   ${dec(r.floteseco)}%   ${LF}`);
-  p.push(`          BROCA:${r.granosbrocados} (GRANOS) ${LF}${LF}`);
+  p.push(`          BROCA:${r.granosbrocados} (GRANOS) ${LF}`);
+  // Después de BROCA, con el mismo sangrado que los otros porcentajes.
+  for (const d of r.defectos) {
+    p.push(`          ${d.etiqueta}: ${dec(d.valor)}%   ${LF}`);
+  }
+  p.push(LF);
 
   p.push(`RECIBIDORES:${LF}${LF}`);
   for (const nombre of r.recibidores) p.push(`${nombre}${LF}`);

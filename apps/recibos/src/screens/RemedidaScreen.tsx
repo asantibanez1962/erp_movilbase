@@ -24,6 +24,7 @@ import {
   marcarRemedidaImpresa,
 } from "../lib/remedida";
 import { imprimirRemedida } from "../lib/imprimirRemedida";
+import { defectosDeLaEmpresa, type CampoDefecto } from "../lib/defectos";
 import { useSesion } from "../lib/sesion";
 import type {
   Calidad,
@@ -103,12 +104,23 @@ export function RemedidaScreen({
   const [flotemaduro, setFlotemaduro] = useState(remedida?.flotemaduro ?? 0);
   const [floteseco, setFloteseco] = useState(remedida?.floteseco ?? 0);
   const [brocados, setBrocados] = useState(String(remedida?.granosbrocados ?? 0));
+  /** Defectos de control de calidad; ver la nota en `lib/defectos.ts`. */
+  const [defectos, setDefectos] = useState<Array<{ campo: CampoDefecto; etiqueta: string }>>([]);
+  const [extras, setExtras] = useState<Partial<Record<CampoDefecto, number>>>({
+    pinton: remedida?.pinton,
+    granopasa: remedida?.granopasa,
+    flotenegro: remedida?.flotenegro,
+  });
   const [observaciones, setObservaciones] = useState(remedida?.observaciones ?? "");
   const [elegidos, setElegidos] = useState<string[]>([]);
 
   const [picker, setPicker] = useState<
     "calidad" | "tipocafe" | "transportista" | "recibidores" | null
   >(null);
+
+  useEffect(() => {
+    void (async () => setDefectos([...(await defectosDeLaEmpresa())]))();
+  }, []);
 
   useEffect(() => {
     void (async () => {
@@ -163,6 +175,7 @@ export function RemedidaScreen({
     granosbrocados: Number.parseInt(brocados, 10) || 0,
     observaciones: observaciones.trim() || null,
     recibidores: elegidos,
+    extras,
   });
 
   const listo =
@@ -470,6 +483,17 @@ export function RemedidaScreen({
           style={[interior, { fontSize: 17, color: colores.texto }]}
         />
       </Campo>
+
+      {/* Los de CONTROL DE CALIDAD, después de broca y sólo los que esta empresa declaró.
+          No castigan: se registran y se imprimen. Ver `lib/defectos.ts`. */}
+      {defectos.map((d) => (
+        <Decimal
+          key={d.campo}
+          etiqueta={d.etiqueta}
+          valor={extras[d.campo] ?? 0}
+          onChange={(v) => setExtras((x) => ({ ...x, [d.campo]: v }))}
+        />
+      ))}
 
       <Campo etiqueta="Observaciones">
         <TextInput

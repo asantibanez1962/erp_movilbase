@@ -2,6 +2,7 @@ import { Q, type Model } from "@nozbe/watermelondb";
 import * as Print from "expo-print";
 import { useAuthStore } from "@erp/shared-api";
 import { database } from "./db";
+import { defectosDeLaEmpresa } from "./defectos";
 import { LOGO, LOGO_ESCPOS } from "./logo";
 import { modoImpresion } from "./modoImpresion";
 import { imprimirTexto } from "./impresoraBt";
@@ -105,6 +106,7 @@ export async function imprimirRecibo(recibo: Recibo): Promise<void> {
         // operando la app en ese momento.
         medidor: useAuthStore.getState().user?.usuario ?? "",
         agregado: comoFechaHora(recibo.agregado),
+        defectos: datos.defectos,
       })
     );
     return;
@@ -190,6 +192,11 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
     floteseco: recibo.floteseco,
     granosbrocados: recibo.granosbrocados,
     nota: empresa?.notaRecibo ?? "",
+    // Sólo los que esta empresa declaró, con el valor que el recibo guardó.
+    defectos: (await defectosDeLaEmpresa()).map((d) => ({
+      etiqueta: d.etiqueta,
+      valor: recibo[d.campo],
+    })),
   };
 }
 
