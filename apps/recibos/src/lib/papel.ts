@@ -47,7 +47,11 @@ export const ESTILO_PAPEL = `
   .c, .titulo, .estado { margin-left: -3.2mm; }
   .c { text-align: center; }
   .m { font-weight: bold; }
-  .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 2.5mm 0 1.5mm -3.2mm; }
+  /* 10pt y no los 12 del .frx: alla el titulo del recibo entra porque dice RECIBO DE
+     CAFE; el de la remedida dice RECIBO DE TRANSPORTE, 43 % mas largo, y el .frx lo
+     compensa dandole una caja de 63 mm contra 45. Aca no hay cajas, asi que se baja el
+     cuerpo para que el mas largo entre. */
+  .titulo { font-size: 10pt; font-weight: bold; text-align: center; margin: 2.5mm 0 1.5mm -3.2mm; }
   .estado { font-weight: bold; text-align: center; margin: 0.8mm 0 1.2mm -3.2mm; }
   /* El logo y la caja tienen ancho propio y se centran con margen automático, así que no se
      les puede dar margen negativo sin descentrarlos: se corren con la propiedad left, que

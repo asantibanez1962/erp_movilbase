@@ -174,6 +174,23 @@ export function RemedidaScreen({
     elegidos.length > 0 &&
     (Number.parseInt(cajuelas, 10) || 0) + cuartillos > 0;
 
+  /** Ya salió en papel: se puede repetir, no modificar. */
+  const yaImpresa = (remedida?.impreso ?? 0) >= 1;
+
+  const reimprimir = async () => {
+    if (!remedida || guardando) return;
+    setGuardando(true);
+    setError(null);
+    try {
+      await imprimirRemedida(remedida);
+      await marcarRemedidaImpresa(remedida);
+      onListo();
+    } catch (e) {
+      setError((e as Error)?.message ?? "No se pudo imprimir.");
+      setGuardando(false);
+    }
+  };
+
   const guardar = async (opts: { imprimir: boolean }) => {
     if (!listo || guardando) return;
     setGuardando(true);
@@ -215,7 +232,17 @@ export function RemedidaScreen({
       style?: "cancel" | "destructive";
       onPress?: () => void;
     }> = [];
-    if (listo) {
+    /**
+     * Una remedida ya impresa no se edita —el papel se fue con el camión— pero SÍ se vuelve
+     * a imprimir: se traba el rollo, o hacen falta dos copias. Sin esto, la única salida que
+     * ofrecía la pantalla era anular, que es desproporcionado para "necesito otro papel".
+     */
+     if (yaImpresa) {
+      opciones.push({
+        text: "Volver a imprimir",
+        onPress: () => void reimprimir(),
+      });
+    } else if (listo) {
       opciones.push({
         text: "Imprimir remedida",
         onPress: () => void guardar({ imprimir: true }),
@@ -225,7 +252,7 @@ export function RemedidaScreen({
         onPress: () => void guardar({ imprimir: false }),
       });
     }
-    opciones.push({
+    if (!yaImpresa) opciones.push({
       text: "Descartar",
       style: "destructive",
       onPress: () =>
@@ -236,13 +263,11 @@ export function RemedidaScreen({
     });
     opciones.push({ text: "Cancelar", style: "cancel" });
 
-    Alert.alert(
-      numero ?? "Remedida",
-      listo
-        ? undefined
-        : "Faltan datos: sifón, calidad, la medida y al menos un recibidor.",
-      opciones
-    );
+    let aviso: string | undefined;
+    if (yaImpresa) aviso = "Ya impresa. No se puede modificar; sí volver a imprimir.";
+    else if (!listo) aviso = "Faltan datos: sifón, calidad, la medida y al menos un recibidor.";
+
+    Alert.alert(numero ?? "Remedida", aviso, opciones);
   };
 
   useEffect(() => {
