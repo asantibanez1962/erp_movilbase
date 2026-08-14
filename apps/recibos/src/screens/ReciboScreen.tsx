@@ -1202,6 +1202,19 @@ export function ReciboScreen({
         castigo={calculo ? fmtCajuelas(calculo.broca, calculo.cuartillosbroca) : null}
         onChange={(v) => setMedida((m) => ({ ...m, granosbrocados: v }))}
       />
+      {/* ⚠️ ESTE BLOQUE ESTÁ DOS VECES en la pantalla, una por maquetado —dos columnas para
+          tableta, una para teléfono— y hay que tocar LOS DOS. Se agregó sólo al de tableta
+          la primera vez, y el resultado fue que el campo salía impreso pero no se podía
+          capturar en vertical, que es como se usa el teléfono. */}
+      {defectos.map((d) => (
+        <Defecto
+          key={d.campo}
+          etiqueta={d.etiqueta}
+          valor={extras[d.campo] ?? 0}
+          castigo={null}
+          onChange={(v) => setExtras((x) => ({ ...x, [d.campo]: v }))}
+        />
+      ))}
 
       {/* ── Total ────────────────────────────────────────────────────────── */}
       {/* Sólo la cantidad. El valor se calcula y se guarda, pero no se muestra ni se
