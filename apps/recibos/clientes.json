@@ -29,6 +29,8 @@
     "acento": "#3b82f6",
     "package": "cr.confeldan.recibos",
     "apiBaseUrl": "http://10.0.2.2:5249",
+    "_logoImpresoNota": "dev apunta a la base de Altura, asi que imprime su logo. Sin esto las pruebas salen sin logo y el defecto recien aparece al compilar para un cliente real.",
+    "logoImpreso": "altura.png",
     "logo": null,
     "idSocioGenerico": 5109
   },
