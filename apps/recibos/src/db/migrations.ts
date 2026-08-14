@@ -19,6 +19,33 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // Los defectos de control de calidad. ⚠️ No castigan: el cálculo no cambia.
+      // Ver v1.71/RC/49.
+      toVersion: 9,
+      steps: [
+        addColumns({
+          table: "recibos",
+          columns: [
+            { name: "pinton", type: "number" },
+            { name: "granopasa", type: "number" },
+            { name: "flotenegro", type: "number" },
+          ],
+        }),
+        addColumns({
+          table: "remedidas",
+          columns: [
+            { name: "pinton", type: "number" },
+            { name: "granopasa", type: "number" },
+            { name: "flotenegro", type: "number" },
+          ],
+        }),
+        addColumns({
+          table: "companias",
+          columns: [{ name: "ben_defectos", type: "string", isOptional: true }],
+        }),
+      ],
+    },
+    {
       // La nota legal del recibo, que es de cada beneficio. Ver v1.71/RC/48.
       toVersion: 8,
       steps: [

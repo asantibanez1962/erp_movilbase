@@ -50,8 +50,11 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *        `parametros` deja de sincronizar. Ver v1.71/RC/46.
  *   8 → `ben_nota_recibo`: la nota legal del pie es texto de CADA BENEFICIO, no del
  *        sistema. Estaba escrita dentro del .frx. Ver v1.71/RC/48.
+ *   9 → `pinton`, `granopasa` y `flotenegro` en recibos y remedidas, y la lista de
+ *        cuáles usa cada beneficio. ⚠️ SÓLO REGISTRAN: son control de calidad y no
+ *        producen rebajo, así que el cálculo no cambia. Ver v1.71/RC/49.
  */
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -303,6 +306,8 @@ export const schema = appSchema({
         { name: "ben_codigoicafe", type: "string", isOptional: true },
         // Con sus saltos de línea: los renglones son parte del texto legal.
         { name: "ben_nota_recibo", type: "string", isOptional: true },
+        // Lista separada por comas de los defectos que esta empresa registra.
+        { name: "ben_defectos", type: "string", isOptional: true },
       ],
     }),
     tableSchema({
@@ -377,6 +382,11 @@ export const schema = appSchema({
         { name: "flotemaduro", type: "number" },
         { name: "floteseco", type: "number" },
         { name: "granosbrocados", type: "number" },
+        // Defectos de CONTROL DE CALIDAD: se registran y se imprimen, pero no
+        // castigan. Cada beneficio declara cuáles usa; ver `Compania.defectos`.
+        { name: "pinton", type: "number" },
+        { name: "granopasa", type: "number" },
+        { name: "flotenegro", type: "number" },
         { name: "medidor", type: "string", isOptional: true },
         { name: "observaciones", type: "string", isOptional: true },
         // Campo de cierre: 0 sin imprimir, 1 original, 2+ copias.
@@ -453,6 +463,11 @@ export const schema = appSchema({
         { name: "cantidadinicial", type: "number" },
         { name: "cuartillosinicial", type: "number" },
         { name: "granosbrocados", type: "number" },
+        // Defectos de CONTROL DE CALIDAD: se registran y se imprimen, pero no
+        // castigan. Cada beneficio declara cuáles usa; ver `Compania.defectos`.
+        { name: "pinton", type: "number" },
+        { name: "granopasa", type: "number" },
+        { name: "flotenegro", type: "number" },
         { name: "verdes", type: "number" },
         { name: "flotemaduro", type: "number" },
         { name: "floteseco", type: "number" },

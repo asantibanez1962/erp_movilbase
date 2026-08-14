@@ -202,6 +202,17 @@ export class Compania extends Model {
    * otra a otro cliente obligaba a mantener un .frx por cliente.
    */
   @readonly @field("ben_nota_recibo") notaRecibo!: string | null;
+  /**
+   * Los defectos de control de calidad que ESTA empresa registra, separados por comas.
+   *
+   * ⚠️ SÓLO REGISTRAN — no castigan. Por eso se pueden agregar sin tocar el cálculo, que es
+   * un port verificado contra los 38 550 recibos de la cosecha.
+   *
+   * Vacío ⇒ ninguno, que es el caso de Altura: sus tres columnas están en cero en toda la
+   * cosecha. Mostrar campos que nadie llena ensucia una pantalla que se usa decenas de veces
+   * al día.
+   */
+  @readonly @field("ben_defectos") defectos!: string | null;
 }
 
 export class Finca extends Model {
@@ -262,6 +273,16 @@ export class Remedida extends Model {
   @field("flotemaduro") flotemaduro!: number;
   @field("floteseco") floteseco!: number;
   @field("granosbrocados") granosbrocados!: number;
+  /**
+   * Defectos de CONTROL DE CALIDAD. Se registran y se imprimen, pero **no castigan**:
+   * no hay columnas de rebajo para ellos ni filas en `rc_tipocastigo`, y no las
+   * necesitan. Por eso se pudieron agregar sin tocar el cálculo.
+   *
+   * Cada beneficio declara cuáles usa en `Compania.defectos`.
+   */
+  @field("pinton") pinton!: number;
+  @field("granopasa") granopasa!: number;
+  @field("flotenegro") flotenegro!: number;
   @field("medidor") medidor!: string | null;
   @field("observaciones") observaciones!: string | null;
   /** 0 sin imprimir · 1 original · 2+ copias. Es el campo de cierre del sync. */
@@ -329,6 +350,16 @@ export class Recibo extends Model {
   @field("cantidadinicial") cantidadinicial!: number;
   @field("cuartillosinicial") cuartillosinicial!: number;
   @field("granosbrocados") granosbrocados!: number;
+  /**
+   * Defectos de CONTROL DE CALIDAD. Se registran y se imprimen, pero **no castigan**:
+   * no hay columnas de rebajo para ellos ni filas en `rc_tipocastigo`, y no las
+   * necesitan. Por eso se pudieron agregar sin tocar el cálculo.
+   *
+   * Cada beneficio declara cuáles usa en `Compania.defectos`.
+   */
+  @field("pinton") pinton!: number;
+  @field("granopasa") granopasa!: number;
+  @field("flotenegro") flotenegro!: number;
   @field("verdes") verdes!: number;
   @field("flotemaduro") flotemaduro!: number;
   @field("floteseco") floteseco!: number;
