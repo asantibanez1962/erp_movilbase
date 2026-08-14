@@ -473,6 +473,52 @@ que diseñar acá.
 
 ## 7. Impresión
 
+### ⚠️ LOS CASTIGOS NO SE IMPRIMEN — ES POR LEY
+
+En el comprobante van **los porcentajes de defecto**, no los castigos que producen:
+
+```
+          AJUSTES:
+          VERDE:     4.00%
+          FLOTE M:   1.00%
+          FLOTE S:   0.00%
+          BROCA:      12 (GRANOS)
+```
+
+**No es una preferencia de presentación ni una simplificación**: la ley no permite
+imprimir el castigo en el documento que se entrega. Por eso en el procedimiento legacy
+las líneas de rebajo están comentadas, no ausentes — alguien las escribió y las tuvo que
+sacar.
+
+Importa dejarlo anotado porque nuestra app **sí calcula** los castigos y los guarda con el
+recibo. La tentación de mostrarlos en el papel —ya que están— es exactamente el cambio que
+no se puede hacer.
+
+Lo que sí lleva el papel es la cantidad neta, en números y en letras.
+
+### El precio impreso es el GENÉRICO, no el del productor
+
+El comprobante imprime `ADELANTO`, que es **el precio por fanega**: el precio por cajuela
+× 20. Con el precio actual, unos ₡129 000.
+
+⚠️ Y se busca **sin el código del productor**. El legacy consulta por
+`cosecha + tipocafe + calidad + codigozona + recibidor`, y si no encuentra cae a
+`cosecha + tipocafe + calidad`. Un productor puede tener precio especial, pero **en el
+papel va el genérico**.
+
+Es distinto del precio que se GUARDA con el recibo, donde el código del productor sí entra
+al criterio. Usar la misma función para las dos cosas —lo natural— haría que el papel
+imprimiera el precio especial: un número plausible y equivocado en el documento que la
+persona firma y se lleva.
+
+**El recibo imprime un precio, nunca un valor.**
+
+### Lo que el papel necesita y no bajaba
+
+`re_parametros` (nombre de la empresa, tres líneas de dirección, código ICAFE, teléfono,
+correo), `productores.direccion` para el `UBICACION:` y `rc_Finca.ubicacion` cuando el
+recibo lleva finca. Registrado en v1.71/RC/43, todo sin acentos por la impresora.
+
 ### ORIGINAL / COPIA sin tocar el esquema
 
 `recibos.impreso` ya es `tinyint`, no bit. **Sirve de contador tal cual**: 0 sin
