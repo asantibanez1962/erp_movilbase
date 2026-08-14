@@ -621,6 +621,60 @@ driver ya existe y funciona, y escribir un módulo nativo para ganar dos toques 
 
 **Impresora: 3nStar, papel de 80 mm (3").**
 
+### ⚠️ Lo que hay que dejar listo en CADA teléfono, y la app no puede hacer
+
+Se descubrió probando en el Galaxy A05, y sin esto la impresión simplemente no aparece:
+
+1. **Abrir *Printer Manager* una vez.** El servicio ESC/POS viene en `enabled=4`
+   (*disabled until used*): instalado pero **oculto del diálogo de impresión** hasta que
+   alguien lo abra. El síntoma es que el diálogo sólo ofrece tamaños de impresora de
+   escritorio —Carta y compañía— y ninguno de 80 mm. Parece que la impresora no existe.
+2. **Dejar UN solo servicio ESC/POS.** En el teléfono de prueba había dos paquetes
+   distintos, `xp.print.printservice.esc` (1.5.3) y `.xml` (1.4.2), **los dos con una clase
+   llamada `EscPrintService`**, así que en el diálogo aparecen con el mismo nombre. Peor:
+   tenían la MISMA impresora registrada dos veces —igual MAC `DC:0D:30:FD:B5:2C`, nombres
+   `3star` y `305bt`— con configuraciones de papel distintas. Un recibidor que ve dos
+   servicios idénticos elige mal la mitad de las veces, y el síntoma es "el recibo sale
+   partido", que no se parece en nada a la causa. Borrar la impresora no alcanza: hay que
+   desinstalar uno de los dos paquetes.
+3. **Elegir el tamaño de papel la primera vez.** Android lo recuerda por impresora y por
+   app, pero la primera vez lo pone el usuario.
+
+### ⚠️ El tamaño de página lo decide el DRIVER, no la app
+
+`printAsync` acepta `width`/`height`, pero son **una sugerencia**. Manda el tamaño elegido
+en el diálogo, que sale del driver. Se probó con 763 pt y con 940 pt: el resultado no
+cambió en nada.
+
+La 3nStar declara `80(72MM)` = **71,4 × 210 mm**, con variantes `1:1.5`, `1:2`, `1:2.5` y
+`1:3` para papeles más largos, y un `80mm Roll` de 101,6 × 304,8 mm.
+
+El comprobante mide **262 mm**, así que en `1:1` la vista previa lo muestra **partido en
+dos**. ⚠️ **Pero en papel sale bien**: la térmica es un rollo continuo y no tiene hojas —
+la paginación es una ficción del framework de Android. Verificado imprimiendo.
+
+Lo que sí delata la paginación son unas marcas que el driver imprime **una por página**
+(se ven como una `B` suelta en el margen izquierdo, separadas ~210 mm). No salen del HTML:
+no están en la vista previa, sólo en el papel. Con `1:1.5` (315 mm) el comprobante entra en
+una página y la marca se reduce a una.
+
+El alto igual hay que seguir pasándolo: omitirlo hace que `printAsync` use 792 pt por
+defecto —el alto de una hoja Carta— y **eso** sí cambia el resultado.
+
+### Márgenes: van en el `body`, no en `@page`
+
+Android imprime pasando el HTML por su propio framework, que **ignora los márgenes de
+`@page`**: el texto salía pegado al borde izquierdo del rollo. Puestos como `padding` del
+`body` sí se respetan.
+
+- **Izquierda 2,5 mm** — poco más de un carácter, para que no arranque contra el borde.
+- **Abajo 6,35 mm (¼")** — es el **margen de corte**: lo que la impresora necesita avanzar
+  para que la última línea pase la barra de corte. Sin eso, cortar se lleva parte del
+  texto.
+
+⚠️ El margen de corte y la opción **"Bottom saving paper"** del driver se pisan: esa opción
+recorta el blanco del final, o sea justamente este margen. Van juntas — o una, o la otra.
+
 ### Si la impresión falla
 
 ⚠️ **`Print.printAsync` resuelve al ABRIR el diálogo, no al salir el papel.** Que la promesa

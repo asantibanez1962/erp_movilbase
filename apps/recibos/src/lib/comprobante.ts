@@ -106,9 +106,15 @@ export function armarComprobante(c: ComprobanteRecibo): string {
      Y el ancho va FIJO, no heredado: sin declararlo, las filas de dos columnas —que son
      flex, y un flex no se encoge por debajo de su contenido— empujan la página más ancha
      que el papel, todo lo centrado se descentra y el rollo corta el borde derecho. */
+  /* ⚠️ LOS 6.35 mm DE ABAJO SON EL MARGEN DE CORTE, NO RELLENO. Un cuarto de pulgada, que
+     es lo que la impresora necesita avanzar para que la última línea pase la barra de
+     corte: sin eso, cortar el papel se lleva parte del texto.
+     Ojo con la opción "Bottom saving paper" del driver: recorta el blanco del final, o sea
+     que si se activa se come justamente este margen. Van juntas — o el margen, o el
+     recorte, no los dos. */
   body { font-family: Verdana, "DejaVu Sans", Tahoma, Geneva, sans-serif;
          font-size: 8.25pt; line-height: 1.45; margin: 0; color: #000;
-         box-sizing: border-box; width: 72mm; padding: 0 1mm 0 2.5mm;
+         box-sizing: border-box; width: 72mm; padding: 0 1mm 6.35mm 2.5mm;
          overflow-wrap: break-word; }
   .c { text-align: center; }
   .m { font-weight: bold; }
@@ -129,7 +135,9 @@ export function armarComprobante(c: ComprobanteRecibo): string {
   /* El blanco sobre la raya es donde firma el productor: no es margen suelto. */
   .firma { margin: 17mm auto 0; width: 58.6mm; border-top: 1px solid #000;
            text-align: center; }
-  .nota { margin-top: 3mm; text-align: center; white-space: pre-line; }
+  /* Y el de abajo separa la firma de la nota legal. En pantalla 3 mm parecían
+     suficientes; impreso, "FIRMA" y "NOTA:" quedaban pegados y se leían como un bloque. */
+  .nota { margin-top: 8mm; text-align: center; white-space: pre-line; }
 </style></head><body>
 
   <img class="logo" src="${LOGO}" alt="" />

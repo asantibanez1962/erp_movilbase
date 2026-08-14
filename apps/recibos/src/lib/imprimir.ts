@@ -38,14 +38,35 @@ import type {
  * un hueco en la secuencia. Ver `marcarImpreso` en `recibo.ts`.
  */
 
+/**
+ * Tamaño de página que se le SUGIERE a Android, en puntos (72 por pulgada — no son píxeles
+ * de pantalla a 96 dpi, que es el error fácil). 226 × 940 pt ≈ 80 × 331 mm.
+ *
+ * ⚠️ ES UNA SUGERENCIA, NO UNA ORDEN, Y AVERIGUARLO COSTÓ VARIAS PRUEBAS. Manda el
+ * **tamaño elegido en el diálogo de impresión**, que sale del driver: la 3nStar declara
+ * `80(72MM)` = 71,4 × 210 mm, con variantes 1:1.5, 1:2, 1:3 para papeles más largos. Sea
+ * cual sea el alto que se pida acá, el trabajo se arma con el del diálogo — se probó con
+ * 763 y con 940 y el resultado no cambió en nada.
+ *
+ * Por eso el comprobante, que mide 262 mm, aparece partido en dos en la vista previa: no
+ * entra en los 210 mm de la página del driver. **Pero en papel sale bien**, porque la
+ * térmica es un rollo continuo y no tiene hojas: la paginación es una ficción del
+ * framework de Android. Verificado imprimiendo.
+ *
+ * El alto igual se pasa, y hay que seguir pasándolo: omitirlo hace que `printAsync` use
+ * 792 pt por defecto —el alto de una hoja Carta— y eso sí cambia el resultado.
+ *
+ * ⚠️ La jornada va a ser distinta: su largo depende de cuántos recibos lleve. Como la
+ * paginación real la decide el driver y no nosotros, ahí lo que hay que revisar es si el
+ * rollo continuo la imprime seguida igual que al recibo, o si conviene un tamaño de papel
+ * más largo en el diálogo.
+ */
+const PAGINA = { width: 226, height: 940 };
+
 /** Imprime el comprobante. La primera vez sale ORIGINAL; de ahí en adelante, COPIA. */
 export async function imprimirRecibo(recibo: Recibo): Promise<void> {
   const datos = await reunirDatos(recibo);
-  await Print.printAsync({
-    html: armarComprobante(datos),
-    // 76.2 mm de ancho de papel = 3", que es lo que declara la página del .frx.
-    width: 288,
-  });
+  await Print.printAsync({ html: armarComprobante(datos), ...PAGINA });
 }
 
 async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
