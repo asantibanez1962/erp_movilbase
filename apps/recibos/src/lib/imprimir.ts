@@ -1,7 +1,11 @@
 import { Q, type Model } from "@nozbe/watermelondb";
 import * as Print from "expo-print";
+import { useAuthStore } from "@erp/shared-api";
 import { database } from "./db";
-import { LOGO } from "./logo";
+import { LOGO, LOGO_ESCPOS } from "./logo";
+import { modoImpresion } from "./modoImpresion";
+import { imprimirTexto } from "./impresoraBt";
+import { armarReciboTexto } from "./reciboTexto";
 import { armarComprobante, type ComprobanteRecibo } from "./comprobante";
 import type {
   Calidad,
@@ -67,6 +71,47 @@ const PAGINA = { width: 226, height: 940 };
 /** Imprime el comprobante. La primera vez sale ORIGINAL; de ahí en adelante, COPIA. */
 export async function imprimirRecibo(recibo: Recibo): Promise<void> {
   const datos = await reunirDatos(recibo);
+
+  if (modoImpresion() === "directo") {
+    await imprimirTexto(
+      armarReciboTexto({
+        logo: LOGO_ESCPOS,
+        copia: datos.copia,
+        empresa: datos.empresa,
+        cosecha: datos.cosecha,
+        recibo: datos.recibo,
+        fecha: datos.fecha,
+        codigo: recibo.codigo ?? "",
+        productor: datos.productor,
+        cedula: datos.cedula,
+        ubicacion: [datos.provincia, datos.canton, datos.distrito]
+          .map((x) => x.trim())
+          .filter((x) => x !== "")
+          .join(" · "),
+        finca: "",
+        // ⚠️ POR FANEGA: el legacy multiplica por 20 y el .frx del web no. Ver la nota en
+        // `reciboTexto.ts` — son ₡127 000 contra ₡6 350, no es un redondeo.
+        adelanto: datos.precio == null ? null : datos.precio * 20,
+        recibidor: datos.recibidor,
+        tipoCafe: datos.tipoCafe,
+        cldd: datos.cldd ? "SELLO: CLDD" : "",
+        certificado: datos.certificado,
+        calidad: datos.calidad,
+        cajuelas: datos.cajuelas,
+        cuartillos: datos.cuartillos,
+        verdes: datos.verdes,
+        flotemaduro: datos.flotemaduro,
+        floteseco: datos.floteseco,
+        granosbrocados: datos.granosbrocados,
+        // El legacy imprime `Usuarios.usuario`, no un campo del recibo: es quien está
+        // operando la app en ese momento.
+        medidor: useAuthStore.getState().user?.usuario ?? "",
+        agregado: comoFechaHora(recibo.agregado),
+      })
+    );
+    return;
+  }
+
   await Print.printAsync({ html: armarComprobante(datos), ...PAGINA });
 }
 

@@ -69,6 +69,8 @@ const dec = (v: number) => v.toFixed(2);
 export function armarRemedida(r: RemedidaImpresa): string {
   const p: string[] = [];
 
+  p.push(cmd.reiniciar);
+
   if (r.logo) p.push(`${cmd.centrado}${logoRaster(r.logo)}${LF}`);
 
   // Encabezado: la empresa en grande, el resto mediano. Idéntico al del legacy.

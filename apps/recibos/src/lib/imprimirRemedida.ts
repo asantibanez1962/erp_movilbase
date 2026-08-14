@@ -43,12 +43,7 @@ export async function imprimirRemedida(remedida: Remedida): Promise<void> {
   // alguna vez difieren en el contenido, el papel dependería de qué teléfono lo emitió.
   if (modoImpresion() === "directo") {
     await imprimirTexto(
-      armarRemedida({
-        ...datos,
-        logo: LOGO_ESCPOS,
-        copia: (remedida.impreso ?? 0) > 0,
-        medidor: remedida.medidor ?? "",
-      })
+      armarRemedida({ ...datos, logo: LOGO_ESCPOS })
     );
     return;
   }
@@ -94,6 +89,7 @@ async function reunirDatos(remedida: Remedida): Promise<ComprobanteRemedida> {
 
   return {
     logo: LOGO,
+    copia: (remedida.impreso ?? 0) > 0,
     empresa: {
       nombre: empresa?.nombre ?? "",
       direccion1: empresa?.direccion1 ?? "",

@@ -122,6 +122,8 @@ export function armarBitacora(j: BitacoraImpresa): string {
   // El logo primero, centrado. El legacy no lo lleva —su papel arranca con la raya— pero
   // la bitácora también sale del beneficio y no hay razón para que sea el único documento
   // sin identificar de un vistazo.
+  p.push(cmd.reiniciar);
+
   if (j.logo) p.push(`${cmd.centrado}${logoRaster(j.logo)}${LF}`);
 
   // Encabezado: nombre grande y centrado, el resto mediano.

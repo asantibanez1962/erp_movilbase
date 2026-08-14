@@ -45,6 +45,14 @@ export interface ComprobanteRemedida {
     telefono: string;
     email: string;
   };
+  /**
+   * ORIGINAL la primera vez, COPIA de ahí en adelante.
+   *
+   * ⚠️ EL .frx DEL WEB NO LO IMPRIME —el del recibo sí— pero el ESC/POS del legacy sí,
+   * y distinguir una reimpresión del original es información que el papel debería
+   * llevar. Se agrega a los dos modos para que no dependa de qué teléfono lo emitió.
+   */
+  copia: boolean;
   cosecha: string;
   /** El número: sifón de 3 dígitos + consecutivo de 6. */
   recibo: string;
@@ -105,11 +113,11 @@ export function armarComprobanteRemedida(c: ComprobanteRemedida): string {
   ${linea(c.empresa.email, "c")}
 
   <div class="titulo">RECIBO DE TRANSPORTE</div>
+  <div class="estado">${c.copia ? "COPIA" : "ORIGINAL"}</div>
 
   <div>COSECHA: ${esc(c.cosecha)}</div>
   ${par("No.:", c.recibo)}
   ${par("Fecha:", c.fecha)}
-  ${par("Medidor:", c.medidor)}
   ${par("Llegada:", c.llegada)}
   ${par("Salida:", c.salida)}
   ${par("Transportista:", c.transportista)}
@@ -140,6 +148,8 @@ export function armarComprobanteRemedida(c: ComprobanteRemedida): string {
 
   ${c.observaciones.trim() === "" ? "" : `<div class="bloque">OBSERVACIONES:</div>
   <div>${esc(c.observaciones)}</div>`}
+
+  ${linea(`HECHO POR ${c.medidor}`, "bloque")}
 
 </body></html>`;
 }
