@@ -6,6 +6,7 @@ import { cliente } from "../branding";
 import { anularRecibo, esAnulado, marcarImpreso } from "../lib/recibo";
 import { imprimirRecibo } from "../lib/imprimir";
 import { colores, estilos, fmtCajuelas, fmtFechaHora } from "./estilos";
+import { useCatalogos } from "./useCatalogos";
 
 /**
  * Un recibo ya emitido. Sólo lectura, y con una sola acción: anular.
@@ -24,6 +25,8 @@ export function ReciboDetalleScreen({
 }: Readonly<{ recibo: Recibo; onVolver: () => void }>) {
   const navigation = useNavigation();
   const [, setTick] = useState(0);
+  const catalogos = useCatalogos();
+  const certificado = catalogos.certificado(recibo.idCertificado);
   const anulado = esAnulado(recibo);
   const impreso = (recibo.impreso ?? 0) >= 1;
 
@@ -123,11 +126,20 @@ export function ReciboDetalleScreen({
         <Estado anulado={anulado} impreso={recibo.impreso ?? 0} />
       </View>
 
+      {/* ⚠️ POR NOMBRE, NUNCA POR CÓDIGO. Las columnas guardan `M` y `2`; el recibidor
+          eligió "Maduro" y "DIF O-01". Mostrar el crudo no da ningún error — se ve raro y
+          ya— y en una pantalla de sólo lectura, que existe para confirmar lo que salió
+          impreso, es justo donde más estorba. Ver el comentario de useCatalogos: éste es
+          el cuarto lugar donde apareció el mismo problema. */}
       <Dato etiqueta="Fecha" valor={fmtFechaHora(recibo.fecha)} />
       <Dato etiqueta="Productor" valor={recibo.nombre ?? recibo.codigo ?? "—"} />
       <Dato etiqueta="Identificación" valor={recibo.cedula ?? "—"} />
-      <Dato etiqueta="Calidad" valor={recibo.calidad ?? "—"} />
-      <Dato etiqueta="Tipo de café" valor={recibo.tipoCafe ?? "—"} />
+      <Dato etiqueta="Calidad" valor={catalogos.calidad(recibo.calidad)} />
+      <Dato etiqueta="Tipo de café" valor={catalogos.tipoCafe(recibo.tipoCafe)} />
+      {/* Los dos sólo aparecen cuando aplican: un renglón vacío se lee como dato
+          faltante, y acá lo que se está confirmando es lo que dice el papel. */}
+      {(recibo.cldd ?? 0) !== 0 ? <Dato etiqueta="CLDD" valor="Sí" /> : null}
+      {certificado ? <Dato etiqueta="Certificado" valor={certificado} /> : null}
 
       <Text style={estilos.seccion}>Medida</Text>
       <Dato

@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { database } from "../lib/db";
-import type { Nivel, TipoCafe, Transportista } from "../db/models";
+import type { Calidad, Certificado, Nivel, TipoCafe, Transportista } from "../db/models";
 
 /**
  * Los nombres de los catálogos que se muestran en más de una pantalla.
@@ -15,25 +15,33 @@ import type { Nivel, TipoCafe, Transportista } from "../db/models";
  */
 export interface Catalogos {
   tipoCafe: (codigo: string | null | undefined) => string;
+  calidad: (codigo: string | null | undefined) => string;
+  certificado: (id: number | null | undefined) => string | null;
   transportista: (codigo: string | null | undefined) => string;
   nivel: (nivel: number | null | undefined) => string;
 }
 
 export function useCatalogos(): Catalogos {
   const [tipos, setTipos] = useState<TipoCafe[]>([]);
+  const [calidades, setCalidades] = useState<Calidad[]>([]);
+  const [certificados, setCertificados] = useState<Certificado[]>([]);
   const [transportistas, setTransportistas] = useState<Transportista[]>([]);
   const [niveles, setNiveles] = useState<Nivel[]>([]);
 
   useEffect(() => {
     let vivo = true;
     void (async () => {
-      const [tc, tr, nv] = await Promise.all([
+      const [tc, ca, ce, tr, nv] = await Promise.all([
         database.get<TipoCafe>("tipos_cafe").query().fetch(),
+        database.get<Calidad>("calidades").query().fetch(),
+        database.get<Certificado>("certificados").query().fetch(),
         database.get<Transportista>("transportistas").query().fetch(),
         database.get<Nivel>("niveles").query().fetch(),
       ]);
       if (!vivo) return;
       setTipos(tc);
+      setCalidades(ca);
+      setCertificados(ce);
       setTransportistas(tr);
       setNiveles(nv);
     })();
@@ -56,6 +64,16 @@ export function useCatalogos(): Catalogos {
       const c = (codigo ?? "").trim();
       return buscar(tipos, (t) => t.tipocafe.trim() === c, (t) => t.nombre, c);
     },
+    calidad: (codigo) => {
+      const c = (codigo ?? "").trim();
+      return buscar(calidades, (x) => x.calidad.trim() === c, (x) => x.nombre, c);
+    },
+    // Devuelve null —y no un guión— cuando el recibo no lleva certificado: la pantalla
+    // omite el renglón entero en vez de mostrar un campo vacío que parece dato faltante.
+    certificado: (id) =>
+      id == null
+        ? null
+        : (certificados.find((x) => x.idcertificado === id)?.nombre ?? `#${id}`),
     transportista: (codigo) => {
       const c = (codigo ?? "").trim();
       return buscar(

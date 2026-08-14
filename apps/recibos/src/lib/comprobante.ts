@@ -95,15 +95,21 @@ export function armarComprobante(c: ComprobanteRecibo): string {
      PAPEL. Android no trae Verdana y el WebView cae a Roboto, que es más angosto: las
      líneas salen algo más cortas que en el web y nada se desborda. Para que fueran
      idénticas habría que empotrar la fuente, y Verdana es de Microsoft. */
-  @page { size: 76.2mm auto; margin: 3.81mm 1.78mm 3.81mm 2.03mm; }
-  /* ⚠️ EL ANCHO VA FIJO, NO HEREDADO. 76.2 mm de papel menos los márgenes de la página son
-     72.39 mm útiles. Sin declararlo, las filas de dos columnas (que son flex, y un flex no
-     se encoge por debajo de su contenido) empujan la página más ancha que el papel: todo
-     lo centrado se descentra y el rollo corta el borde derecho. Con el ancho puesto, el
-     texto largo parte de línea, que es lo que hace un recibo. */
+  @page { size: 76.2mm auto; margin: 0; }
+  /* ⚠️ EL ANCHO Y LOS MÁRGENES VAN EN EL BODY, NO EN @page. Android imprime pasando el
+     HTML por su propio framework, que decide el tamaño de página desde el driver e
+     IGNORA los márgenes de la regla @page: el texto salía pegado al borde izquierdo del
+     rollo. Puestos como padding del body, sí se respetan.
+     72 mm es el área imprimible que declara la 3nStar (el driver la lista como
+     "80(72MM)"): 80 mm de papel, 72 de tinta. El border-box hace que el padding entre
+     dentro de esos 72 y no los estire.
+     Y el ancho va FIJO, no heredado: sin declararlo, las filas de dos columnas —que son
+     flex, y un flex no se encoge por debajo de su contenido— empujan la página más ancha
+     que el papel, todo lo centrado se descentra y el rollo corta el borde derecho. */
   body { font-family: Verdana, "DejaVu Sans", Tahoma, Geneva, sans-serif;
-         font-size: 8.25pt; line-height: 1.45; margin: 0; padding: 0; color: #000;
-         width: 72.39mm; overflow-wrap: break-word; }
+         font-size: 8.25pt; line-height: 1.45; margin: 0; color: #000;
+         box-sizing: border-box; width: 72mm; padding: 0 1mm 0 2.5mm;
+         overflow-wrap: break-word; }
   .c { text-align: center; }
   .m { font-weight: bold; }
   .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 4mm 0 2mm; }
