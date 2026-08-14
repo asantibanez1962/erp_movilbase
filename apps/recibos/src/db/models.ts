@@ -194,6 +194,14 @@ export class Compania extends Model {
   @readonly @field("ben_telefono") telefono!: string | null;
   @readonly @field("ben_email") email!: string | null;
   @readonly @field("ben_codigoicafe") codigoicafe!: string | null;
+  /**
+   * La nota legal del pie, con sus saltos de línea.
+   *
+   * ⚠️ Es texto de CADA BENEFICIO, no del sistema: son sus condiciones y su redacción.
+   * Estaba escrita dentro del .frx, donde cambiarla obligaba a editar el reporte y dar
+   * otra a otro cliente obligaba a mantener un .frx por cliente.
+   */
+  @readonly @field("ben_nota_recibo") notaRecibo!: string | null;
 }
 
 export class Finca extends Model {

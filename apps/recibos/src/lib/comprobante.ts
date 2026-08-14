@@ -87,6 +87,14 @@ export interface ComprobanteRecibo {
   flotemaduro: number;
   floteseco: number;
   granosbrocados: number;
+  /**
+   * La nota legal del pie, con sus saltos de línea. Vacía ⇒ no se imprime.
+   *
+   * ⚠️ ES TEXTO DEL BENEFICIO, no del sistema: sale de `ge_companias.ben_nota_recibo`. Estaba
+   * escrita acá adentro, y con eso cada cliente habría necesitado su propia versión del
+   * código. Ver v1.71/RC/48.
+   */
+  nota: string;
 }
 
 const esc = (s: string | null | undefined) =>
@@ -98,6 +106,21 @@ const esc = (s: string | null | undefined) =>
 
 const dec = (v: number | null | undefined, n: number) => (v == null ? "" : v.toFixed(n));
 
+/**
+ * Parte la nota legal en parrafos.
+ *
+ * Los renglones EN BLANCO separan parrafos; los saltos simples son cortes de linea dentro
+ * del mismo parrafo, y los respeta el CSS con white-space. El texto viene tal como lo
+ * escribio el beneficio en ge_companias.ben_nota_recibo, asi que los saltos son parte del
+ * contenido y no decoracion.
+ */
+function partirParrafos(texto: string): string[] {
+  return texto
+    .replaceAll("\r\n", "\n")
+    .split(/\n[ \t]*\n/)
+    .map((x) => x.trim())
+    .filter((x) => x !== "");
+}
 export function armarComprobante(c: ComprobanteRecibo): string {
   // Las dos van después de CALIDAD y antes de CAFE EN FRUTA. Cuando no aplican no ocupan
   // renglón: el .frx deja el objeto vacío, que es el efecto de su CanShrink.
@@ -113,6 +136,15 @@ export function armarComprobante(c: ComprobanteRecibo): string {
     .map((x) => x.trim())
     .filter((x) => x !== "")
     .join(" · ");
+
+  // Cada párrafo va en su propio <p>: los renglones en blanco del texto separan párrafos, y
+  // dentro de cada uno los saltos se respetan con white-space.
+  const nota =
+    c.nota.trim() === ""
+      ? ""
+      : `<div class="nota">${partirParrafos(c.nota)
+          .map((parrafo) => `<p>${esc(parrafo)}</p>`)
+          .join("")}</div>`;
 
   const sello = c.cldd.trim() === "" ? "" : `<div class="bloque c m">${esc(c.cldd)}</div>`;
   const certificado =
@@ -190,12 +222,7 @@ export function armarComprobante(c: ComprobanteRecibo): string {
 
   <div class="firma">FIRMA</div>
 
-  <div class="nota"><p>NOTA: ESTE RECIBO NO ES NEGOCIBLE Y
-DEBE CONSERVARLO EL PRODUCTOR PARA
-HACER VALER SUS DERECHOS EN LA
-LIQUIDACION DEFINITIVA.</p><p>EL PRECIO DE ESTE CAFE SERA CONFORME
-CON LAS LEYES VIGENTES.</p><p>CUIDE ESTE RECIBO, NO SE ATENDERAN
-RECLAMOS POR PERDIDA.</p></div>
+${nota}
 
 </body></html>`;
 }

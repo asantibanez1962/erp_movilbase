@@ -189,6 +189,7 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
     flotemaduro: recibo.flotemaduro,
     floteseco: recibo.floteseco,
     granosbrocados: recibo.granosbrocados,
+    nota: empresa?.notaRecibo ?? "",
   };
 }
 

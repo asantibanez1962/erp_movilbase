@@ -48,8 +48,10 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *        que están previstos para eso, y no de re_parametros —la tabla del legacy,
  *        de una fila y sin compañía— que es lo que la 6 había registrado por error.
  *        `parametros` deja de sincronizar. Ver v1.71/RC/46.
+ *   8 → `ben_nota_recibo`: la nota legal del pie es texto de CADA BENEFICIO, no del
+ *        sistema. Estaba escrita dentro del .frx. Ver v1.71/RC/48.
  */
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -299,6 +301,8 @@ export const schema = appSchema({
         { name: "ben_telefono", type: "string", isOptional: true },
         { name: "ben_email", type: "string", isOptional: true },
         { name: "ben_codigoicafe", type: "string", isOptional: true },
+        // Con sus saltos de línea: los renglones son parte del texto legal.
+        { name: "ben_nota_recibo", type: "string", isOptional: true },
       ],
     }),
     tableSchema({

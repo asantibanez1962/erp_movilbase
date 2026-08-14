@@ -19,6 +19,16 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // La nota legal del recibo, que es de cada beneficio. Ver v1.71/RC/48.
+      toVersion: 8,
+      steps: [
+        addColumns({
+          table: "companias",
+          columns: [{ name: "ben_nota_recibo", type: "string", isOptional: true }],
+        }),
+      ],
+    },
+    {
       // El encabezado del tiquete pasa a ge_companias. Ver v1.71/RC/46.
       //
       // `parametros` NO se borra: WatermelonDB no sabe eliminar tablas en una migración, y
