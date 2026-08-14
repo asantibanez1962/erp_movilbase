@@ -1,4 +1,5 @@
-import RNBluetoothClassic from "react-native-bluetooth-classic";
+import { PermissionsAndroid, Platform } from "react-native";
+import RNBluetoothClassic, { type BluetoothDevice } from "react-native-bluetooth-classic";
 
 /**
  * Envío directo a la impresora térmica por Bluetooth, sin pasar por Android.
@@ -54,6 +55,58 @@ const PAUSA_MS = 60;
 const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
 /**
+ * Abre el socket, probando primero seguro y después inseguro.
+ *
+ * ⚠️ NO ES UN REINTENTO POR LAS DUDAS: son dos formas distintas de socket RFCOMM. El
+ * legacy usa `createRfcommSocketToServiceRecord`, que es el SEGURO, y le funciona — por eso
+ * se prueba primero. Pero en Android moderno el seguro exige garantías de emparejamiento
+ * que muchas térmicas baratas no cumplen, y falla con un `java.io.IOException` que no dice
+ * nada. Ahí entra el inseguro, que es lo que usa casi toda integración con estas
+ * impresoras.
+ *
+ * `charset` en ISO-8859-1 y no el `ascii` por defecto: los comandos ESC/POS son bytes, y en
+ * ascii todo lo que pase de 127 se mutila.
+ */
+async function conectar(impresora: BluetoothDevice): Promise<boolean> {
+  const opciones = { connectorType: "rfcomm", delimiter: "", charset: "ISO-8859-1" };
+  try {
+    return await impresora.connect({ ...opciones, secureSocket: true });
+  } catch {
+    return await impresora.connect({ ...opciones, secureSocket: false });
+  }
+}
+
+/**
+ * Pide `BLUETOOTH_CONNECT` en runtime.
+ *
+ * ⚠️ DECLARARLO EN EL MANIFEST NO ALCANZA. Desde Android 12 (API 31) es permiso de runtime:
+ * sin pedirlo, `getBondedDevices()` tira SecurityException y el error que ve el recibidor no
+ * menciona ningún permiso — parece que la impresora no existe.
+ *
+ * En Android 11 y anteriores el permiso viejo del manifest sí alcanza, y pedir uno que no
+ * existe en esa versión falla. Por eso el corte por `Platform.Version`.
+ */
+async function pedirPermiso(): Promise<void> {
+  if (Platform.OS !== "android" || Number(Platform.Version) < 31) return;
+
+  const resultado = await PermissionsAndroid.request(
+    PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
+    {
+      title: "Permiso para imprimir",
+      message: "La jornada se imprime conectándose a la impresora por Bluetooth.",
+      buttonPositive: "Permitir",
+      buttonNegative: "Ahora no",
+    }
+  );
+
+  if (resultado !== PermissionsAndroid.RESULTS.GRANTED) {
+    throw new Error(
+      "Sin permiso de Bluetooth no se puede imprimir la jornada. Se otorga una sola vez."
+    );
+  }
+}
+
+/**
  * Manda el texto a la impresora y devuelve cuando terminó de escribirse.
  *
  * ⚠️ QUE ESTO CUMPLA NO PRUEBA QUE SALIÓ EL PAPEL. Se confirma que los bytes entraron al
@@ -62,6 +115,8 @@ const esperar = (ms: number) => new Promise((r) => setTimeout(r, ms));
  * imprime ANTES de marcar la hora final — si algo falla, la jornada queda abierta.
  */
 export async function imprimirTexto(texto: string): Promise<void> {
+  await pedirPermiso();
+
   if (!(await RNBluetoothClassic.isBluetoothEnabled())) {
     throw new Error("El Bluetooth está apagado. Encendelo para poder imprimir la jornada.");
   }
@@ -86,15 +141,35 @@ export async function imprimirTexto(texto: string): Promise<void> {
   }
 
   const impresora = emparejados[0]!;
+  const comoSeLlama = impresora.name?.trim() || impresora.address;
   let conectada = false;
   try {
     // `rfcomm` es Serial Port Profile, lo mismo que el UUID 00001101-… del legacy: es lo
     // que hablan las térmicas. Sin delimitador porque no esperamos respuesta.
-    conectada = await impresora.connect({ connectorType: "rfcomm", delimiter: "" });
+    try {
+      conectada = await conectar(impresora);
+    } catch (e) {
+      /**
+       * ⚠️ UN SOCKET SPP LO TIENE UN SOLO PROCESO A LA VEZ. El `java.io.IOException` que
+       * tira Android acá casi siempre significa que la impresora ya está tomada — y el
+       * sospechoso número uno es **ESCprint Service**, el driver que usa el recibo, que
+       * tiene una opción "Keep alive service" para no soltar la conexión.
+       *
+       * El mensaje crudo no dice nada de eso, y el recibidor termina revisando el
+       * Bluetooth, la carga y el rollo. Se traduce acá, con el orden de lo que hay que
+       * probar.
+       */
+      throw new Error(
+        `No se pudo abrir la impresora "${comoSeLlama}".\n\n` +
+          "Suele ser que otra app la tiene conectada: el servicio de impresión que usa el " +
+          "recibo la retiene si tiene activado \"Keep alive\". Apagá y encendé la " +
+          "impresora, o desactivá esa opción.\n\n" +
+          `Detalle: ${(e as Error)?.message ?? e}`
+      );
+    }
     if (!conectada) {
       throw new Error(
-        `No se pudo conectar con "${impresora.name ?? impresora.address}". ` +
-          "Verificá que esté encendida y cerca."
+        `No se pudo conectar con "${comoSeLlama}". Verificá que esté encendida y cerca.`
       );
     }
     // ⚠️ `latin1` y no `utf8`: los comandos ESC/POS son BYTES, no texto. En utf8 cualquier
