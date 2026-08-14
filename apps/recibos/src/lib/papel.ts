@@ -39,11 +39,20 @@ export const ESTILO_PAPEL = `
          font-size: 8.25pt; line-height: 1.32; margin: 0; color: #000;
          box-sizing: border-box; width: 72mm; padding: 0 1mm 6.35mm 4.2mm;
          overflow-wrap: break-word; }
+  /* ⚠️ LO CENTRADO SE CENTRA EN EL PAPEL, NO EN EL CUERPO. El body tiene 4.2 mm de padding
+     a la izquierda y 1 a la derecha —asimetría buscada, para que el texto alineado a la
+     izquierda no arranque contra el borde—, y eso corría todo lo centrado 1.6 mm a la
+     derecha y le quitaba 3.2 mm de ancho. Se notaba: "RECIBO DE TRANSPORTE" no entraba.
+     El margen negativo le devuelve esos 3.2 mm y lo vuelve a centrar sobre el rollo. */
+  .c, .titulo, .estado { margin-left: -3.2mm; }
   .c { text-align: center; }
   .m { font-weight: bold; }
-  .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 2.5mm 0 1.5mm; }
-  .estado { font-weight: bold; text-align: center; margin: 0.8mm 0 1.2mm; }
-  .logo { display: block; margin: 0 auto 0.8mm; width: 30mm; }
+  .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 2.5mm 0 1.5mm -3.2mm; }
+  .estado { font-weight: bold; text-align: center; margin: 0.8mm 0 1.2mm -3.2mm; }
+  /* El logo y la caja tienen ancho propio y se centran con margen automático, así que no se
+     les puede dar margen negativo sin descentrarlos: se corren con la propiedad left, que
+     los mueve sin rehacer el layout. */
+  .logo { display: block; margin: 0 auto 0.8mm; width: 30mm; position: relative; left: -1.6mm; }
   /* Dos columnas: la etiqueta llega hasta los 23 mm, que es donde el .frx pone el valor. */
   .par { display: flex; }
   .par > span:first-child { flex: 0 0 23mm; }
@@ -51,5 +60,6 @@ export const ESTILO_PAPEL = `
   .par > span:last-child { min-width: 0; }
   .bloque { margin-top: 1mm; }
   /* La caja de CAFE EN FRUTA es lo único con recuadro, en los dos documentos. */
-  .caja { border: 1px solid #000; width: 34.3mm; margin: 1.2mm auto 0.8mm; text-align: center; }
+  .caja { border: 1px solid #000; width: 34.3mm; margin: 1.2mm auto 0.8mm;
+          text-align: center; position: relative; left: -1.6mm; }
 `;

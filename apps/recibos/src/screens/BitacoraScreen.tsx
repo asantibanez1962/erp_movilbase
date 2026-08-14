@@ -3,7 +3,7 @@ import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Bitacora, Recibo } from "../db/models";
 import { cliente } from "../branding";
-import { cerrarBitacora, recibosDe } from "../lib/bitacora";
+import { cerrarBitacora, reimprimirBitacora, recibosDe } from "../lib/bitacora";
 import { imprimirBitacora } from "../lib/imprimirBitacora";
 import { colores, estilos, fmtCajuelas, fmtFecha } from "./estilos";
 import { useCatalogos } from "./useCatalogos";
@@ -66,6 +66,18 @@ export function BitacoraScreen({
       onVolver();
     } catch (e) {
       Alert.alert("No se pudo cerrar", (e as Error)?.message ?? "Error desconocido");
+    } finally {
+      setCerrando(false);
+    }
+  };
+
+  const reimprimir = async () => {
+    if (cerrando) return;
+    setCerrando(true);
+    try {
+      await reimprimirBitacora(bitacora, () => imprimirBitacora(bitacora));
+    } catch (e) {
+      Alert.alert("No se pudo imprimir", (e as Error)?.message ?? "Error desconocido");
     } finally {
       setCerrando(false);
     }
@@ -196,7 +208,37 @@ export function BitacoraScreen({
             </Text>
           </TouchableOpacity>
         </View>
-      ) : null}
+      ) : (
+        /* Cerrada: lo único que queda es volver a sacar el papel. El camión puede salir sin
+           él si se trabó el rollo, y la bitácora ya no se puede cerrar de nuevo. */
+        <View
+          style={{
+            position: "absolute",
+            left: 16,
+            right: 16,
+            bottom: 20 + insets.bottom,
+          }}
+        >
+          <TouchableOpacity
+            onPress={() => void reimprimir()}
+            disabled={cerrando}
+            style={{
+              backgroundColor: colores.superficie,
+              borderWidth: 1,
+              borderColor: colores.borde,
+              borderRadius: 12,
+              minHeight: 50,
+              alignItems: "center",
+              justifyContent: "center",
+              opacity: cerrando ? 0.6 : 1,
+            }}
+          >
+            <Text style={{ color: colores.texto, fontWeight: "600", fontSize: 15 }}>
+              {cerrando ? "Imprimiendo..." : "Volver a imprimir"}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
     </View>
   );
 }

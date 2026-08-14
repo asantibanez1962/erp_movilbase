@@ -139,6 +139,40 @@ export async function editarBitacora(
  * la tarde, el día no puede quedar atrapado en el teléfono sin que la oficina sepa que
  * existió. Queda anotado en las observaciones porque después nadie se acuerda.
  */
+/**
+ * Vuelve a imprimir una bitácora YA CERRADA.
+ *
+ * ⚠️ EXIGE QUE ESTÉ CERRADA, que es la condición inversa a la de `cerrarBitacora`, y no es
+ * una formalidad: si estuviera abierta, imprimir tiene que CERRARLA —ése es el flujo del
+ * legacy y el que evita que exista una "cerrada sin papel"—. Una reimpresión que además
+ * cerrara sería el cierre disfrazado, sin las validaciones que el cierre hace.
+ *
+ * Hace falta porque el papel se pierde: se traba el rollo a mitad de la impresión, o el
+ * camión sale y hay que darle otra copia. Sin esto, una bitácora cerrada queda sin forma de
+ * volver a sacar el reporte que el camión tiene que llevarse.
+ *
+ * No re-sincroniza: ya se envió al cerrar. Sólo sube el contador, que es el registro de
+ * cuántas veces se sacó ese papel.
+ */
+export async function reimprimirBitacora(
+  bitacora: Bitacora,
+  imprimir: () => Promise<void>
+): Promise<void> {
+  if (bitacora.estaAbierta) {
+    throw new Error(
+      "Esta bitácora todavía está abierta. Se imprime al cerrarla, no antes."
+    );
+  }
+
+  await imprimir();
+
+  await database.write(async () => {
+    await bitacora.update((b) => {
+      b.impresiones = (b.impresiones ?? 0) + 1;
+    });
+  });
+}
+
 export async function cerrarBitacora(
   bitacora: Bitacora,
   imprimir: () => Promise<void>,
