@@ -8,10 +8,10 @@ import { syncNow } from "./sync";
 import type { Bitacora, Recibo } from "../db/models";
 
 /**
- * La jornada de trabajo en un recibidor.
+ * La bitácora de trabajo en un recibidor.
  *
  * VOCABULARIO — la palabra "bitácora" nombra cuatro cosas distintas en este sistema, y
- * ésta es UNA de ellas: la jornada de un recibidor (`re_Bitacora_recibos`). No es la
+ * ésta es UNA de ellas: la bitácora de un recibidor (`re_Bitacora_recibos`). No es la
  * bitácora de auditoría del móvil, ni `bitacora_recibos` (el versionado de un recibo),
  * ni la bitácora de precios. Ver §1 del design doc.
  *
@@ -61,14 +61,14 @@ export interface DatosApertura {
 }
 
 /**
- * Abre la jornada. Es local y no toca la red: a las cinco de la mañana en un recibidor
+ * Abre la bitácora. Es local y no toca la red: a las cinco de la mañana en un recibidor
  * puede no haber señal, y esperar a tenerla para poder empezar a recibir café no es una
  * opción.
  *
  * `medidor` se llena solo con el usuario de la app — es quien mide, y pedirlo sería
  * pedir algo que ya sabemos. ⚠️ No confundirlo con el medidor de la remedida.
  *
- * Puede haber VARIAS abiertas a la vez: algunos clientes separan la jornada por
+ * Puede haber VARIAS abiertas a la vez: algunos clientes separan la bitácora por
  * categoría de café. Por eso esta función no valida que no haya otra abierta.
  */
 export async function abrirBitacora(datos: DatosApertura): Promise<Bitacora> {
@@ -97,11 +97,11 @@ export async function abrirBitacora(datos: DatosApertura): Promise<Bitacora> {
 }
 
 /**
- * Completar los datos de una jornada ABIERTA.
+ * Completar los datos de una bitácora ABIERTA.
  *
  * Hace falta por cómo es el día de verdad: **el camión y su placa se saben al final, no
  * al empezar**. La primera versión pedía todo al abrir y después no dejaba tocar nada, y
- * el resultado era una jornada que arrancaba a las cinco de la mañana con datos que
+ * el resultado era una bitácora que arrancaba a las cinco de la mañana con datos que
  * todavía no existían y quedaban vacíos para siempre.
  *
  * Cerrada no se edita: el papel ya salió con el camión y el envío ya ocurrió.
@@ -110,7 +110,7 @@ export async function editarBitacora(
   bitacora: Bitacora,
   datos: DatosApertura
 ): Promise<Bitacora> {
-  if (!bitacora.estaAbierta) throw new Error("Una jornada cerrada ya no se edita.");
+  if (!bitacora.estaAbierta) throw new Error("Una bitácora cerrada ya no se edita.");
 
   await database.write(async () => {
     await bitacora.update((b) => {
@@ -124,11 +124,11 @@ export async function editarBitacora(
 }
 
 /**
- * Cierra la jornada y la manda al servidor con sus recibos.
+ * Cierra la bitácora y la manda al servidor con sus recibos.
  *
  * ⚠️ CERRAR ES IMPRIMIR. No existe un "cerrada pero sin papel": ese estado intermedio es
  * el que genera dudas en el campo. La impresión del reporte del día ocurre ANTES de
- * marcar `horaFinal`, para que un fallo de la impresora deje la jornada abierta y se
+ * marcar `horaFinal`, para que un fallo de la impresora deje la bitácora abierta y se
  * pueda reintentar — y no cerrada sin el papel que el camión tiene que llevarse.
  *
  * `imprimir` se recibe como parámetro y no se llama acá adentro para que esa garantía de
@@ -156,7 +156,7 @@ export async function cerrarBitacora(
   /**
    * ⚠️ NO SE CIERRA CON RECIBOS SIN IMPRIMIR. Es la regla del legacy, y en el móvil pesa
    * todavía más: `impreso` es el campo de cierre de la colección, así que un recibo sin
-   * imprimir **tampoco sincronizó**. Cerrar la jornada ahí la mandaría al servidor sin
+   * imprimir **tampoco sincronizó**. Cerrar la bitácora ahí la mandaría al servidor sin
    * esos recibos, y la oficina vería un día cuadrado que no cuadra.
    *
    * `cantidad > 0` excluye a los anulados, que quedan en cero justamente para eso: ya
@@ -167,9 +167,9 @@ export async function cerrarBitacora(
     const cuales = pendientes.map((r) => r.recibo).join(", ");
     throw new Error(
       pendientes.length === 1
-        ? `El recibo ${cuales} está sin imprimir. Imprimilo antes de cerrar la jornada.`
+        ? `El recibo ${cuales} está sin imprimir. Imprimilo antes de cerrar la bitácora.`
         : `Hay ${pendientes.length} recibos sin imprimir (${cuales}). Imprimilos antes de ` +
-            "cerrar la jornada."
+            "cerrar la bitácora."
     );
   }
 
@@ -187,7 +187,7 @@ export async function cerrarBitacora(
     });
   });
 
-  // El envío es parte del cierre, pero su fallo NO lo deshace: la jornada quedó cerrada
+  // El envío es parte del cierre, pero su fallo NO lo deshace: la bitácora quedó cerrada
   // e impresa, y eso es cierto aunque no haya señal. El sync se reintenta después; que
   // el papel ya esté en el camión no depende de la red.
   try {

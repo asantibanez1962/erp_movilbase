@@ -9,12 +9,12 @@ import { colores, estilos, fmtFecha } from "./estilos";
 import { useCatalogos, type Catalogos } from "./useCatalogos";
 
 /**
- * Las jornadas del recibidor: la de hoy arriba, las anteriores debajo.
+ * Las bitácoras del recibidor: la de hoy arriba, las anteriores debajo.
  *
  * Es la pantalla de inicio porque es donde empieza el día: sin una bitácora abierta no
  * se puede hacer un recibo, y ése es el orden real de la operación.
  *
- * Puede haber VARIAS abiertas a la vez —hay clientes que separan la jornada por
+ * Puede haber VARIAS abiertas a la vez —hay clientes que separan la bitácora por
  * categoría de café— así que la lista no asume una sola.
  */
 export function BitacorasScreen({
@@ -32,7 +32,7 @@ export function BitacorasScreen({
   const [bitacoras, setBitacoras] = useState<Bitacora[] | null>(null);
   const [conteos, setConteos] = useState<Record<string, number>>({});
 
-  // observe() y no fetch(): al crear o cerrar una jornada la lista se actualiza sola,
+  // observe() y no fetch(): al crear o cerrar una bitácora la lista se actualiza sola,
   // sin que cada pantalla tenga que acordarse de refrescar a la vuelta.
   useEffect(() => {
     const sub = todasLasBitacoras().observe().subscribe(setBitacoras);
@@ -78,7 +78,7 @@ export function BitacorasScreen({
           bitacoras == null ? null : (
             <View style={estilos.vacio}>
               <Text style={estilos.vacioTexto}>
-                Todavía no abriste ninguna jornada.{"\n"}
+                Todavía no abriste ninguna bitácora.{"\n"}
                 El día arranca acá: abrí la bitácora y después se le cuelgan los recibos.
               </Text>
             </View>
@@ -103,7 +103,7 @@ export function BitacorasScreen({
         }}
       >
         <Text style={{ color: "#f1f5f9", fontWeight: "700", fontSize: 15 }}>
-          + Abrir jornada
+          + Abrir bitácora
         </Text>
       </TouchableOpacity>
     </View>

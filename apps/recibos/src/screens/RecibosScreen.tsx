@@ -12,7 +12,7 @@ import { colores, estilos, fmtCajuelas, fmtFechaHora } from "./estilos";
 /**
  * Todos los recibos del recibidor en la cosecha, sin importar de qué jornada sean.
  *
- * Tiene menú propio y no cuelga de la jornada porque así es como se busca de verdad: el
+ * Tiene menú propio y no cuelga de la bitácora porque así es como se busca de verdad: el
  * recibidor se acuerda del número o del productor, no de en qué bitácora quedó. La
  * jornada sigue siendo el padre —el recibo se cuelga de una— pero eso es contabilidad
  * del día, no la forma de encontrar un recibo.

@@ -17,7 +17,7 @@ import { PickerModal, type OpcionPicker } from "./Picker";
 import { colores, estilos } from "./estilos";
 
 /**
- * Abrir la jornada.
+ * Abrir la bitácora.
  *
  * Todo lo que se puede deducir, se deduce: la fecha es hoy, la hora de inicio es ahora,
  * el medidor es el usuario de la app. Lo único que se pregunta es lo que la app no puede
@@ -33,7 +33,7 @@ export function AbrirBitacoraScreen({
   onListo,
   onCancelar,
 }: Readonly<{
-  /** Presente ⇒ se EDITA una jornada abierta en vez de abrir una nueva. */
+  /** Presente ⇒ se EDITA una bitácora abierta en vez de abrir una nueva. */
   bitacora?: Bitacora;
   onListo: (b: Bitacora) => void;
   onCancelar: () => void;
@@ -94,7 +94,7 @@ export function AbrirBitacoraScreen({
       const b = editando ? await editarBitacora(bitacora, datos) : await abrirBitacora(datos);
       onListo(b);
     } catch (e) {
-      setError((e as Error)?.message ?? "No se pudo abrir la jornada.");
+      setError((e as Error)?.message ?? "No se pudo abrir la bitácora.");
       setGuardando(false);
     }
   };
@@ -111,11 +111,11 @@ export function AbrirBitacoraScreen({
     >
       <View style={{ padding: 20, gap: 4 }}>
         <Text style={{ fontSize: 22, fontWeight: "700", color: colores.texto }}>
-          {editando ? "Datos de la jornada" : "Abrir jornada"}
+          {editando ? "Datos de la bitácora" : "Abrir bitácora"}
         </Text>
         <Text style={{ color: colores.textoTenue, fontSize: 14 }}>
           {editando
-            ? "El transportista y la placa se pueden completar mientras la jornada esté abierta."
+            ? "El transportista y la placa se pueden completar mientras la bitácora esté abierta."
             : "La fecha, la hora y el medidor se llenan solos."}
         </Text>
       </View>
@@ -135,7 +135,7 @@ export function AbrirBitacoraScreen({
         </>
       )}
 
-      <Text style={estilos.seccion}>De la jornada</Text>
+      <Text style={estilos.seccion}>De la bitácora</Text>
       {/* OBLIGATORIO. El tipo de café decide el PRECIO de todos los recibos de la
           jornada: buscarPrecio() filtra por él, así que sin tipo ningún recibo del día
           encuentra precio. Dejar abrir sin esto era abrir un día entero condenado. */}
@@ -194,7 +194,7 @@ export function AbrirBitacoraScreen({
               fontSize: 16,
             }}
           >
-            {editando ? "Guardar" : "Abrir jornada"}
+            {editando ? "Guardar" : "Abrir bitácora"}
           </Text>
         </TouchableOpacity>
 

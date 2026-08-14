@@ -68,7 +68,7 @@ export async function syncNow(): Promise<FalloPull[]> {
       return puedeEnviarse(politicas, coleccion, fila);
     },
     // Fechas y horas LOCALES, no instantes: varias columnas del servidor son `date` o
-    // `time` y el BE interpreta los milisegundos como UTC. Con UTC-6, una jornada de
+    // `time` y el BE interpreta los milisegundos como UTC. Con UTC-6, una bitácora de
     // la tarde se archivaba en el día siguiente. Ver lib/fechas.ts.
     prepararEnvio: prepararFechas,
   });

@@ -8,7 +8,7 @@ import RNBluetoothClassic, { type BluetoothDevice } from "react-native-bluetooth
  *
  * El recibo va como HTML por el diálogo de impresión: conserva logo y tipografía, que
  * importan porque es el documento del productor. Pero ese camino impone una **página de
- * tamaño fijo** que decide el driver, y la jornada no tiene largo fijo — depende de cuántos
+ * tamaño fijo** que decide el driver, y la bitácora no tiene largo fijo — depende de cuántos
  * recibos lleve. Con página fija se parte en un punto arbitrario, y un corte arbitrario ya
  * nos imprimió "FIRMA" encima de "NOTA:" en el recibo.
  *
@@ -35,14 +35,20 @@ import RNBluetoothClassic, { type BluetoothDevice } from "react-native-bluetooth
  *    también.
  *  - **Un solo socket, pero la escritura sí va troceada.** El legacy parte el texto en
  *    bloques de 1000 bytes y abre una conexión NUEVA por bloque. El troceado se conserva
- *    —está ahí porque en su momento las jornadas largas fallaron, y el buffer de estas
+ *    —está ahí porque en su momento las bitácoras largas fallaron, y el buffer de estas
  *    térmicas es de unos pocos KB— pero se trocea la ESCRITURA y no la CONEXIÓN: reconectar
  *    por bloque es lento y deja al recibidor mirando cómo la impresora arranca y para.
  *    Sobre un mismo socket los bytes llegan en orden, así que cortar en cualquier posición
  *    es inocuo aunque parta un comando ESC/POS por la mitad.
  */
 
-/** Bloque de escritura, en bytes. Es el del legacy. */
+/**
+ * Bloque de escritura, en bytes. Es el del legacy.
+ *
+ * VERIFICADO: se probó bajándolo a 200 para forzar el troceado con una bitácora de sólo 3
+ * recibos —que con 1000 habría entrado en un bloque y nunca lo habría ejercitado—, y el
+ * papel salió igual. El camino que el legacy necesitó para las bitácoras largas funciona.
+ */
 const BLOQUE = 1000;
 
 /**
@@ -93,7 +99,7 @@ async function pedirPermiso(): Promise<void> {
     PermissionsAndroid.PERMISSIONS.BLUETOOTH_CONNECT,
     {
       title: "Permiso para imprimir",
-      message: "La jornada se imprime conectándose a la impresora por Bluetooth.",
+      message: "La bitácora se imprime conectándose a la impresora por Bluetooth.",
       buttonPositive: "Permitir",
       buttonNegative: "Ahora no",
     }
@@ -101,7 +107,7 @@ async function pedirPermiso(): Promise<void> {
 
   if (resultado !== PermissionsAndroid.RESULTS.GRANTED) {
     throw new Error(
-      "Sin permiso de Bluetooth no se puede imprimir la jornada. Se otorga una sola vez."
+      "Sin permiso de Bluetooth no se puede imprimir la bitácora. Se otorga una sola vez."
     );
   }
 }
@@ -112,13 +118,13 @@ async function pedirPermiso(): Promise<void> {
  * ⚠️ QUE ESTO CUMPLA NO PRUEBA QUE SALIÓ EL PAPEL. Se confirma que los bytes entraron al
  * socket, no que la impresora tuviera rollo. Es la misma limitación que con el diálogo de
  * Android, y se resuelve igual: la operación mira el papel. Por eso `cerrarBitacora`
- * imprime ANTES de marcar la hora final — si algo falla, la jornada queda abierta.
+ * imprime ANTES de marcar la hora final — si algo falla, la bitácora queda abierta.
  */
 export async function imprimirTexto(texto: string): Promise<void> {
   await pedirPermiso();
 
   if (!(await RNBluetoothClassic.isBluetoothEnabled())) {
-    throw new Error("El Bluetooth está apagado. Encendelo para poder imprimir la jornada.");
+    throw new Error("El Bluetooth está apagado. Encendelo para poder imprimir la bitácora.");
   }
 
   // No se escanea: emparejar es del sistema operativo y se hace una vez. Escanear exigiría

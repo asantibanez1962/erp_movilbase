@@ -3,7 +3,7 @@ import { database } from "./db";
 import { randomUUID } from "./deviceId";
 
 /**
- * Creación de las filas que el teléfono ORIGINA: jornadas, recibos, remedidas y sus rutas.
+ * Creación de las filas que el teléfono ORIGINA: bitácoras, recibos, remedidas y sus rutas.
  *
  * ⚠️ POR QUÉ NO SE LLAMA `collection.create()` DIRECTO. Las cuatro colecciones son
  * bidireccionales, así que la fila que sube vuelve a bajar en el próximo pull. Para que
@@ -18,7 +18,7 @@ import { randomUUID } from "./deviceId";
  *
  * ⚠️ Y EL SÍNTOMA DE OLVIDARLO NO APARECE CUANDO UNO MIRA. La primera jornada que subió
  * se guardó con ClientUuid en NULL y el push dijo "aceptado": el error recién se vería en
- * el SEGUNDO sync, como una jornada duplicada, o el día que un teléfono reinstalado no
+ * el SEGUNDO sync, como una bitácora duplicada, o el día que un teléfono reinstalado no
  * reconociera lo suyo. De ahí que valga la pena el helper en vez de recordarlo en cada
  * pantalla.
  */

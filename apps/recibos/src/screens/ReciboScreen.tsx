@@ -118,7 +118,7 @@ export function ReciboScreen({
   const [tiposCafe, setTiposCafe] = useState<TipoCafe[]>([]);
   /** Jornadas abiertas del recibidor. Puede haber varias: hay clientes que separan el
    *  día por categoría de café. */
-  const [jornadas, setJornadas] = useState<Bitacora[]>([]);
+  const [abiertas, setAbiertas] = useState<Bitacora[]>([]);
   const [bitacora, setBitacora] = useState<Bitacora | null>(bitacoraInicial ?? null);
 
   // Quién entrega
@@ -143,7 +143,7 @@ export function ReciboScreen({
   // pantalla que se usa decenas de veces al día.
   const [calidad, setCalidad] = useState<string | null>("M");
   const [picker, setPicker] = useState<
-    "productor" | "finca" | "calidad" | "certificado" | "tipocafe" | "jornada" | null
+    "productor" | "finca" | "calidad" | "certificado" | "tipocafe" | "bitacora" | null
   >(null);
 
   const [medida, setMedida] = useState<MedidaCapturada>({
@@ -155,7 +155,7 @@ export function ReciboScreen({
     floteseco: 0,
   });
 
-  // Arranca con el de la jornada y se puede cambiar: la jornada dice qué se está
+  // Arranca con el de la bitácora y se puede cambiar: la bitácora dice qué se está
   // recibiendo hoy, pero un recibo puntual puede ser de otro tipo. Entra al criterio del
   // precio, así que no es una etiqueta.
   const [tipoCafe, setTipoCafe] = useState<string>(
@@ -188,12 +188,12 @@ export function ReciboScreen({
         setError((e as Error)?.message ?? "No se pudieron leer los catálogos.");
       }
 
-      // La jornada: si hay UNA sola abierta se asigna sola —es el caso normal— y si hay
+      // La bitácora: si hay UNA sola abierta se asigna sola —es el caso normal— y si hay
       // varias se elige en el formulario. Es el único momento en que la app puede pedirle
       // al recibidor que decida algo que no puede deducir.
       try {
         const abiertas = await bitacorasAbiertas().fetch();
-        setJornadas(abiertas);
+        setAbiertas(abiertas);
         if (recibo) {
           const suya = abiertas.find((b) => b.id === recibo.idBitacora);
           setBitacora(suya ?? null);
@@ -201,7 +201,7 @@ export function ReciboScreen({
           setBitacora(abiertas[0]!);
         }
       } catch {
-        // Sin jornadas no se puede grabar, y `listo` ya lo impide. No vale romper la
+        // Sin bitácoras no se puede grabar, y `listo` ya lo impide. No vale romper la
         // pantalla entera por esto.
       }
 
@@ -280,13 +280,13 @@ export function ReciboScreen({
   /**
    * EL TIPO DE CAFÉ SIGUE A LA JORNADA. Una sola regla, y por eso está acá.
    *
-   * Antes se copiaba en tres lugares —la jornada que llega por parámetro, la que se
+   * Antes se copiaba en tres lugares —la bitácora que llega por parámetro, la que se
    * autoasigna cuando hay una sola, y la que se elige en el selector— y al recibo creado
    * desde el menú Recibos no le llegaba por ninguno. Tres copias de una regla es tres
    * oportunidades de que un camino nuevo se olvide de ella, y el síntoma no es un error:
    * es un recibo sin precio que aparece cuadrando en la oficina.
    *
-   * Mirando la jornada VIGENTE da igual cómo se haya fijado.
+   * Mirando la bitácora VIGENTE da igual cómo se haya fijado.
    *
    * Al editar no se toca: manda lo que se guardó con el recibo.
    */
@@ -411,7 +411,7 @@ export function ReciboScreen({
       numero ?? "Recibo",
       listo
         ? undefined
-        : "Faltan datos para poder grabar: jornada, productor, calidad, tipo de café y medida.",
+        : "Faltan datos para poder grabar: bitácora, productor, calidad, tipo de café y medida.",
       opciones
     );
   };
@@ -583,21 +583,21 @@ export function ReciboScreen({
       {dosColumnas ? (
         <View style={{ flexDirection: "row", alignItems: "flex-start" }}>
           <View style={{ flex: 1 }}>
-          {/* La jornada a la que se cuelga el recibo. Con una sola abierta viene puesta y no
+          {/* La bitácora a la que se cuelga el recibo. Con una sola abierta viene puesta y no
               hay nada que decidir; con varias —hay clientes que separan el día por categoría
               de café— el recibidor elige, y es lo único que la app no puede deducir. */}
-          {jornadas.length > 1 || bitacora == null ? (
+          {abiertas.length > 1 || bitacora == null ? (
             <Campo
-              etiqueta="Jornada"
+              etiqueta="Bitácora"
               valor={
                 bitacora
                   ? `${fmtFecha(bitacora.fecha)}${
                       bitacora.tipocafe ? ` · ${nombreTipoCafe(tiposCafe, bitacora.tipocafe)}` : ""
                     }`
-                  : "Elegir jornada"
+                  : "Elegir bitácora"
               }
               vacio={bitacora == null}
-              onPress={() => setPicker("jornada")}
+              onPress={() => setPicker("bitacora")}
             />
           ) : null}
 
@@ -922,21 +922,21 @@ export function ReciboScreen({
         </View>
       ) : (
         <>
-      {/* La jornada a la que se cuelga el recibo. Con una sola abierta viene puesta y no
+      {/* La bitácora a la que se cuelga el recibo. Con una sola abierta viene puesta y no
           hay nada que decidir; con varias —hay clientes que separan el día por categoría
           de café— el recibidor elige, y es lo único que la app no puede deducir. */}
-      {jornadas.length > 1 || bitacora == null ? (
+      {abiertas.length > 1 || bitacora == null ? (
         <Campo
-          etiqueta="Jornada"
+          etiqueta="Bitácora"
           valor={
             bitacora
               ? `${fmtFecha(bitacora.fecha)}${
                   bitacora.tipocafe ? ` · ${nombreTipoCafe(tiposCafe, bitacora.tipocafe)}` : ""
                 }`
-              : "Elegir jornada"
+              : "Elegir bitácora"
           }
           vacio={bitacora == null}
-          onPress={() => setPicker("jornada")}
+          onPress={() => setPicker("bitacora")}
         />
       ) : null}
 
@@ -1259,9 +1259,9 @@ export function ReciboScreen({
       )}
 
       <PickerModal
-        visible={picker === "jornada"}
-        titulo="Jornada"
-        opciones={jornadas.map((b) => ({
+        visible={picker === "bitacora"}
+        titulo="Bitácora"
+        opciones={abiertas.map((b) => ({
           valor: b.id,
           titulo: fmtFecha(b.fecha),
           subtitulo: [nombreTipoCafe(tiposCafe, b.tipocafe ?? ""), b.transportista]
@@ -1269,7 +1269,7 @@ export function ReciboScreen({
             .join(" · "),
         }))}
         onSeleccionar={(v) => {
-          const b = jornadas.find((x) => x.id === v) ?? null;
+          const b = abiertas.find((x) => x.id === v) ?? null;
           setBitacora(b);
           setPicker(null);
         }}

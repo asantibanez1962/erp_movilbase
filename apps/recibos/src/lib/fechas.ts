@@ -10,7 +10,7 @@
  *     remedida.fecha              date
  *
  * El BE convierte los milisegundos que le llegan con `DateTimeOffset.FromUnixTimeMilli-
- * seconds(...).UtcDateTime`, o sea EN UTC. Costa Rica está en UTC−6, así que una jornada
+ * seconds(...).UtcDateTime`, o sea EN UTC. Costa Rica está en UTC−6, así que una bitácora
  * abierta a las 20:13 del 13 de agosto se guardaba como **14 de agosto**. En una columna
  * `date` eso ya no se distingue de un dato bueno: el documento queda archivado en el día
  * equivocado y nadie tiene cómo saberlo.

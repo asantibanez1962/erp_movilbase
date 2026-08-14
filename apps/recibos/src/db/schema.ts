@@ -413,7 +413,7 @@ export const schema = appSchema({
         { name: "transportista", type: "string", isOptional: true },
         { name: "placacamion", type: "string", isOptional: true },
         { name: "observaciones", type: "string", isOptional: true },
-        // Locales, no viajan: el contador de impresiones y el estado de la jornada.
+        // Locales, no viajan: el contador de impresiones y el estado de la bitácora.
         { name: "impresiones", type: "number" },
       ],
     }),

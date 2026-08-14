@@ -56,7 +56,7 @@ import type {
  * El alto igual se pasa, y hay que seguir pasándolo: omitirlo hace que `printAsync` use
  * 792 pt por defecto —el alto de una hoja Carta— y eso sí cambia el resultado.
  *
- * ⚠️ La jornada va a ser distinta: su largo depende de cuántos recibos lleve. Como la
+ * ⚠️ La bitácora va a ser distinta: su largo depende de cuántos recibos lleve. Como la
  * paginación real la decide el driver y no nosotros, ahí lo que hay que revisar es si el
  * rollo continuo la imprime seguida igual que al recibo, o si conviene un tamaño de papel
  * más largo en el diálogo.

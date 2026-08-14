@@ -54,18 +54,18 @@ const navTheme: Theme = {
 };
 
 export type StackParams = {
-  Jornadas: undefined;
-  AbrirJornada: undefined;
+  Bitacoras: undefined;
+  AbrirBitacora: undefined;
   // La bitácora viaja como INSTANCIA de WatermelonDB y no como un id: es observable, así
   // que la pantalla se entera sola cuando se le agrega un recibo o se cierra. Con un id
   // habría que volver a buscarla y suscribirse a mano en cada entrada.
-  Jornada: { bitacora: Bitacora };
+  Bitacora: { bitacora: Bitacora };
   Recibos: undefined;
   Recibo: { bitacora?: Bitacora; recibo?: Recibo };
   ReciboDetalle: { recibo: Recibo };
   Remedidas: undefined;
   Remedida: { remedida?: Remedida };
-  EditarJornada: { bitacora: Bitacora };
+  EditarBitacora: { bitacora: Bitacora };
 };
 
 const Stack = createNativeStackNavigator<StackParams>();
@@ -92,37 +92,37 @@ function JornadasStack() {
       }}
     >
       <Stack.Screen
-        name="Jornadas"
+        name="Bitacoras"
         options={({ navigation }) => ({
-          title: "Jornadas",
+          title: "Bitácoras",
           headerLeft: () => <BotonMenu navigation={navigation} />,
         })}
       >
         {({ navigation }) => (
           <BitacorasScreen
-            onAbrir={() => navigation.navigate("AbrirJornada")}
-            onEntrar={(b) => navigation.navigate("Jornada", { bitacora: b })}
+            onAbrir={() => navigation.navigate("AbrirBitacora")}
+            onEntrar={(b) => navigation.navigate("Bitacora", { bitacora: b })}
           />
         )}
       </Stack.Screen>
 
-      <Stack.Screen name="AbrirJornada" options={{ title: "Abrir jornada" }}>
+      <Stack.Screen name="AbrirBitacora" options={{ title: "Abrir bitácora" }}>
         {({ navigation }) => (
           <AbrirBitacoraScreen
             // replace: la pantalla de apertura no tiene sentido en el historial. Si
-            // quedara, el "atrás" desde la jornada recién creada volvería a un
+            // quedara, el "atrás" desde la bitácora recién creada volvería a un
             // formulario que ya se usó.
-            onListo={(b) => navigation.replace("Jornada", { bitacora: b })}
+            onListo={(b) => navigation.replace("Bitacora", { bitacora: b })}
             onCancelar={() => navigation.goBack()}
           />
         )}
       </Stack.Screen>
 
-      <Stack.Screen name="Jornada" options={{ title: "Jornada" }}>
+      <Stack.Screen name="Bitacora" options={{ title: "Bitácora" }}>
         {({ navigation, route }) => (
           <BitacoraScreen
             bitacora={route.params.bitacora}
-            onVolver={() => navigation.navigate("Jornadas")}
+            onVolver={() => navigation.navigate("Bitácoras")}
             onNuevoRecibo={() =>
               navigation.navigate("Recibo", { bitacora: route.params.bitacora })
             }
@@ -133,7 +133,7 @@ function JornadasStack() {
                 : navigation.navigate("ReciboDetalle", { recibo: r })
             }
             onEditar={() =>
-              navigation.navigate("EditarJornada", { bitacora: route.params.bitacora })
+              navigation.navigate("EditarBitacora", { bitacora: route.params.bitacora })
             }
           />
         )}
@@ -148,7 +148,7 @@ function JornadasStack() {
         )}
       </Stack.Screen>
 
-      <Stack.Screen name="EditarJornada" options={{ title: "Datos de la jornada" }}>
+      <Stack.Screen name="EditarBitacora" options={{ title: "Datos de la bitácora" }}>
         {({ navigation, route }) => (
           <AbrirBitacoraScreen
             bitacora={route.params.bitacora}
@@ -173,12 +173,12 @@ function JornadasStack() {
 }
 
 /**
- * Recibos tiene su propio stack, hermano del de jornadas.
+ * Recibos tiene su propio stack, hermano del de bitácoras.
  *
- * Se separaron porque son dos formas distintas de trabajar: la jornada es la contabilidad
+ * Se separaron porque son dos formas distintas de trabajar: la bitácora es la contabilidad
  * del día —se abre, se le cuelgan recibos, se cierra e imprime— y el recibo es lo que se
  * busca de verdad, por número o por productor, sin acordarse de en qué bitácora quedó.
- * Tenerlo colgando de la jornada obligaba a recorrer el día entero para llegar a uno.
+ * Tenerlo colgando de la bitácora obligaba a recorrer el día entero para llegar a uno.
  */
 function RecibosStack() {
   return (
@@ -239,7 +239,7 @@ const Drawer = createDrawerNavigator();
 /**
  * Remedidas: el camión que llega de los recibidores.
  *
- * Menú propio y no colgando de la jornada, porque no pertenece a una: se captura en el
+ * Menú propio y no colgando de la bitácora, porque no pertenece a una: se captura en el
  * sitio de recepción de camiones, que es otro lugar y otro momento del día.
  */
 function RemedidasStack() {
@@ -294,9 +294,9 @@ export function Navegacion() {
         }}
       >
         <Drawer.Screen
-          name="MenuJornadas"
+          name="MenuBitacoras"
           component={JornadasStack}
-          options={{ title: "Jornadas" }}
+          options={{ title: "Bitácoras" }}
         />
         <Drawer.Screen
           name="MenuRecibos"
@@ -325,7 +325,7 @@ export function Navegacion() {
 
 /**
  * ⚠️ Las rutas del DRAWER llevan otro nombre que las del stack de adentro
- * (`MenuJornadas` → stack `Jornadas`). Con el mismo nombre, react-navigation avisaba
+ * (`MenuBitacoras` → stack `Bitacoras`). Con el mismo nombre, react-navigation avisaba
  * —"screens with the same name nested inside one another"— y no es cosmético: al navegar
  * por nombre puede resolver a la pantalla equivocada, y eso aparece como un salto raro
  * que nadie asocia con el nombre de una ruta.
@@ -387,7 +387,7 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
     Alert.alert(
       "Hay trabajo sin enviar",
       `Todavía no subieron: ${describirPendientes(pendientes)}.\n\n` +
-        "Se borran los datos de este teléfono y ESO SE PIERDE. Cerrá la jornada e " +
+        "Se borran los datos de este teléfono y ESO SE PIERDE. Cerrá la bitácora e " +
         "imprimila primero.",
       [
         { text: "Cancelar", style: "cancel" },
@@ -430,8 +430,8 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
       ) : null}
 
       <DrawerItem
-        label="Jornadas"
-        onPress={() => props.navigation.navigate("MenuJornadas")}
+        label="Bitácoras"
+        onPress={() => props.navigation.navigate("MenuBitacoras")}
         labelStyle={estilosDrawer.label}
       />
       <DrawerItem

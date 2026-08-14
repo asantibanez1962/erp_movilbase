@@ -1,5 +1,5 @@
 /**
- * El papel de la jornada, en texto plano de 32 columnas.
+ * El papel de la bitácora, en texto plano de 32 columnas.
  *
  * ── POR QUÉ ÉSTE NO ES HTML COMO EL RECIBO ──────────────────────────────────
  *
@@ -7,7 +7,7 @@
  * diálogo de Android. Ese camino impone una **página de tamaño fijo** que el driver decide
  * y la app no puede cambiar — se comprobó pidiendo 763 y 940 pt sin ninguna diferencia.
  *
- * La jornada NO tiene largo fijo: depende de cuántos recibos lleve. Con página fija, una
+ * La bitácora NO tiene largo fijo: depende de cuántos recibos lleve. Con página fija, una
  * jornada de 30 recibos se parte en un punto arbitrario, y ya vimos lo que hace un corte
  * arbitrario — en el recibo llegó a imprimir "FIRMA" encima de "NOTA:". No hay forma de
  * controlarlo desde acá.
@@ -16,7 +16,7 @@
  * Sin páginas, sin diálogo, sin driver. La impresora imprime lo que recibe y se detiene.
  *
  * El costo es la tipografía —fuente interna monoespaciada en vez de Verdana— y acá no
- * importa: **la jornada es control interno del recibidor**, no el documento del cliente.
+ * importa: **la bitácora es control interno del recibidor**, no el documento del cliente.
  *
  * ── ⚠️ LOS CASTIGOS SÍ SE IMPRIMEN ACÁ ──────────────────────────────────────
  *
@@ -57,8 +57,8 @@ const cmd = {
 /** Ancho útil de la fuente interna a 80 mm. La raya del legacy mide 31. */
 const RAYA = "-".repeat(32);
 
-/** Todo lo que el papel de la jornada necesita, ya resuelto. */
-export interface JornadaImpresa {
+/** Todo lo que el papel de la bitácora necesita, ya resuelto. */
+export interface BitacoraImpresa {
   empresa: { nombre: string; direccion1: string; direccion2: string; codigoicafe: string };
   recibidor: string;
   cosecha: string;
@@ -71,10 +71,10 @@ export interface JornadaImpresa {
   horaInicio: string;
   horaFinal: string;
   observaciones: string;
-  recibos: ReciboEnJornada[];
+  recibos: ReciboEnBitacora[];
 }
 
-export interface ReciboEnJornada {
+export interface ReciboEnBitacora {
   recibo: string;
   codigo: string;
   calidad: string;
@@ -137,7 +137,7 @@ function partir(cajuelas: number): { enteras: number; cuartillos: number } {
 const par = (v: { enteras: number; cuartillos: number }) => `${v.enteras}/ ${v.cuartillos}`;
 
 /** Arma el texto completo, listo para mandarle los bytes a la impresora. */
-export function armarJornada(j: JornadaImpresa): string {
+export function armarBitacora(j: BitacoraImpresa): string {
   const p: string[] = [];
 
   // Encabezado: nombre grande y centrado, el resto mediano.
@@ -151,7 +151,7 @@ export function armarJornada(j: JornadaImpresa): string {
   p.push(`${RAYA}${LF}`);
   p.push(`BITACORA DE RECIBIDOR${LF}`);
 
-  // Datos de la jornada, alineados a la izquierda.
+  // Datos de la bitácora, alineados a la izquierda.
   p.push(`${cmd.izquierda}${cmd.negritaOff}${LF}`);
   p.push(`RECIBIDOR: ${j.recibidor}${LF}`);
   p.push(`COSECHA: ${j.cosecha}${LF}`);

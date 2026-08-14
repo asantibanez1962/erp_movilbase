@@ -4,12 +4,12 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Bitacora, Recibo } from "../db/models";
 import { cliente } from "../branding";
 import { cerrarBitacora, recibosDe } from "../lib/bitacora";
-import { imprimirJornada } from "../lib/imprimirJornada";
+import { imprimirBitacora } from "../lib/imprimirBitacora";
 import { colores, estilos, fmtCajuelas, fmtFecha } from "./estilos";
 import { useCatalogos } from "./useCatalogos";
 
 /**
- * Una jornada: sus datos, sus recibos, y el cierre.
+ * Una bitácora: sus datos, sus recibos, y el cierre.
  *
  * ⚠️ CERRAR ES IMPRIMIR. No hay un botón de "cerrar" separado del de imprimir, porque el
  * estado intermedio —cerrada pero sin papel— es el que genera dudas en el campo, y el
@@ -55,11 +55,11 @@ export function BitacoraScreen({
     if (cerrando) return;
     setCerrando(true);
     try {
-      const { falloSync } = await cerrarBitacora(bitacora, () => imprimirJornada(bitacora), { simulada });
+      const { falloSync } = await cerrarBitacora(bitacora, () => imprimirBitacora(bitacora), { simulada });
       if (falloSync) {
         Alert.alert(
           "Cerrada, pero sin enviar",
-          `La jornada quedó cerrada. No se pudo sincronizar: ${falloSync}.\n\n` +
+          `La bitácora quedó cerrada. No se pudo sincronizar: ${falloSync}.\n\n` +
             "Se reintenta cuando haya señal; los datos no se pierden."
         );
       }
@@ -73,7 +73,7 @@ export function BitacoraScreen({
 
   const confirmarCierre = () => {
     Alert.alert(
-      "Cerrar jornada",
+      "Cerrar bitácora",
       `Se imprime el reporte del día y se envían al servidor la bitácora y sus ${
         recibos?.length ?? 0
       } recibos.\n\nDespués no admite más recibos.`,
@@ -121,7 +121,7 @@ export function BitacoraScreen({
             ) : null}
 
             {/* El camión y su placa se saben al FINAL del día, no al abrir. Sin esta
-                entrada la jornada quedaba con los campos vacíos para siempre. */}
+                entrada la bitácora quedaba con los campos vacíos para siempre. */}
             {abierta ? (
               <TouchableOpacity onPress={onEditar} style={estilos.detalleFila}>
                 <Text style={estilos.detalleEtiqueta}>Completar datos del camión</Text>
@@ -192,7 +192,7 @@ export function BitacoraScreen({
             }}
           >
             <Text style={{ color: colores.texto, fontWeight: "600", fontSize: 15 }}>
-              {cerrando ? "Cerrando..." : "Cerrar jornada e imprimir"}
+              {cerrando ? "Cerrando..." : "Cerrar bitácora e imprimir"}
             </Text>
           </TouchableOpacity>
         </View>
