@@ -11,15 +11,9 @@ import { LF, RAYA, cmd, logoRaster, type LogoRaster } from "./escpos";
  *
  * No son de estilo: el legacy y el `.frx` dicen cosas distintas, y hubo que elegir.
  *
- * **1. El ADELANTO va POR FANEGA (× 20).** El legacy multiplica el monto por 20 —una fanega
- * son 20 cajuelas—; el `.frx` del web imprime el monto crudo. Con el precio de la cosecha
- * eso es ₡127 000 contra ₡6 350: no es un redondeo, es otra magnitud. Acá se sigue al
- * legacy, que es lo que el productor viene leyendo hace años, y queda anotado como
- * diferencia con el web hasta que se unifique.
+ * **1. El título dice "COMPROBANTE DE RECIBO DE CAFE"**, no "RECIBO DE CAFE".
  *
- * **2. El título dice "COMPROBANTE DE RECIBO DE CAFE"**, no "RECIBO DE CAFE".
- *
- * **3. No lleva la nota legal.** El `.frx` cierra con los tres párrafos de "ESTE RECIBO NO
+ * **2. No lleva la nota legal.** El `.frx` cierra con los tres párrafos de "ESTE RECIBO NO
  * ES NEGOCIABLE…"; el legacy no imprime ninguno. Se respeta el legacy, pero conviene
  * revisarlo: si esa nota es obligatoria, falta en todos los recibos que el legacy imprimió.
  *

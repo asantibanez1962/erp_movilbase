@@ -89,9 +89,7 @@ export async function imprimirRecibo(recibo: Recibo): Promise<void> {
           .filter((x) => x !== "")
           .join(" · "),
         finca: "",
-        // ⚠️ POR FANEGA: el legacy multiplica por 20 y el .frx del web no. Ver la nota en
-        // `reciboTexto.ts` — son ₡127 000 contra ₡6 350, no es un redondeo.
-        adelanto: datos.precio == null ? null : datos.precio * 20,
+        adelanto: datos.precio,
         recibidor: datos.recibidor,
         tipoCafe: datos.tipoCafe,
         cldd: datos.cldd ? "SELLO: CLDD" : "",
@@ -247,7 +245,16 @@ async function geografiaDe(
  * Los dos parámetros que definen "a quién le aplica" salen del PRODUCTOR (su tipo y su
  * zona), no del recibo; el recibo aporta cosecha, calidad, recibidor y tipo de café. Y el
  * tipo de café del recibo viaja en la columna `zona`, que es el nombre engañoso de siempre.
+ *
+ * ⚠️ DEVUELVE EL PRECIO POR FANEGA: el monto de la tabla es POR CAJUELA y se multiplica por
+ * 20, que es lo que trae una fanega. El café se cotiza por fanega, así que es la magnitud
+ * que el productor espera leer.
+ *
+ * El `.frx` del web imprimía el monto crudo —₡6 350 donde van ₡127 000— y el ESC/POS del
+ * legacy sí multiplicaba. Se corrigió el web en v1.71/RC/47; acá el ×20 vive en un solo
+ * lugar para que los dos modos de impresión no puedan discrepar.
  */
+const CAJUELAS_POR_FANEGA = 20;
 async function precioImpreso(
   recibo: Recibo,
   productor: Productor | null
@@ -279,7 +286,7 @@ async function precioImpreso(
     [norm(p.tipo) || " ", norm(p.recibidor) || " ", norm(p.zona) || " "].join(" ");
   candidatos.sort((a, b) => (clave(a) < clave(b) ? 1 : clave(a) > clave(b) ? -1 : 0));
 
-  return candidatos[0]!.monto;
+  return candidatos[0]!.monto * CAJUELAS_POR_FANEGA;
 }
 
 /** `dd/MM/yyyy`, como el `Format.Format="d"` del .frx bajo configuración de Costa Rica. */
