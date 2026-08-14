@@ -146,10 +146,30 @@ export async function cerrarBitacora(
 ): Promise<{ falloSync: string | null }> {
   if (!bitacora.estaAbierta) throw new Error("Esta bitácora ya está cerrada.");
 
-  const cuantos = await recibosDe(bitacora.id).fetchCount();
-  if (cuantos === 0) {
+  const recibos = await recibosDe(bitacora.id).fetch();
+  if (recibos.length === 0) {
     throw new Error(
       "La bitácora no tiene recibos. Si el día no se trabajó, no hace falta cerrarla."
+    );
+  }
+
+  /**
+   * ⚠️ NO SE CIERRA CON RECIBOS SIN IMPRIMIR. Es la regla del legacy, y en el móvil pesa
+   * todavía más: `impreso` es el campo de cierre de la colección, así que un recibo sin
+   * imprimir **tampoco sincronizó**. Cerrar la jornada ahí la mandaría al servidor sin
+   * esos recibos, y la oficina vería un día cuadrado que no cuadra.
+   *
+   * `cantidad > 0` excluye a los anulados, que quedan en cero justamente para eso: ya
+   * salieron en papel, su número está en la secuencia y no tienen nada pendiente.
+   */
+  const pendientes = recibos.filter((r) => (r.impreso ?? 0) === 0 && r.cantidad > 0);
+  if (pendientes.length > 0) {
+    const cuales = pendientes.map((r) => r.recibo).join(", ");
+    throw new Error(
+      pendientes.length === 1
+        ? `El recibo ${cuales} está sin imprimir. Imprimilo antes de cerrar la jornada.`
+        : `Hay ${pendientes.length} recibos sin imprimir (${cuales}). Imprimilos antes de ` +
+            "cerrar la jornada."
     );
   }
 

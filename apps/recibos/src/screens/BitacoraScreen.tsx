@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { Bitacora, Recibo } from "../db/models";
 import { cliente } from "../branding";
 import { cerrarBitacora, recibosDe } from "../lib/bitacora";
+import { imprimirJornada } from "../lib/imprimirJornada";
 import { colores, estilos, fmtCajuelas, fmtFecha } from "./estilos";
 import { useCatalogos } from "./useCatalogos";
 
@@ -54,7 +55,7 @@ export function BitacoraScreen({
     if (cerrando) return;
     setCerrando(true);
     try {
-      const { falloSync } = await cerrarBitacora(bitacora, imprimirPendiente, { simulada });
+      const { falloSync } = await cerrarBitacora(bitacora, () => imprimirJornada(bitacora), { simulada });
       if (falloSync) {
         Alert.alert(
           "Cerrada, pero sin enviar",
@@ -197,23 +198,6 @@ export function BitacoraScreen({
         </View>
       ) : null}
     </View>
-  );
-}
-
-/**
- * La impresión real todavía no existe: ESC/POS por Bluetooth es el paso siguiente.
- *
- * Es a propósito que TIRE en vez de resolver en silencio. `cerrarBitacora` imprime antes
- * de marcar la hora final justamente para que un fallo deje la jornada abierta y se pueda
- * reintentar; si esto resolviera como si hubiera impreso, cerraría jornadas sin papel y
- * el camión saldría sin el reporte. Mientras tanto se cierra con la opción "Sin papel",
- * que es la misma válvula que usa la operación cuando se acaba el rollo — y queda
- * anotada en las observaciones en vez de fingir que se imprimió.
- */
-async function imprimirPendiente(): Promise<void> {
-  throw new Error(
-    "La impresión por Bluetooth todavía no está implementada. " +
-      'Para cerrar la jornada ahora, usá "Sin papel".'
   );
 }
 

@@ -68,6 +68,26 @@ module.exports = ({ config }) => {
         ...(icono ? { foregroundImage: icono } : {}),
         backgroundColor: cliente.color,
       },
+      /**
+       * Bluetooth para imprimir la jornada, que va por socket directo a la impresora y no
+       * por el diálogo de Android — ver `lib/jornadaTexto.ts` para el porqué.
+       *
+       * ⚠️ Van los permisos VIEJOS y los NUEVOS. Android 12 (API 31) partió `BLUETOOTH` en
+       * `BLUETOOTH_CONNECT` y `BLUETOOTH_SCAN`, pero los teléfonos de campo no son todos
+       * nuevos: sin los dos juegos, o falla en los viejos o falla en los nuevos. Los de
+       * antes de 12 se marcan con `maxSdkVersion` para que Play no los exija de más.
+       *
+       * NO se pide `BLUETOOTH_SCAN` ni ubicación: la impresora se empareja desde los
+       * ajustes del teléfono, así que la app sólo necesita CONECTARSE a algo ya
+       * emparejado. Pedir permiso de escaneo arrastra el de ubicación, que asusta al
+       * usuario y no hace falta.
+       */
+      permissions: [
+        ...(config.android?.permissions ?? []),
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_CONNECT",
+      ],
     },
     extra: {
       ...config.extra,
