@@ -7,6 +7,7 @@ import {
 } from "@erp/shared-api";
 import { config } from "./config";
 import { getOrCreateDeviceId } from "./deviceId";
+import { cargarModoImpresion } from "./modoImpresion";
 import { cargarUrlServidor } from "./servidor";
 import { contextoActual } from "./sesion";
 
@@ -28,6 +29,10 @@ export async function bootstrapApi(): Promise<void> {
   //    la capturan al construirse, así que leerla después no tendría efecto hasta
   //    el siguiente arranque.
   await cargarUrlServidor();
+
+  // El modo de impresión es preferencia del teléfono, igual que la dirección: se lee acá
+  // para que la primera impresión no tenga que esperar a nadie.
+  await cargarModoImpresion();
 
   // 1. Hidrata auth store desde SecureStore (refresh token vivo → arrancamos
   //    logueado sin pedir credenciales).

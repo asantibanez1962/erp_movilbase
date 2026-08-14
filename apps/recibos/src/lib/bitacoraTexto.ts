@@ -28,86 +28,7 @@
  * del recibidor sin arreglar nada.
  */
 
-/** Comandos ESC/POS, tal como los usa el procedimiento del legacy. */
-const ESC = "\x1B";
-const GS = "\x1D";
-const LF = "\r\n";
-
-const cmd = {
-  /** Énfasis — el "tamaño mediano" del legacy. */
-  medio: `${ESC}!\x0A`,
-  /** Doble alto — el "tamaño grande". */
-  grande: `${ESC}!\x14`,
-  izquierda: `${ESC}a\x00`,
-  centrado: `${ESC}a\x01`,
-  negritaOn: `${ESC}E\x01`,
-  negritaOff: `${ESC}E\x00`,
-  /** Unidireccional. El legacy lo manda y lo dejó marcado con un "?"; se respeta. */
-  uniOn: `${ESC}U\x01`,
-  uniOff: `${ESC}U\x00`,
-  /**
-   * Cortar papel. ⚠️ Estas impresoras NO tienen cuchilla — el recibidor arranca el papel a
-   * mano. El comando se manda igual porque el legacy lo manda y es inocuo en un equipo sin
-   * cutter, pero no hay que contar con él: el avance para poder arrancar lo dan las líneas
-   * en blanco del final.
-   */
-  cortar: `${GS}V\x00`,
-};
-
-/** Ancho útil de la fuente interna a 80 mm. La raya del legacy mide 31. */
-const RAYA = "-".repeat(32);
-
-/**
- * Decodifica base64 a una cadena donde cada carácter ES un byte.
- *
- * Se escribe a mano porque `atob` no está garantizado en Hermes y `Buffer` no existe en
- * React Native. Son diez líneas y evita una dependencia para algo que se usa una vez.
- *
- * ⚠️ El resultado se manda con `latin1`, que mapea cada carácter 0-255 a su byte. En utf8
- * cualquier valor sobre 127 se codificaría en dos bytes y la imagen saldría corrupta.
- */
-function deBase64(b64: string): string {
-  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-  let bits = 0;
-  let acum = 0;
-  let salida = "";
-  for (const ch of b64) {
-    if (ch === "=") break;
-    const v = abc.indexOf(ch);
-    if (v < 0) continue;
-    acum = (acum << 6) | v;
-    bits += 6;
-    if (bits >= 8) {
-      bits -= 8;
-      salida += String.fromCharCode((acum >> bits) & 0xff);
-    }
-  }
-  return salida;
-}
-
-/**
- * El logo, como imagen ráster.
- *
- * `GS v 0 m xL xH yL yH` + los bytes del mapa de bits. `m = 0` es tamaño normal; el ancho va
- * en BYTES (no en puntos) y el alto en puntos, los dos en little-endian.
- *
- * El logo sale del catálogo del cliente, igual que la IP y el color — ver `logo.ts`.
- */
-function logoRaster(logo: BitacoraImpresa["logo"]): string {
-  // Sin logo declarado para este cliente no se manda nada: mejor un papel sin logo que el
-  // de otro beneficio.
-  if (!logo) return "";
-  const { anchoBytes, alto, b64 } = logo;
-  const cabecera =
-    `${GS}v0\x00` +
-    String.fromCharCode(
-      anchoBytes & 0xff,
-      (anchoBytes >> 8) & 0xff,
-      alto & 0xff,
-      (alto >> 8) & 0xff
-    );
-  return cabecera + deBase64(b64);
-}
+import { LF, RAYA, cmd, logoRaster, type LogoRaster } from "./escpos";
 
 /** Todo lo que el papel de la bitácora necesita, ya resuelto. */
 export interface BitacoraImpresa {
@@ -116,7 +37,7 @@ export interface BitacoraImpresa {
    * `ComprobanteRecibo.logo`: viene como dato para que esta plantilla no dependa del
    * branding y se pueda generar fuera del teléfono.
    */
-  logo: { anchoBytes: number; alto: number; b64: string } | null;
+  logo: LogoRaster | null;
   empresa: { nombre: string; direccion1: string; direccion2: string; codigoicafe: string };
   recibidor: string;
   cosecha: string;
@@ -201,8 +122,7 @@ export function armarBitacora(j: BitacoraImpresa): string {
   // El logo primero, centrado. El legacy no lo lleva —su papel arranca con la raya— pero
   // la bitácora también sale del beneficio y no hay razón para que sea el único documento
   // sin identificar de un vistazo.
-  const raster = logoRaster(j.logo);
-  if (raster) p.push(`${cmd.centrado}${raster}${LF}`);
+  if (j.logo) p.push(`${cmd.centrado}${logoRaster(j.logo)}${LF}`);
 
   // Encabezado: nombre grande y centrado, el resto mediano.
   p.push(`${cmd.medio}${cmd.izquierda}${cmd.negritaOff}${RAYA}${LF}`);

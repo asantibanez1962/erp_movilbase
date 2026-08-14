@@ -21,6 +21,11 @@ import {
 } from "../lib/servidor";
 import { cerrarSesion } from "../lib/alcance";
 import { describirPendientes, resumenPendientes } from "../lib/sync";
+import {
+  guardarModoImpresion,
+  modoImpresion,
+  type ModoImpresion,
+} from "../lib/modoImpresion";
 import { colores, estilos } from "./estilos";
 
 /**
@@ -41,6 +46,17 @@ import { colores, estilos } from "./estilos";
 export function ServidorScreen({
   onVolver,
 }: Readonly<{ onVolver?: () => void }> = {}) {
+  /**
+   * El modo de impresión NO exige reiniciar, al revés que la dirección del servidor: se
+   * consulta en cada impresión y no al construir un cliente. Esa diferencia es deliberada —
+   * el otro caso ya nos costó una tarde de "error de red" con la pantalla diciendo que todo
+   * estaba bien.
+   */
+  const [modo, setModo] = useState<ModoImpresion>(modoImpresion());
+  const elegirModo = async (m: ModoImpresion) => {
+    await guardarModoImpresion(m);
+    setModo(m);
+  };
   const [texto, setTexto] = useState(urlServidor());
   const [probando, setProbando] = useState(false);
   const [guardando, setGuardando] = useState(false);
@@ -285,6 +301,55 @@ export function ServidorScreen({
         al servidor anterior. Después de entrar de nuevo, la primera sincronización baja
         todo desde el servidor nuevo.
       </Text>
+
+      {/* ── Cómo imprime este teléfono ───────────────────────────────────────── */}
+      <Text style={[estilos.seccion, { marginTop: 28 }]}>Impresión</Text>
+      <Text style={{ color: colores.textoTenue, fontSize: 13, marginBottom: 10 }}>
+        El recibo y la remedida. La bitácora siempre va directa: su largo depende de cuántos
+        recibos lleve y el diálogo de Android no lo admite.
+      </Text>
+
+      {(
+        [
+          {
+            valor: "driver" as const,
+            titulo: "Con ESCprint",
+            detalle:
+              "El papel sale igual que desde la oficina, con su tipografía. Hay que instalar " +
+              "y configurar ESCprint Service en este teléfono, y elegir la impresora en cada " +
+              "impresión.",
+          },
+          {
+            valor: "directo" as const,
+            titulo: "Directo a la impresora",
+            detalle:
+              "No hace falta instalar nada y es un solo toque por documento. El logo sale " +
+              "igual; el texto usa la letra interna de la impresora. Requiere una sola " +
+              "impresora emparejada.",
+          },
+        ]
+      ).map((op) => (
+        <TouchableOpacity
+          key={op.valor}
+          onPress={() => void elegirModo(op.valor)}
+          style={{
+            borderWidth: 1,
+            borderColor: modo === op.valor ? cliente.chrome : colores.borde,
+            backgroundColor: modo === op.valor ? colores.superficie : "transparent",
+            borderRadius: 10,
+            padding: 12,
+            marginBottom: 8,
+          }}
+        >
+          <Text style={{ color: colores.texto, fontWeight: "700", fontSize: 15 }}>
+            {modo === op.valor ? "● " : "○ "}
+            {op.titulo}
+          </Text>
+          <Text style={{ color: colores.textoTenue, fontSize: 13, marginTop: 4 }}>
+            {op.detalle}
+          </Text>
+        </TouchableOpacity>
+      ))}
 
       {/* Sólo cuando se llega desde el login, que no tiene drawer ni header con
           botón de atrás. Desde el drawer sobra: el header ya lo resuelve. */}

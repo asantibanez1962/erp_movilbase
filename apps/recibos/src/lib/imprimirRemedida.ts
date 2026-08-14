@@ -1,7 +1,10 @@
 import { Q, type Model } from "@nozbe/watermelondb";
 import * as Print from "expo-print";
+import { modoImpresion } from "./modoImpresion";
+import { imprimirTexto } from "./impresoraBt";
+import { armarRemedida } from "./remedidaTexto";
 import { database } from "./db";
-import { LOGO } from "./logo";
+import { LOGO, LOGO_ESCPOS } from "./logo";
 import { rutasDe, partir } from "./remedida";
 import {
   armarComprobanteRemedida,
@@ -34,10 +37,23 @@ import type {
 const PAGINA = { width: 226, height: 940 };
 
 export async function imprimirRemedida(remedida: Remedida): Promise<void> {
-  await Print.printAsync({
-    html: armarComprobanteRemedida(await reunirDatos(remedida)),
-    ...PAGINA,
-  });
+  const datos = await reunirDatos(remedida);
+
+  // Los dos caminos parten de los MISMOS datos: lo único que cambia es cómo se dibujan. Si
+  // alguna vez difieren en el contenido, el papel dependería de qué teléfono lo emitió.
+  if (modoImpresion() === "directo") {
+    await imprimirTexto(
+      armarRemedida({
+        ...datos,
+        logo: LOGO_ESCPOS,
+        copia: (remedida.impreso ?? 0) > 0,
+        medidor: remedida.medidor ?? "",
+      })
+    );
+    return;
+  }
+
+  await Print.printAsync({ html: armarComprobanteRemedida(datos), ...PAGINA });
 }
 
 async function reunirDatos(remedida: Remedida): Promise<ComprobanteRemedida> {
