@@ -113,6 +113,9 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
     recibidor: recibidor?.nombre ?? recibo.recibidor,
     tipoCafe: tipoCafe?.nombre ?? recibo.tipoCafe ?? "",
     calidad: calidad?.nombre ?? recibo.calidad ?? "",
+    // `<> 0` y no `= 1`: cubre los tipos 1-4 del legacy además del 0/1 del checkbox nuevo,
+    // igual que la vista. Ver la nota en `ComprobanteRecibo.cldd` — el web no lo imprime.
+    cldd: (recibo.cldd ?? 0) !== 0 ? "SELLO CLDD" : "",
     // La vista arma la línea completa o la deja vacía; el .frx la imprime tal cual.
     certificado: certificado?.nombre ? `CERTIFICADO: ${certificado.nombre}` : "",
     cajuelas,

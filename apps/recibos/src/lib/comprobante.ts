@@ -50,6 +50,19 @@ export interface ComprobanteRecibo {
   recibidor: string;
   tipoCafe: string;
   calidad: string;
+  /**
+   * Línea completa (`SELLO CLDD`) o vacía, como la arma la vista.
+   *
+   * ⚠️ EL WEB HOY NO LA IMPRIME, y es un descuido, no una decisión. `vw_rc_recibo_impreso`
+   * la prepara desde v1.68/RC/87 —con el comentario explícito de bindear un TextObject con
+   * CanShrink— pero el objeto nunca se agregó al `rc_recibo.frx`. En `cldd` la columna
+   * aparece sólo en el diccionario de datos del reporte. Son 9.211 recibos de la cosecha
+   * 2025-2026 a los que les falta el sello en el papel.
+   *
+   * Acá SÍ se imprime, en el hueco que el .frx dejó entre CALIDAD y el certificado. Hasta
+   * que se agregue el objeto al reporte, los dos papeles difieren en esta línea.
+   */
+  cldd: string;
   /** Línea completa (`CERTIFICADO: X`) o vacía, como la arma la vista. */
   certificado: string;
   cajuelas: number;
@@ -70,7 +83,9 @@ const esc = (s: string | null | undefined) =>
 const dec = (v: number | null | undefined, n: number) => (v == null ? "" : v.toFixed(n));
 
 export function armarComprobante(c: ComprobanteRecibo): string {
-  // El .frx deja el objeto vacío cuando no hay certificado, y ahí no ocupa renglón.
+  // Las dos van después de CALIDAD y antes de CAFE EN FRUTA. Cuando no aplican no ocupan
+  // renglón: el .frx deja el objeto vacío, que es el efecto de su CanShrink.
+  const sello = c.cldd.trim() === "" ? "" : `<div class="bloque c m">${esc(c.cldd)}</div>`;
   const certificado =
     c.certificado.trim() === "" ? "" : `<div class="bloque">${esc(c.certificado)}</div>`;
 
@@ -90,6 +105,7 @@ export function armarComprobante(c: ComprobanteRecibo): string {
          font-size: 8.25pt; line-height: 1.45; margin: 0; padding: 0; color: #000;
          width: 72.39mm; overflow-wrap: break-word; }
   .c { text-align: center; }
+  .m { font-weight: bold; }
   .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 4mm 0 2mm; }
   .estado { font-weight: bold; text-align: center; margin: 1mm 0 2mm; }
   .logo { display: block; margin: 0 auto 1mm; width: 36.6mm; }
@@ -140,6 +156,7 @@ export function armarComprobante(c: ComprobanteRecibo): string {
   <div class="par"><span>RECIBIDOR:</span><span>${esc(c.recibidor)}</span></div>
   <div class="par"><span>TIPO CAFE:</span><span>${esc(c.tipoCafe)}</span></div>
   <div class="par"><span>CALIDAD:</span><span>${esc(c.calidad)}</span></div>
+  ${sello}
   ${certificado}
 
   <div class="caja">CAFE EN FRUTA</div>
