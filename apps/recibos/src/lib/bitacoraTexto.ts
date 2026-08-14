@@ -57,8 +57,66 @@ const cmd = {
 /** Ancho útil de la fuente interna a 80 mm. La raya del legacy mide 31. */
 const RAYA = "-".repeat(32);
 
+/**
+ * Decodifica base64 a una cadena donde cada carácter ES un byte.
+ *
+ * Se escribe a mano porque `atob` no está garantizado en Hermes y `Buffer` no existe en
+ * React Native. Son diez líneas y evita una dependencia para algo que se usa una vez.
+ *
+ * ⚠️ El resultado se manda con `latin1`, que mapea cada carácter 0-255 a su byte. En utf8
+ * cualquier valor sobre 127 se codificaría en dos bytes y la imagen saldría corrupta.
+ */
+function deBase64(b64: string): string {
+  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  let bits = 0;
+  let acum = 0;
+  let salida = "";
+  for (const ch of b64) {
+    if (ch === "=") break;
+    const v = abc.indexOf(ch);
+    if (v < 0) continue;
+    acum = (acum << 6) | v;
+    bits += 6;
+    if (bits >= 8) {
+      bits -= 8;
+      salida += String.fromCharCode((acum >> bits) & 0xff);
+    }
+  }
+  return salida;
+}
+
+/**
+ * El logo, como imagen ráster.
+ *
+ * `GS v 0 m xL xH yL yH` + los bytes del mapa de bits. `m = 0` es tamaño normal; el ancho va
+ * en BYTES (no en puntos) y el alto en puntos, los dos en little-endian.
+ *
+ * El logo sale del catálogo del cliente, igual que la IP y el color — ver `logo.ts`.
+ */
+function logoRaster(logo: BitacoraImpresa["logo"]): string {
+  // Sin logo declarado para este cliente no se manda nada: mejor un papel sin logo que el
+  // de otro beneficio.
+  if (!logo) return "";
+  const { anchoBytes, alto, b64 } = logo;
+  const cabecera =
+    `${GS}v0\x00` +
+    String.fromCharCode(
+      anchoBytes & 0xff,
+      (anchoBytes >> 8) & 0xff,
+      alto & 0xff,
+      (alto >> 8) & 0xff
+    );
+  return cabecera + deBase64(b64);
+}
+
 /** Todo lo que el papel de la bitácora necesita, ya resuelto. */
 export interface BitacoraImpresa {
+  /**
+   * El logo en ráster, o null si el cliente no tiene uno definido. Ver la nota en
+   * `ComprobanteRecibo.logo`: viene como dato para que esta plantilla no dependa del
+   * branding y se pueda generar fuera del teléfono.
+   */
+  logo: { anchoBytes: number; alto: number; b64: string } | null;
   empresa: { nombre: string; direccion1: string; direccion2: string; codigoicafe: string };
   recibidor: string;
   cosecha: string;
@@ -139,6 +197,12 @@ const par = (v: { enteras: number; cuartillos: number }) => `${v.enteras}/ ${v.c
 /** Arma el texto completo, listo para mandarle los bytes a la impresora. */
 export function armarBitacora(j: BitacoraImpresa): string {
   const p: string[] = [];
+
+  // El logo primero, centrado. El legacy no lo lleva —su papel arranca con la raya— pero
+  // la bitácora también sale del beneficio y no hay razón para que sea el único documento
+  // sin identificar de un vistazo.
+  const raster = logoRaster(j.logo);
+  if (raster) p.push(`${cmd.centrado}${raster}${LF}`);
 
   // Encabezado: nombre grande y centrado, el resto mediano.
   p.push(`${cmd.medio}${cmd.izquierda}${cmd.negritaOff}${RAYA}${LF}`);

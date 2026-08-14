@@ -1,6 +1,7 @@
 import { Q, type Model } from "@nozbe/watermelondb";
 import * as Print from "expo-print";
 import { database } from "./db";
+import { LOGO } from "./logo";
 import { armarComprobante, type ComprobanteRecibo } from "./comprobante";
 import type {
   Calidad,
@@ -102,6 +103,7 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
   const cajuelas = Math.trunc(recibo.cantidad);
 
   return {
+    logo: LOGO,
     // El encabezado dice ORIGINAL o COPIA según lo que había ANTES de esta impresión,
     // igual que en el web: la vista lee `impreso` y el endpoint lo marca después.
     copia: (recibo.impreso ?? 0) > 0,

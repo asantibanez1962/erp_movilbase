@@ -1,5 +1,4 @@
 import { enLetras, cuartillosEnLetras } from "./enletras";
-import { LOGO } from "./logo";
 import { ESTILO_PAPEL } from "./papel";
 
 /**
@@ -28,6 +27,15 @@ import { ESTILO_PAPEL } from "./papel";
  * `angarilla` tampoco se imprime: la vista lo expone pero el .frx no lo bindea.
  */
 export interface ComprobanteRemedida {
+  /**
+   * El logo como data URI, o vacío si el cliente no tiene uno definido.
+   *
+   * ⚠️ VIENE COMO DATO Y NO SE IMPORTA ACÁ A PROPÓSITO. Elegir el logo del cliente
+   * obliga a leer el branding, que arrastra los PNG de la interfaz — y con eso esta
+   * plantilla dejaría de poder generarse fuera del teléfono, que es lo que permite
+   * revisar el papel sin gastar rollo.
+   */
+  logo: string;
   empresa: {
     nombre: string;
     direccion1: string;
@@ -86,7 +94,7 @@ export function armarComprobanteRemedida(c: ComprobanteRemedida): string {
   .ruta { break-inside: avoid; page-break-inside: avoid; }
 </style></head><body>
 
-  <img class="logo" src="${LOGO}" alt="" />
+  ${c.logo ? `<img class="logo" src="${c.logo}" alt="" />` : ""}
 
   ${linea(c.empresa.nombre, "c")}
   ${linea(c.empresa.direccion1, "c")}

@@ -1,6 +1,7 @@
 import { Q, type Model } from "@nozbe/watermelondb";
 import * as Print from "expo-print";
 import { database } from "./db";
+import { LOGO } from "./logo";
 import { rutasDe, partir } from "./remedida";
 import {
   armarComprobanteRemedida,
@@ -76,6 +77,7 @@ async function reunirDatos(remedida: Remedida): Promise<ComprobanteRemedida> {
   const { cajuelas, cuartillos } = partir(remedida.cantidad);
 
   return {
+    logo: LOGO,
     empresa: {
       nombre: empresa?.nombre ?? "",
       direccion1: empresa?.direccion1 ?? "",

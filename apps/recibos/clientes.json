@@ -39,6 +39,7 @@
     "package": "cr.confeldan.recibos.altura",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "altura.png",
+    "logoImpreso": "altura.png",
     "idSocioGenerico": 5109
   },
   "laeva": {
@@ -48,6 +49,7 @@
     "package": "cr.confeldan.recibos.laeva",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "laeva.png",
+    "logoImpreso": null,
     "idSocioGenerico": 5109
   },
   "diamante": {
@@ -57,6 +59,7 @@
     "package": "cr.confeldan.recibos.diamante",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "diamante.png",
+    "logoImpreso": null,
     "idSocioGenerico": 5109
   },
   "santacruz": {
@@ -66,6 +69,7 @@
     "package": "cr.confeldan.recibos.santacruz",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "santacruz.png",
+    "logoImpreso": null,
     "idSocioGenerico": 5109
   },
   "marespi": {
@@ -75,6 +79,7 @@
     "package": "cr.confeldan.recibos.marespi",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "marespi.png",
+    "logoImpreso": null,
     "idSocioGenerico": 5109
   }
 }

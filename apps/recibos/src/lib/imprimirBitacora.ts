@@ -1,5 +1,6 @@
 import { Q, type Model } from "@nozbe/watermelondb";
 import { database } from "./db";
+import { LOGO_ESCPOS } from "./logo";
 import { recibosDe } from "./bitacora";
 import { imprimirTexto } from "./impresoraBt";
 import { armarBitacora, castigoTotal, type BitacoraImpresa } from "./bitacoraTexto";
@@ -48,6 +49,7 @@ async function reunirBitacora(bitacora: Bitacora): Promise<BitacoraImpresa> {
   recibos.sort((a, b) => (a.recibo ?? "").localeCompare(b.recibo ?? ""));
 
   return {
+    logo: LOGO_ESCPOS,
     empresa: {
       nombre: empresa?.nombre ?? "",
       direccion1: empresa?.direccion1 ?? "",
