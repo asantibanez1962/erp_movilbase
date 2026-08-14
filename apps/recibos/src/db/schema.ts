@@ -44,8 +44,12 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *        en NULL y el push la dio por aceptada.
  *   6 → lo que el comprobante necesita: `parametros` (quién emite), la geografía del
  *        productor y la ubicación de la finca. Ver v1.71/RC/43 y /45.
+ *   7 → `companias`: el encabezado del tiquete sale de los `ben_*` de ge_companias,
+ *        que están previstos para eso, y no de re_parametros —la tabla del legacy,
+ *        de una fila y sin compañía— que es lo que la 6 había registrado por error.
+ *        `parametros` deja de sincronizar. Ver v1.71/RC/46.
  */
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -58,7 +62,7 @@ export const COLLECTIONS = [
   "castigos_cosecha",
   "talonarios",
   "niveles",
-  "parametros",
+  "companias",
   "recibidor_nivel",
   "precios",
   // Catálogos de consulta y selección.
@@ -280,17 +284,21 @@ export const schema = appSchema({
         { name: "tipo", type: "number" },
       ],
     }),
-    // El encabezado del comprobante: quién lo emite. Es UNA fila.
+    // El encabezado del tiquete: quién lo emite. Baja UNA fila, la del usuario.
+    //
+    // Las tres líneas de dirección no son un capricho del modelo: son tres RENGLONES del
+    // papel, cortados al ancho que aguanta la impresora, y le toca al usuario repartir el
+    // texto entre ellas como le sirva.
     tableSchema({
-      name: "parametros",
+      name: "companias",
       columns: [
-        { name: "nombrecompania", type: "string" },
-        { name: "direccion1", type: "string", isOptional: true },
-        { name: "direccion2", type: "string", isOptional: true },
-        { name: "direccion3", type: "string", isOptional: true },
-        { name: "telefono", type: "string", isOptional: true },
-        { name: "email", type: "string", isOptional: true },
-        { name: "codigoicafe", type: "string", isOptional: true },
+        { name: "ben_nombre", type: "string" },
+        { name: "ben_direccion1", type: "string", isOptional: true },
+        { name: "ben_direccion2", type: "string", isOptional: true },
+        { name: "ben_direccion3", type: "string", isOptional: true },
+        { name: "ben_telefono", type: "string", isOptional: true },
+        { name: "ben_email", type: "string", isOptional: true },
+        { name: "ben_codigoicafe", type: "string", isOptional: true },
       ],
     }),
     tableSchema({

@@ -175,16 +175,25 @@ export class Productor extends Model {
   @readonly @field("recibidor") recibidor!: string | null;
 }
 
-/** El encabezado del comprobante: quién lo emite. Una sola fila. */
-export class Parametro extends Model {
-  static readonly table = "parametros";
-  @readonly @field("nombrecompania") nombrecompania!: string;
-  @readonly @field("direccion1") direccion1!: string | null;
-  @readonly @field("direccion2") direccion2!: string | null;
-  @readonly @field("direccion3") direccion3!: string | null;
-  @readonly @field("telefono") telefono!: string | null;
-  @readonly @field("email") email!: string | null;
-  @readonly @field("codigoicafe") codigoicafe!: string | null;
+/**
+ * El encabezado del tiquete: quién lo emite. Baja una sola fila, la del usuario.
+ *
+ * Son los campos `ben_*` de `ge_companias`, que están previstos para las impresiones — no
+ * los de `re_parametros`, que es la tabla del legacy (una fila para todo el sistema, sin
+ * compañía) y que hoy sólo escribe el PowerBuilder. Ver v1.71/RC/46.
+ *
+ * Las tres líneas de dirección son tres RENGLONES del papel, cortados al ancho que aguanta
+ * la impresora: el usuario reparte el texto entre ellas como le sirva.
+ */
+export class Compania extends Model {
+  static readonly table = "companias";
+  @readonly @field("ben_nombre") nombre!: string;
+  @readonly @field("ben_direccion1") direccion1!: string | null;
+  @readonly @field("ben_direccion2") direccion2!: string | null;
+  @readonly @field("ben_direccion3") direccion3!: string | null;
+  @readonly @field("ben_telefono") telefono!: string | null;
+  @readonly @field("ben_email") email!: string | null;
+  @readonly @field("ben_codigoicafe") codigoicafe!: string | null;
 }
 
 export class Finca extends Model {
@@ -367,6 +376,6 @@ export const MODEL_CLASSES = [
   CastigoBroca, CastigoCosecha, RecibidorNivel, Precio, Talonario, Nivel,
   Zona, TipoCafe, TipoCastigo, Calidad, Certificado, Cosecha,
   Recibidor, Transportista, Provincia, Canton, Distrito,
-  Productor, Finca, Cuota, CuotaEntregador, Parametro,
+  Productor, Finca, Cuota, CuotaEntregador, Compania,
   Bitacora, Recibo, Remedida, RemedidaRuta, Evento,
 ];

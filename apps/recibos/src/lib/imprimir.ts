@@ -8,7 +8,7 @@ import type {
   Certificado,
   Cosecha,
   Distrito,
-  Parametro,
+  Compania,
   Precio,
   Productor,
   Provincia,
@@ -58,7 +58,7 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
   };
 
   const [empresa, cosecha, recibidor, tipoCafe, calidad] = await Promise.all([
-    uno<Parametro>("parametros"),
+    uno<Compania>("companias"),
     uno<Cosecha>("cosechas", "cosecha", recibo.cosecha),
     uno<Recibidor>("recibidores", "recibidor", recibo.recibidor),
     uno<TipoCafe>("tipos_cafe", "tipocafe", recibo.tipoCafe ?? ""),
@@ -84,12 +84,11 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
     // El encabezado dice ORIGINAL o COPIA según lo que había ANTES de esta impresión,
     // igual que en el web: la vista lee `impreso` y el endpoint lo marca después.
     copia: (recibo.impreso ?? 0) > 0,
+    // Los `ben_*` de `ge_companias`, la MISMA fuente que el .frx del web. Las tres líneas
+    // de dirección son tres renglones del papel y el usuario reparte el texto como le
+    // sirva; la app no las interpreta ni las junta. Ver v1.71/RC/46.
     empresa: {
-      // ⚠️ EL WEB LEE OTRA TABLA. El .frx toma el encabezado de `ge_companias.ben_*`, que
-      // hoy tiene valores de relleno ("DIRECCION 3", "EL TELEFONO", "EL EMAIL"). El móvil
-      // usa `re_parametros`, que tiene los datos reales. Los dos papeles van a diferir en
-      // el encabezado hasta que se corrija `ge_companias`.
-      nombre: empresa?.nombrecompania ?? "",
+      nombre: empresa?.nombre ?? "",
       direccion1: empresa?.direccion1 ?? "",
       direccion2: empresa?.direccion2 ?? "",
       direccion3: empresa?.direccion3 ?? "",

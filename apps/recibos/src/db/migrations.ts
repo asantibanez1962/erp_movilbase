@@ -19,6 +19,29 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // El encabezado del tiquete pasa a ge_companias. Ver v1.71/RC/46.
+      //
+      // `parametros` NO se borra: WatermelonDB no sabe eliminar tablas en una migración, y
+      // forzarlo no vale la pena. Deja de aparecer en COLLECTIONS, así que no sincroniza
+      // más; en los teléfonos que alcanzaron la 6 queda una tabla muerta que nadie
+      // consulta. En los demás nunca llega a existir.
+      toVersion: 7,
+      steps: [
+        createTable({
+          name: "companias",
+          columns: [
+            { name: "ben_nombre", type: "string" },
+            { name: "ben_direccion1", type: "string", isOptional: true },
+            { name: "ben_direccion2", type: "string", isOptional: true },
+            { name: "ben_direccion3", type: "string", isOptional: true },
+            { name: "ben_telefono", type: "string", isOptional: true },
+            { name: "ben_email", type: "string", isOptional: true },
+            { name: "ben_codigoicafe", type: "string", isOptional: true },
+          ],
+        }),
+      ],
+    },
+    {
       // Lo que el comprobante necesita para identificar a quién emite y dónde queda el
       // productor. Ver v1.71/RC/43 y /45.
       toVersion: 6,

@@ -541,9 +541,35 @@ por 20: la vista del web no lo hace.
 
 ### Lo que el papel necesita y no bajaba
 
-`re_parametros` (nombre de la empresa, tres líneas de dirección, código ICAFE, teléfono,
-correo) en v1.71/RC/43, y la **geografía del socio** en v1.71/RC/45. Todo sin acentos por la
-impresora.
+El **encabezado del tiquete** —los `ben_*` de `ge_companias`— en v1.71/RC/46, y la
+**geografía del socio** en v1.71/RC/45. Todo sin acentos por la impresora.
+
+Las tres líneas de dirección no son un capricho del modelo: son **tres renglones del
+papel**, cortados al ancho que aguanta la impresora, y le toca al usuario repartir el texto
+entre ellas como le sirva. Por eso son tres columnas y no una dirección larga; la app no las
+interpreta ni las junta.
+
+⚠️ **Se registró primero la tabla equivocada.** En v1.71/RC/43 la colección apuntaba a
+`re_parametros`, que es la tabla del legacy: una fila para todo el sistema, sin compañía.
+Los campos previstos para las impresiones son los `ben_*` de `ge_companias`, que es de donde
+imprime el web y de donde ya salía el PDF de transporte de remedida.
+
+⚠️ **Y las dos tablas ya se separaron.** `v1.48/GE/05` copió `re_parametros` →
+`ge_companias.ben_*` **una** vez, con `COALESCE(destino, origen)`. Después:
+
+| | Escribe | Estado |
+|---|---|---|
+| `re_parametros` | PowerBuilder legacy | Datos reales |
+| `ge_companias.ben_*` | Formulario Compañía del web | La foto vieja |
+
+El backend no escribe `re_parametros` en ningún lado (sólo la lee para
+`clddrecibosconfinca`) y no hay formulario web para ella. Como el `COALESCE` sólo copia
+cuando el destino está en NULL, **re-correr aquella migración nunca las vuelve a alinear**:
+es idempotente en el peor sentido.
+
+Que `ge_companias` tenga hoy texto de relleno (`DIRECCION 3`, `EL TELEFONO`, `EL EMAIL`) es
+un dato por corregir en el formulario, no un motivo para leer la otra tabla. La migración
+avisa cuando lo detecta, sin fallar.
 
 ⚠️ **El `UBICACION:` del móvil no calca al web, y está bien que no.** La vista decodifica el
 código empaquetado `productores.ubicacion` (ocho caracteres, con dos formatos conviviendo:
@@ -552,20 +578,27 @@ que unen directo y no hay nada que interpretar. Mismo resultado por un camino qu
 puede equivocar. Los ~780 productores sin los ids caen al respaldo: sin ubicación, igual que
 en el web, en vez de imprimir una provincia inventada.
 
-⚠️ **El encabezado va a diferir hasta que se corrija la base.** El `.frx` lo toma de
-`ge_companias.ben_*`, que hoy tiene valores de relleno (`DIRECCION 3`, `EL TELEFONO`,
-`EL EMAIL`); el móvil usa `re_parametros`, que tiene los reales. El papel del teléfono sale
-mejor que el del web, que no es lo que se buscaba: hay que arreglar `ge_companias`.
-
-Dos diferencias menores más, anotadas donde ocurren:
+Dos diferencias menores, anotadas donde ocurren:
 
 - **El orden del nombre.** La vista arma `APELLIDO1 APELLIDO2 NOMBRE`; el teléfono baja el
   nombre concatenado como `NOMBRE APELLIDO1 APELLIDO2`. Es la misma persona escrita al
   revés. Unificarlo es cambiar la proyección de `productores`, que también alimenta la lista
   y la búsqueda de la app.
-- **Ni CLDD ni observaciones ni finca salen en el papel**, porque el `.frx` no los imprime
-  —aunque la vista ya prepare la línea `SELLO CLDD`. Se replica la ausencia; agregarlos sería
-  apartarse del web.
+- **Ni observaciones ni finca salen en el papel**, porque el `.frx` no los imprime. Se
+  replica la ausencia.
+
+### ⚠️ El SELLO CLDD falta en el web, no en el móvil
+
+`vw_rc_recibo_impreso` arma la línea desde v1.68/RC/87 —con el comentario explícito de
+bindear un TextObject con CanShrink— pero **el objeto nunca se agregó al `rc_recibo.frx`**:
+en la plantilla viva `cldd` aparece sólo en el diccionario de datos del reporte. Son **9.211
+recibos de la cosecha 2025-2026** que hoy salen sin el sello.
+
+El móvil sí lo imprime, en el hueco que el `.frx` dejó entre `CALIDAD:` y el certificado —
+las dos líneas juntas, antes de `CAFE EN FRUTA`. Se usa `<> 0` y no `= 1`, para cubrir los
+tipos 1-4 del legacy además del 0/1 del checkbox nuevo, igual que la vista.
+
+Hasta que el objeto se agregue al reporte, los dos papeles difieren en esta línea.
 
 ### ORIGINAL / COPIA sin tocar el esquema
 
