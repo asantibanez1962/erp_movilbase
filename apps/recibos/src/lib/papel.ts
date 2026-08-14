@@ -55,8 +55,16 @@ export const ESTILO_PAPEL = `
   .estado { font-weight: bold; text-align: center; margin: 0.8mm 0 1.2mm -3.2mm; }
   /* El logo y la caja tienen ancho propio y se centran con margen automático, así que no se
      les puede dar margen negativo sin descentrarlos: se corren con la propiedad left, que
-     los mueve sin rehacer el layout. */
-  .logo { display: block; margin: 0 auto 0.8mm; width: 30mm; position: relative; left: -1.6mm; }
+     los mueve sin rehacer el layout.
+     ⚠️ SE FIJA EL ALTO Y NO EL ANCHO. Cada cliente trae su logo con la proporción que sea, y
+     lo que está contado en este papel es el ESPACIO VERTICAL: el recibo entra en la página
+     por unos pocos milímetros. Con el ancho fijo, un logo más alto que el anterior empuja
+     todo hacia abajo — pasó al cambiar el de Altura, que sumó 4 mm de golpe. Con el alto
+     fijo, cualquier logo ocupa lo mismo y el largo del comprobante no depende de con qué
+     proporción lo exportaron.
+     El max-width es el freno para un logo muy apaisado, que si no se saldría del papel. */
+  .logo { display: block; margin: 0 auto 0.8mm; height: 16mm; width: auto; max-width: 45mm;
+          position: relative; left: -1.6mm; }
   /* Dos columnas: la etiqueta llega hasta los 23 mm, que es donde el .frx pone el valor. */
   .par { display: flex; }
   .par > span:first-child { flex: 0 0 23mm; }

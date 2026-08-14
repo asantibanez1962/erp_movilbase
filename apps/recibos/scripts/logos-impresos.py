@@ -42,7 +42,15 @@ DESTINO = os.path.join(APP, "src", "lib", "logosImpresos.ts")
 # Ancho al que se lleva cualquier logo, en puntos de impresora. 320 ≈ 40 mm a 203 dpi.
 ANCHO_OBJETIVO = 320
 # Por debajo de este gris el punto se imprime. 0 es negro, 255 blanco.
-UMBRAL = 128
+#
+# ⚠️ 210 Y NO 128, QUE SERÍA "LA MITAD". Los logos reales no son blanco y negro puros: el de
+# Altura tiene sólo 2 % de negro y otro 6 % en grises medios —los bordes suavizados y los
+# trazos finos—. Con 128 esos grises caen del lado blanco y el logo sale mutilado: se perdían
+# la montaña y la palabra "Altura", quedando apenas "Café de".
+#
+# El riesgo del otro lado es un logo con FONDO gris claro: a 210 el fondo entero se imprimiría
+# en negro. Por eso el script avisa cuando la tinta pasa del 40 %.
+UMBRAL = 210
 
 
 def leer_png(ruta):
@@ -234,7 +242,18 @@ def main():
         na, nal, bits = a_monocromo(ancho, alto, gris, ANCHO_OBJETIVO)
         png = a_png(na, nal, bits)
         fila_bytes, crudo = a_escpos(na, nal, bits)
-        print(f"  {cliente}: {ancho}x{alto} -> {na}x{nal}  ({len(png)} B PNG, {len(crudo)} B ESC/POS)")
+        tinta = sum(sum(f) for f in bits) * 100 // (na * nal)
+        print(
+            f"  {cliente}: {ancho}x{alto} -> {na}x{nal}  "
+            f"({len(png)} B PNG, {len(crudo)} B ESC/POS, {tinta}% de tinta)"
+        )
+        if tinta > 40:
+            print(
+                f"    AVISO: {tinta}% es mucho — probablemente el FONDO se este "
+                f"imprimiendo en negro. Revisa {archivo}: deberia tener fondo blanco "
+                "puro, sin transparencia."
+            )
+
         partes.append(
             f'  {cliente}: {{\n'
             f'    png: "data:image/png;base64,{base64.b64encode(png).decode()}",\n'
