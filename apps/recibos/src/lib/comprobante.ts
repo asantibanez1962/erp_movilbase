@@ -36,9 +36,16 @@ export interface ComprobanteRecibo {
   recibo: string;
   /** `dd/MM/yyyy`. */
   fecha: string;
-  /** `dd/MM/yyyy HH:mm`. */
+  /**
+   * ⚠️ NO SE IMPRIMEN, y es una decisión, no un olvido. El .frx del web saca tres fechas
+   * —FECHA, AGREGADO (cuándo se digitó) e IMPRESO (cuándo salió el papel)— pero en el móvil
+   * los dos renglones extra costaban 7 mm de los 57 que hubo que recortar para que el
+   * comprobante entrara en la página de 210 mm del driver. Se guardan igual con el recibo.
+   *
+   * El costo: una COPIA ya no dice cuándo se emitió. Lo compensa el "COPIA" del encabezado,
+   * que sí distingue el original de las reimpresiones.
+   */
   agregado: string;
-  /** `dd/MM/yyyy HH:mm` — el momento de esta impresión. */
   hoy: string;
   productor: string;
   cedula: string;
@@ -85,6 +92,19 @@ const dec = (v: number | null | undefined, n: number) => (v == null ? "" : v.toF
 export function armarComprobante(c: ComprobanteRecibo): string {
   // Las dos van después de CALIDAD y antes de CAFE EN FRUTA. Cuando no aplican no ocupan
   // renglón: el .frx deja el objeto vacío, que es el efecto de su CanShrink.
+  // Una línea vacía igual ocupa renglón, y con el papel contado eso es desperdicio puro.
+  // Pasa de verdad: hay ~780 productores sin geografía, y su UBICACION son tres blancos.
+  const linea = (texto: string, clase = "") =>
+    texto.trim() === "" ? "" : `<div${clase ? ` class="${clase}"` : ""}>${esc(texto)}</div>`;
+
+  // ⚠️ LA UBICACION VA EN UNA LÍNEA, no en tres como el .frx. Es la misma información
+  // —provincia, cantón y distrito— y ahorra dos renglones de los que hay que recortar para
+  // que el comprobante entre en la página de 210 mm que impone el driver.
+  const ubicacion = [c.provincia, c.canton, c.distrito]
+    .map((x) => x.trim())
+    .filter((x) => x !== "")
+    .join(" · ");
+
   const sello = c.cldd.trim() === "" ? "" : `<div class="bloque c m">${esc(c.cldd)}</div>`;
   const certificado =
     c.certificado.trim() === "" ? "" : `<div class="bloque">${esc(c.certificado)}</div>`;
@@ -106,65 +126,83 @@ export function armarComprobante(c: ComprobanteRecibo): string {
      Y el ancho va FIJO, no heredado: sin declararlo, las filas de dos columnas —que son
      flex, y un flex no se encoge por debajo de su contenido— empujan la página más ancha
      que el papel, todo lo centrado se descentra y el rollo corta el borde derecho. */
-  /* ⚠️ LOS 6.35 mm DE ABAJO SON EL MARGEN DE CORTE, NO RELLENO. Un cuarto de pulgada, que
-     es lo que la impresora necesita avanzar para que la última línea pase la barra de
-     corte: sin eso, cortar el papel se lleva parte del texto.
-     Ojo con la opción "Bottom saving paper" del driver: recorta el blanco del final, o sea
-     que si se activa se come justamente este margen. Van juntas — o el margen, o el
-     recorte, no los dos. */
+  /* ⚠️ LOS 6.35 mm DE ABAJO NO SON RELLENO: son para poder ARRANCAR el papel. La impresora
+     no tiene cuchilla, así que el recibidor lo corta a mano contra el borde, y el cabezal
+     queda un tramo por detrás de ese borde: sin margen, arrancar se lleva la última línea.
+     ⚠️ Se pisa con "Bottom saving paper" del driver, que recorta el blanco final — o sea
+     justamente esto. Si esa opción se activa, el margen lo tiene que poner el driver con
+     "Feed paper at the end of job". Una o la otra, nunca las dos. */
   body { font-family: Verdana, "DejaVu Sans", Tahoma, Geneva, sans-serif;
-         font-size: 8.25pt; line-height: 1.45; margin: 0; color: #000;
-         box-sizing: border-box; width: 72mm; padding: 0 1mm 6.35mm 2.5mm;
+         font-size: 8.25pt; line-height: 1.32; margin: 0; color: #000;
+         box-sizing: border-box; width: 72mm; padding: 0 1mm 6.35mm 4.2mm;
          overflow-wrap: break-word; }
   .c { text-align: center; }
   .m { font-weight: bold; }
-  .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 4mm 0 2mm; }
-  .estado { font-weight: bold; text-align: center; margin: 1mm 0 2mm; }
-  .logo { display: block; margin: 0 auto 1mm; width: 36.6mm; }
+  .titulo { font-size: 12pt; font-weight: bold; text-align: center; margin: 2.5mm 0 1.5mm; }
+  .estado { font-weight: bold; text-align: center; margin: 0.8mm 0 1.2mm; }
+  .logo { display: block; margin: 0 auto 0.8mm; width: 30mm; }
   /* Dos columnas: la etiqueta llega hasta los 23 mm, que es donde el .frx pone el valor. */
   .par { display: flex; }
   .par > span:first-child { flex: 0 0 23mm; }
   /* Que el valor pueda partirse en vez de estirar la fila más allá del papel. */
   .par > span:last-child { min-width: 0; }
-  .bloque { margin-top: 2mm; }
+  .bloque { margin-top: 1mm; }
   /* La caja de CAFE EN FRUTA es lo único con recuadro en todo el comprobante. */
-  .caja { border: 1px solid #000; width: 34.3mm; margin: 2mm auto 1mm; text-align: center; }
+  .caja { border: 1px solid #000; width: 34.3mm; margin: 1.2mm auto 0.8mm; text-align: center; }
   .fruta { display: flex; }
   .fruta > .etq { flex: 0 0 20mm; }
   .fruta > .val { flex: 0 0 11mm; }
-  /* El blanco sobre la raya es donde firma el productor: no es margen suelto. */
-  .firma { margin: 17mm auto 0; width: 58.6mm; border-top: 1px solid #000;
+  /* ⚠️ EL BLANCO SOBRE LA RAYA ES DONDE FIRMA EL PRODUCTOR, no es margen suelto: si se
+     achica, no hay dónde firmar.
+     El "+ 2.64em" son DOS RENGLONES exactos (2 × la interlínea de 1.32), pedidos así: "como
+     si imprimieras dos textos en blanco". Va en em y no en milímetros a propósito — si
+     algún día cambia el cuerpo de letra o la interlínea, sigue siendo dos renglones.
+     ⚠️ NADA DE BACKTICKS EN ESTE COMENTARIO: todo el CSS vive dentro de un template literal
+     y un backtick lo corta, con lo que el navegador deja de ver estilos y el parser de TS
+     empieza a leer el CSS como código. Ya pasó dos veces.
+     ⚠️ NO SUBIRLO POR CÁLCULO. Se probó con 25 mm y el comprobante volvió a salir en DOS
+     páginas, con la misma impresora y el mismo driver. El margen que parecía haber —el papel
+     sale en 5.5" contra una página de 210 mm— no existe: el driver escala el contenido, así
+     que estos milímetros no son los del rollo. La única medida que vale es imprimir. */
+  .firma { margin: calc(8mm + 2.64em) auto 0; width: 58.6mm; border-top: 1px solid #000;
            text-align: center; }
   /* Y el de abajo separa la firma de la nota legal. En pantalla 3 mm parecían
-     suficientes; impreso, "FIRMA" y "NOTA:" quedaban pegados y se leían como un bloque. */
-  .nota { margin-top: 8mm; text-align: center; white-space: pre-line; }
+     suficientes; impreso, "FIRMA" y "NOTA:" quedaban pegados y se leían como un bloque.
+     El margen izquierdo NEGATIVO le devuelve a la nota un carácter (1.75 mm a 8.25 pt):
+     es el bloque más ancho del comprobante y el sangrado que ayuda a leer los datos, acá
+     sólo le aprieta las líneas. Va al revés que el resto a propósito. */
+  .nota { margin: 5mm 0 0 -1.75mm; text-align: center; line-height: 1.1; }
+  .nota p { margin: 0 0 2mm; white-space: pre-line; }
+  .nota p:last-child { margin-bottom: 0; }
+  /* ⚠️ RED DE SEGURIDAD. El comprobante entra en la página de 210 mm con unos milímetros
+     de sobra, pero un nombre de productor largo puede partir en dos líneas y empujarlo.
+     Si eso pasa, que la nota legal se vaya ENTERA a la página siguiente en vez de cortarse
+     por la mitad: un párrafo legal partido a mitad de frase es peor que una hoja de más.
+     Es exactamente lo que pasaba antes con FIRMA impreso encima de NOTA. */
+  .nota, .firma { break-inside: avoid; page-break-inside: avoid; }
 </style></head><body>
 
   <img class="logo" src="${LOGO}" alt="" />
   <div class="estado">${c.copia ? "COPIA" : "ORIGINAL"}</div>
 
-  <div class="c">${esc(c.empresa.nombre)}</div>
-  <div class="c">${esc(c.empresa.direccion1)}</div>
-  <div class="c">${esc(c.empresa.direccion2)}</div>
-  <div class="c">${esc(c.empresa.direccion3)}</div>
-  <div class="c">CODIGO ICAFE:${esc(c.empresa.codigoicafe)}</div>
-  <div class="c">${esc(c.empresa.telefono)}</div>
-  <div class="c">${esc(c.empresa.email)}</div>
+  ${linea(c.empresa.nombre, "c")}
+  ${linea(c.empresa.direccion1, "c")}
+  ${linea(c.empresa.direccion2, "c")}
+  ${linea(c.empresa.direccion3, "c")}
+  ${linea(`CODIGO ICAFE:${c.empresa.codigoicafe}`, "c")}
+  ${linea(c.empresa.telefono, "c")}
+  ${linea(c.empresa.email, "c")}
 
   <div class="titulo">RECIBO DE CAFE</div>
 
   <div>COSECHA: ${esc(c.cosecha)}</div>
   <div>RECIBO:${esc(c.recibo)}</div>
   <div class="par"><span>FECHA:</span><span>${esc(c.fecha)}</span></div>
-  <div class="par"><span>AGREGADO:</span><span>${esc(c.agregado)}</span></div>
-  <div class="par"><span>IMPRESO:</span><span>${esc(c.hoy)}</span></div>
 
   <div class="bloque">RECIBIMOS DE:</div>
   <div>${esc(c.productor)}</div>
   <div>CEDULA:${esc(c.cedula)}</div>
-  <div>UBICACION: ${esc(c.provincia)}</div>
-  <div>${esc(c.canton)}</div>
-  <div>${esc(c.distrito)}</div>
+  ${linea(`UBICACION: ${ubicacion}`)}
 
   <div class="par bloque"><span>ADELANTO:</span><span>${dec(c.precio, 2)}</span></div>
   <div class="par"><span>RECIBIDOR:</span><span>${esc(c.recibidor)}</span></div>
@@ -178,7 +216,7 @@ export function armarComprobante(c: ComprobanteRecibo): string {
     <span class="etq">CAJUELAS:</span><span class="val">${c.cajuelas}</span>
     <span class="etq">CUARTILLOS:</span><span class="val">${c.cuartillos}</span>
   </div>
-  <div class="bloque">${esc(enLetras(c.cajuelas))} CAJUELA(S )</div>
+  <div>${esc(enLetras(c.cajuelas))} CAJUELA(S )</div>
   <div>${esc(cuartillosEnLetras(c.cuartillos))} CUARTILLO(S)</div>
 
   <!-- ⚠️ SÓLO LOS PORCENTAJES. Los castigos en cajuelas que estos porcentajes producen NO
@@ -192,16 +230,12 @@ export function armarComprobante(c: ComprobanteRecibo): string {
 
   <div class="firma">FIRMA</div>
 
-  <div class="nota">NOTA: ESTE RECIBO NO ES NEGOCIBLE Y
+  <div class="nota"><p>NOTA: ESTE RECIBO NO ES NEGOCIBLE Y
 DEBE CONSERVARLO EL PRODUCTOR PARA
 HACER VALER SUS DERECHOS EN LA
-LIQUIDACION DEFINITIVA.
-
-EL PRECIO DE ESTE CAFE SERA CONFORME
-CON LAS LEYES VIGENTES.
-
-CUIDE ESTE RECBO, NO SE ATENDERAN
-RECLAMOS POR PERDIDA.</div>
+LIQUIDACION DEFINITIVA.</p><p>EL PRECIO DE ESTE CAFE SERA CONFORME
+CON LAS LEYES VIGENTES.</p><p>CUIDE ESTE RECIBO, NO SE ATENDERAN
+RECLAMOS POR PERDIDA.</p></div>
 
 </body></html>`;
 }
