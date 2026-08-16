@@ -64,11 +64,17 @@ export async function borrarBaseLocal(): Promise<void> {
  * `descartar` se conserva porque la pantalla lo sigue ofreciendo, pero con esto ya casi
  * no hace falta: lo pendiente sobrevive al cierre de sesión.
  */
-export async function cerrarSesion(opts: { descartar: boolean }): Promise<void> {
-  await exigirNadaPendiente(opts.descartar);
-
-  await useSesion.getState().limpiar();
-  // ⚠️ SIN ESTO NO SE CIERRA NADA. Borrar el contexto deja las credenciales en
+export async function cerrarSesion(): Promise<void> {
+  // ⚠️ NO se exige que no haya pendientes, y es la consecuencia directa de no borrar: no
+  // hay nada que perder. Mientras esto llamaba a `exigirNadaPendiente`, el aviso decía
+  // "esto NO se pierde" y el código frenaba igual con un error rojo — el diálogo y el
+  // comportamiento contándose historias distintas.
+  // ⚠️ LAS CREDENCIALES PRIMERO, igual que en `cambiarServidor` y por lo mismo: mientras
+  // haya sesión, cualquier pantalla puede disparar una petición que termine en un refresh
+  // y la reabra. Acá el riesgo es menor porque no se remonta nada, pero el orden correcto
+  // no cuesta y evita depender de eso.
+  //
+  // SIN EL LOGOUT NO SE CIERRA NADA: borrar el contexto deja las credenciales en
   // SecureStore, así que la app vuelve a entrar sola con el usuario anterior y sólo
   // pregunta el recibidor. El síntoma —"no me pide usuario"— no se parece a "faltó
   // borrar el token", y manda a buscar por el lado de la pantalla de login.
@@ -76,6 +82,7 @@ export async function cerrarSesion(opts: { descartar: boolean }): Promise<void> 
   // La clave local muere con la sesión: sobrevivirle no protegería nada y dejaría al
   // próximo usuario del teléfono con una guarda que responde a la clave de otro.
   await olvidarClave();
+  await useSesion.getState().limpiar();
 }
 
 /**
@@ -94,6 +101,40 @@ export async function borrarSiEsOtroUsuario(usuario: string): Promise<boolean> {
   await borrarBaseLocal();
   await useSesion.getState().limpiar();
   return true;
+}
+
+/**
+ * Cambiar de SERVIDOR: borra la base y saca al usuario.
+ *
+ * ⚠️ ACÁ EL BORRADO NO ES OPCIONAL, y es el caso más fuerte de los tres. Cada beneficio
+ * corre su propio backend contra su propia base: los productores, los precios y hasta los
+ * ids son de OTRO sistema. Conservarlos no sería "datos viejos", sería mezclar dos
+ * empresas — un recibo del servidor A colgando de una bitácora que en el B es otra cosa.
+ *
+ * Existe aparte de `cerrarSesion` justamente porque ésa dejó de borrar. Cuando eran la
+ * misma función, dejar de borrar en una habría dejado de borrar acá sin que nadie lo
+ * notara: el compilador avisó porque la firma cambió, pero el defecto habría sido
+ * silencioso si la firma hubiera quedado igual.
+ */
+export async function cambiarServidor(): Promise<void> {
+  /*
+   * ⚠️ LAS CREDENCIALES SE CORTAN PRIMERO, Y EL BORRADO VA AL FINAL.
+   *
+   * Al revés hay una carrera que deja la sesión abierta: `borrarBaseLocal` remonta el
+   * árbol, las pantallas que vuelven a montarse disparan peticiones, y si alguna devuelve
+   * 401 el cliente intenta un REFRESH. Ese refresh puede resolver DESPUÉS del logout y
+   * volver a escribir los tokens — la sesión queda reabierta y la app no pide usuario,
+   * aunque los datos sí se hayan borrado.
+   *
+   * Y acá pedir usuario no es un trámite: el servidor nuevo es otro backend, con su
+   * propia base de usuarios. El token del anterior no vale nada ahí.
+   *
+   * Sin sesión, el remonte no puede disparar ninguna petición autenticada.
+   */
+  await useAuthStore.getState().logout();
+  await olvidarClave();
+  await useSesion.getState().limpiar();
+  await borrarBaseLocal();
 }
 
 /**

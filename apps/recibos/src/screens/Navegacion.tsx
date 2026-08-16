@@ -392,18 +392,69 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
       accion({ descartar }).catch((e: Error) => setUltimoError(e.message));
 
     const pendientes = await resumenPendientes();
-    setPedirClave({
-      titulo,
-      textoAccion: pendientes.total === 0 ? titulo : "Salir y descartar",
-      advertencia:
-        pendientes.total === 0
-          ? "Se borran los datos de este teléfono: pertenecen a tu usuario y a tu " +
-            "recibidor. No hay nada sin enviar, así que no se pierde trabajo."
-          : `Todavía no subieron: ${describirPendientes(pendientes)}.\n\n` +
-            "Se borran los datos de este teléfono y ESO SE PIERDE. Si podés, cerrá la " +
-            "bitácora e imprimila primero.",
-      ejecutar: () => void ejecutar(pendientes.total > 0),
-    });
+
+    /*
+     * El aviso dice lo que ESTA acción hace, y son dos cosas distintas:
+     *
+     *  · Cambiar recibidor BORRA. El cache está recortado a la zona del recibidor
+     *    anterior y no hay delta que lo corrija.
+     *  · Cerrar sesión ya NO borra: el trabajo queda para cuando vuelvas. Sólo se borra
+     *    si después entra otro usuario, y ahí se le borra a él antes de ver nada.
+     *
+     * Decir "se borran los datos" en los dos casos era cómodo y falso, y hace que la
+     * gente le tenga miedo a la acción inocua — o peor, que deje de leer el aviso.
+     */
+    const advertencia = borra
+      ? pendientes.total === 0
+        ? "Se borran los datos de este teléfono y hay que volver a bajarlos. No hay " +
+          "nada sin enviar, así que no se pierde trabajo."
+        : `Todavía no subieron: ${describirPendientes(pendientes)}.\n\n` +
+          "Se borran los datos de este teléfono y ESO SE PIERDE. Si podés, cerrá la " +
+          "bitácora e imprimila primero."
+      : pendientes.total === 0
+        ? "Se cierra la sesión. Los datos quedan en el teléfono: si volvés a entrar con " +
+          "tu usuario los encontrás y no hay que bajarlos de nuevo."
+        : /*
+           * ⚠️ ACÁ EL PENDIENTE SIGUE IMPORTANDO, PERO POR OTRO MOTIVO.
+           *
+           * Cerrar sesión ya no lo pierde. Lo que sí lo pierde es que DESPUÉS entre otra
+           * persona en este teléfono: ahí se borra la base antes de mostrarle nada, y con
+           * ella el trabajo que quedó esperando.
+           *
+           * Y esa segunda persona no puede decidirlo — no sabe que hay un día ajeno sin
+           * enviar. El único momento en que alguien puede evitarlo es éste, y por eso el
+           * aviso se queda: cambia de "vas a perder esto" a "esto sobrevive, salvo que
+           * alguien más entre".
+           */
+          `Todavía no subieron: ${describirPendientes(pendientes)}.\n\n` +
+          "Eso queda esperando en el teléfono y sube cuando vuelvas a entrar. Pero si " +
+          "entra OTRO usuario antes, se borra. Si podés, cerrá la bitácora y sincronizá " +
+          "antes de salir.";
+
+    const textoAccion = borra && pendientes.total > 0 ? "Salir y descartar" : titulo;
+    // Sólo se descarta cuando la acción borra. Cerrar sesión conserva lo pendiente.
+    const correr = () => void ejecutar(borra && pendientes.total > 0);
+
+    /**
+     * ⚠️ LA CLAVE SÓLO PARA LO QUE BORRA.
+     *
+     * La guarda existe contra la pérdida irreversible: si la bitácora del día no cerró,
+     * sus recibos sólo están acá. Cerrar sesión dejó de ser eso —los datos quedan y el
+     * trabajo pendiente sobrevive— así que pedirla ahí es fricción sin nada que proteger.
+     *
+     * Y es peor que inútil: una clave que se pide para todo se teclea de memoria, y el
+     * día que aparece antes de la acción que SÍ borra, se teclea igual sin leer. La
+     * fricción tiene que ser proporcional a lo que está en juego.
+     */
+    if (!borra) {
+      Alert.alert(titulo, advertencia, [
+        { text: "Cancelar", style: "cancel" },
+        { text: textoAccion, onPress: correr },
+      ]);
+      return;
+    }
+
+    setPedirClave({ titulo, textoAccion, advertencia, ejecutar: correr });
   };
 
   return (

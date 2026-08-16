@@ -19,13 +19,14 @@ import {
   urlCompilada,
   urlServidor,
 } from "../lib/servidor";
-import { cerrarSesion } from "../lib/alcance";
+import { cambiarServidor } from "../lib/alcance";
 import { describirPendientes, resumenPendientes } from "../lib/sync";
 import {
   guardarModoImpresion,
   modoImpresion,
   type ModoImpresion,
 } from "../lib/modoImpresion";
+import { PedirClave } from "./PedirClave";
 import { colores, estilos } from "./estilos";
 
 /**
@@ -61,10 +62,41 @@ export function ServidorScreen({
   const [probando, setProbando] = useState(false);
   const [guardando, setGuardando] = useState(false);
   const [resultado, setResultado] = useState<{ ok: boolean; msg: string } | null>(null);
-  const logout = useAuthStore((s) => s.logout);
+  const usuario = useAuthStore((e) => e.user?.usuario ?? "");
+  /**
+   * La acción destructiva esperando la clave.
+   *
+   * ⚠️ Cambiar de servidor BORRA la base, igual que cambiar de recibidor, así que pide la
+   * clave por la misma razón: es la única fricción proporcional a algo irreversible. Ya
+   * había una confirmación —y se queda— pero un "¿Seguro?" se acepta por reflejo, y acá
+   * lo que se pierde puede ser el día de trabajo de alguien.
+   */
+  const [pedirClave, setPedirClave] = useState<{
+    titulo: string;
+    advertencia: string;
+    textoAccion: string;
+    ejecutar: () => void;
+  } | null>(null);
 
   const vigente = urlServidor();
   const compilada = urlCompilada();
+
+  /**
+   * ¿Lo que hay escrito difiere de lo que se está usando?
+   *
+   * Se compara NORMALIZADO para no avisar por diferencias que no lo son: `192.168.1.50:5249`
+   * y `http://192.168.1.50:5249` son la misma dirección, y marcarlas como distintas
+   * entrenaría a ignorar el aviso. Si el texto no es una dirección válida, se avisa igual
+   * —con más razón: eso seguro no es lo que está en uso.
+   */
+  const sinGuardar = (() => {
+    if (!texto.trim()) return false;
+    try {
+      return normalizarUrl(texto) !== vigente;
+    } catch {
+      return true;
+    }
+  })();
 
   /**
    * Probar la conexión.
@@ -109,10 +141,9 @@ export function ServidorScreen({
     setGuardando(true);
     try {
       await guardarUrlServidor(url);
-      // Se descarta lo pendiente sólo si ya se confirmó arriba; acá no se vuelve a
-      // preguntar porque el usuario ya vio QUÉ se iba a perder.
-      await cerrarSesion({ descartar: true });
-      logout();
+      // Cambiar de servidor BORRA la base: los datos son de otra empresa y de otra base.
+      // No se vuelve a preguntar porque el usuario ya vio arriba qué se iba a perder.
+      await cambiarServidor();
     } catch (e) {
       setResultado({ ok: false, msg: (e as Error)?.message ?? "No se pudo guardar." });
     } finally {
@@ -153,7 +184,16 @@ export function ServidorScreen({
         {
           text: pendientes.total > 0 ? "Descartar y cambiar" : "Cambiar",
           style: "destructive",
-          onPress: () => void aplicar(url),
+          // Confirmación PRIMERO y clave después: la confirmación dice qué se pierde, la
+          // clave obliga a detenerse. Ver la nota en Navegacion.
+          onPress: () =>
+            setPedirClave({
+              titulo: "Cambiar de servidor",
+              advertencia:
+                `Se apunta a ${url} y se borran los datos de este teléfono.` + detalle,
+              textoAccion: "Cambiar",
+              ejecutar: () => void aplicar(url),
+            }),
         },
       ]
     );
@@ -169,14 +209,20 @@ export function ServidorScreen({
         {
           text: "Restaurar",
           style: "destructive",
-          onPress: () => {
-            void (async () => {
-              const url = await restaurarUrlServidor();
-              setTexto(url);
-              await cerrarSesion({ descartar: true });
-              logout();
-            })();
-          },
+          onPress: () =>
+            setPedirClave({
+              titulo: "Volver a la dirección original",
+              advertencia:
+                `Se vuelve a ${compilada} y se borran los datos de este teléfono.`,
+              textoAccion: "Restaurar",
+              ejecutar: () => {
+                void (async () => {
+                  const url = await restaurarUrlServidor();
+                  setTexto(url);
+                  await cambiarServidor();
+                })();
+              },
+            }),
         },
       ]
     );
@@ -208,6 +254,39 @@ export function ServidorScreen({
         placeholder="192.168.1.50:5249"
         placeholderTextColor={colores.textoTenue}
       />
+
+      {/*
+        ⚠️ LO ESCRITO NO ES LO QUE ESTÁ EN USO, Y HAY QUE DECIRLO.
+        
+        Al cancelar la clave —o simplemente al escribir y no guardar— la caja se queda con
+        lo tecleado. La dirección real sigue abajo, en "En uso", pero la caja es lo que uno
+        mira: un número malo ahí se lee como si estuviera configurado, y quien revisa por
+        qué no conecta concluye que la app está rota.
+        
+        No se revierte solo a propósito: si escribiste mal un dígito, borrarte el texto te
+        obliga a teclear la dirección entera de nuevo. Se avisa y se ofrece descartarlo.
+      */}
+      {sinGuardar ? (
+        <View
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            gap: 10,
+            paddingHorizontal: 16,
+            paddingVertical: 8,
+            backgroundColor: "#fef3c7",
+          }}
+        >
+          <Text style={{ color: "#92400e", fontSize: 13, flex: 1 }}>
+            Escrito pero SIN GUARDAR. Se sigue usando {vigente}.
+          </Text>
+          <TouchableOpacity onPress={() => setTexto(vigente)} hitSlop={8}>
+            <Text style={{ color: "#92400e", fontSize: 13, fontWeight: "700" }}>
+              Descartar
+            </Text>
+          </TouchableOpacity>
+        </View>
+      ) : null}
 
       <View style={estilos.detalleFila}>
         <Text style={estilos.detalleEtiqueta}>En uso</Text>
@@ -369,6 +448,20 @@ export function ServidorScreen({
           </Text>
         </TouchableOpacity>
       ) : null}
+
+      <PedirClave
+        visible={pedirClave != null}
+        usuario={usuario}
+        titulo={pedirClave?.titulo ?? ""}
+        advertencia={pedirClave?.advertencia ?? ""}
+        textoAccion={pedirClave?.textoAccion ?? ""}
+        onCancelar={() => setPedirClave(null)}
+        onConfirmar={() => {
+          const accion = pedirClave?.ejecutar;
+          setPedirClave(null);
+          accion?.();
+        }}
+      />
     </ScrollView>
   );
 }
