@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { Q } from "@nozbe/watermelondb";
@@ -7,6 +7,13 @@ import { cliente } from "../branding";
 import { todasLasBitacoras } from "../lib/bitacora";
 import { database } from "../lib/db";
 import { useSesion } from "../lib/sesion";
+import {
+  DIAS_POR_DEFECTO,
+  desdeCuando,
+  FiltroDias,
+  MarcaEnviado,
+  type Dias,
+} from "./FiltroDias";
 import { colores, estilos, fmtFecha } from "./estilos";
 import { useCatalogos, type Catalogos } from "./useCatalogos";
 
@@ -35,6 +42,9 @@ export function BitacorasScreen({
   const cosecha = useSesion((s) => s.cosecha);
   const [bitacoras, setBitacoras] = useState<Bitacora[] | null>(null);
   const [conteos, setConteos] = useState<Record<string, number>>({});
+  const [dias, setDias] = useState<Dias>(DIAS_POR_DEFECTO);
+  // Ver la nota en RecibosScreen: `_status` es interno de WatermelonDB y no se observa.
+  const syncTick = useSesion((s) => s.syncTick);
 
   // Observada y no leída con fetch(): al crear o cerrar una bitácora la lista se
   // actualiza sola, sin que cada pantalla tenga que acordarse de refrescar a la vuelta.
@@ -57,7 +67,7 @@ export function BitacorasScreen({
       ])
       .subscribe(setBitacoras);
     return () => sub.unsubscribe();
-  }, []);
+  }, [syncTick]);
 
   /**
    * El conteo de recibos, OBSERVANDO LA TABLA DE RECIBOS.
@@ -85,6 +95,19 @@ export function BitacorasScreen({
     return () => sub.unsubscribe();
   }, [recibidorId, cosecha]);
 
+  /**
+   * ⚠️ LAS ABIERTAS SE MUESTRAN SIEMPRE, sin importar el filtro.
+   *
+   * Una bitácora abierta es trabajo EN CURSO: esconderla porque se abrió hace tres días
+   * —pasa cuando alguien olvidó cerrarla— es justamente esconder el problema que hay que
+   * resolver. El filtro está para ordenar lo terminado, no para tapar lo pendiente.
+   */
+  const visibles = useMemo(() => {
+    const desde = desdeCuando(dias);
+    if (desde == null) return bitacoras ?? [];
+    return (bitacoras ?? []).filter((b) => b.estaAbierta || (b.fecha ?? 0) >= desde);
+  }, [bitacoras, dias]);
+
   return (
     <View style={estilos.root}>
       <View style={{ paddingHorizontal: 16, paddingTop: 12, paddingBottom: 4 }}>
@@ -93,8 +116,10 @@ export function BitacorasScreen({
         </Text>
       </View>
 
+      <FiltroDias valor={dias} onCambiar={setDias} cuantas={visibles.length} />
+
       <FlatList
-        data={bitacoras ?? []}
+        data={visibles}
         keyExtractor={(b) => b.id}
         renderItem={({ item }) => (
           <Fila
@@ -169,13 +194,16 @@ function Fila({
           .filter(Boolean)
           .join(" · ") || "Sin transportista"}
       </Text>
-      <View
-        style={[
-          estilos.badge,
-          { backgroundColor: abierta ? colores.exito : colores.textoTenue },
-        ]}
-      >
-        <Text style={estilos.badgeTexto}>{abierta ? "ABIERTA" : "CERRADA"}</Text>
+      <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+        <View
+          style={[
+            estilos.badge,
+            { backgroundColor: abierta ? colores.exito : colores.textoTenue },
+          ]}
+        >
+          <Text style={estilos.badgeTexto}>{abierta ? "ABIERTA" : "CERRADA"}</Text>
+        </View>
+        <MarcaEnviado enviado={bitacora.syncStatus === "synced"} />
       </View>
     </TouchableOpacity>
   );

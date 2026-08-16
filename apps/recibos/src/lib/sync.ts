@@ -8,6 +8,7 @@ import { config } from "./config";
 import { useSesion } from "./sesion";
 import { cargarPoliticas, puedeEnviarse } from "./politicas";
 import { prepararFechas } from "./fechas";
+import { purgarAntiguos } from "./purga";
 
 /** Las dos colecciones que el teléfono origina, y por lo tanto pueden tener pendientes. */
 const ESCRIBIBLES = ["bitacoras", "recibos"] as const;
@@ -100,6 +101,17 @@ export async function syncNow(): Promise<FalloPull[]> {
     // la tarde se archivaba en el día siguiente. Ver lib/fechas.ts.
     prepararEnvio: prepararFechas,
   });
+
+  /**
+   * Se limpia lo viejo DESPUÉS de sincronizar, que es el único momento en que se sabe con
+   * certeza qué llegó al servidor. Nunca lanza: una purga que falle no puede romper el
+   * sync, que es lo que de verdad importa. Ver lib/purga.ts.
+   */
+  await purgarAntiguos();
+
+  // Las listas muestran una marca "Enviado" que sale de `_status`, una columna interna de
+  // WatermelonDB que no se puede observar. Este aviso es lo que las hace releer.
+  useSesion.getState().marcarSync();
 
   return fallos;
 }

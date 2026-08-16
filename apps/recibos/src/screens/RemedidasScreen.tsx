@@ -7,6 +7,13 @@ import { cliente } from "../branding";
 import { database } from "../lib/db";
 import { esAnulada, partir } from "../lib/remedida";
 import { useSesion } from "../lib/sesion";
+import {
+  DIAS_POR_DEFECTO,
+  desdeCuando,
+  FiltroDias,
+  MarcaEnviado,
+  type Dias,
+} from "./FiltroDias";
 import { colores, estilos, fmtCajuelas, fmtFecha } from "./estilos";
 
 /**
@@ -23,6 +30,10 @@ export function RemedidasScreen({
   const cosecha = useSesion((s) => s.cosecha);
   const [remedidas, setRemedidas] = useState<Remedida[] | null>(null);
   const [busqueda, setBusqueda] = useState("");
+  const [dias, setDias] = useState<Dias>(DIAS_POR_DEFECTO);
+  // Ver la nota en RecibosScreen: `_status` no se puede observar, así que el aviso de
+  // fin de sync es lo que hace aparecer la marca "Enviado".
+  const syncTick = useSesion((s) => s.syncTick);
 
   useEffect(() => {
     const sub = database
@@ -42,17 +53,23 @@ export function RemedidasScreen({
       ])
       .subscribe(setRemedidas);
     return () => sub.unsubscribe();
-  }, [cosecha]);
+  }, [cosecha, syncTick]);
 
   const visibles = useMemo(() => {
+    const desde = desdeCuando(dias);
+    const enRango =
+      desde == null
+        ? (remedidas ?? [])
+        : (remedidas ?? []).filter((r) => (r.fecha ?? 0) >= desde);
+
     const t = busqueda.trim().toLowerCase();
-    if (!t) return remedidas ?? [];
-    return (remedidas ?? []).filter((r) =>
+    if (!t) return enRango;
+    return enRango.filter((r) =>
       `${r.recibo} ${r.placa ?? ""} ${r.sifon}`.toLowerCase().includes(t)
     );
-  }, [remedidas, busqueda]);
+  }, [remedidas, busqueda, dias]);
 
-  const sinImprimir = (remedidas ?? []).filter((r) => (r.impreso ?? 0) === 0).length;
+  const sinImprimir = visibles.filter((r) => (r.impreso ?? 0) === 0).length;
 
   return (
     <View style={estilos.root}>
@@ -65,6 +82,8 @@ export function RemedidasScreen({
           </Text>
         </View>
       ) : null}
+
+      <FiltroDias valor={dias} onCambiar={setDias} cuantas={visibles.length} />
 
       <TextInput
         style={estilos.buscador}
@@ -86,7 +105,11 @@ export function RemedidasScreen({
               <Text style={estilos.vacioTexto}>
                 {busqueda.trim()
                   ? "Ninguna remedida coincide."
-                  : "Todavía no hay remedidas en esta cosecha."}
+                  : dias === 1
+                    ? "Todavía no hay remedidas hoy. Tocá «Todo» para ver las anteriores."
+                    : dias == null
+                      ? "Todavía no hay remedidas en esta cosecha."
+                      : `No hay remedidas en los últimos ${dias} días.`}
               </Text>
             </View>
           )
@@ -144,6 +167,7 @@ function Fila({
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <Estado remedida={remedida} anulada={anulada} />
         <Text style={estilos.filaSubtitulo}>{fmtFecha(remedida.fecha)}</Text>
+        <MarcaEnviado enviado={remedida.syncStatus === "synced"} />
       </View>
     </TouchableOpacity>
   );

@@ -7,6 +7,13 @@ import { cliente } from "../branding";
 import { database } from "../lib/db";
 import { esAnulado } from "../lib/recibo";
 import { useSesion } from "../lib/sesion";
+import {
+  DIAS_POR_DEFECTO,
+  desdeCuando,
+  FiltroDias,
+  MarcaEnviado,
+  type Dias,
+} from "./FiltroDias";
 import { colores, estilos, fmtCajuelas, fmtFechaHora } from "./estilos";
 
 /**
@@ -26,6 +33,10 @@ export function RecibosScreen({
   const cosecha = useSesion((s) => s.cosecha);
   const [recibos, setRecibos] = useState<Recibo[] | null>(null);
   const [busqueda, setBusqueda] = useState("");
+  const [dias, setDias] = useState<Dias>(DIAS_POR_DEFECTO);
+  // Sube cuando termina un sync. Sin esto la marca "Enviado" no aparece hasta salir y
+  // volver: `_status` es interno de WatermelonDB y no se puede observar. Ver lib/sesion.
+  const syncTick = useSesion((s) => s.syncTick);
 
   useEffect(() => {
     const sub = database
@@ -65,7 +76,7 @@ export function RecibosScreen({
       ])
       .subscribe(setRecibos);
     return () => sub.unsubscribe();
-  }, [recibidor, cosecha]);
+  }, [recibidor, cosecha, syncTick]);
 
   /**
    * Busca por número, nombre y cédula A LA VEZ.
@@ -78,14 +89,25 @@ export function RecibosScreen({
    * "JIMÉNEZ", y en un teclado de teléfono nadie pone la tilde.
    */
   const visibles = useMemo(() => {
+    const desde = desdeCuando(dias);
+    // El filtro de días PRIMERO y la búsqueda después: quien escribe un número espera
+    // encontrarlo entre lo que está viendo. Si la búsqueda ignorara el filtro, el mismo
+    // texto daría resultados distintos según la pestaña, que es peor que no encontrarlo.
+    const enRango =
+      desde == null
+        ? (recibos ?? [])
+        : (recibos ?? []).filter((r) => (r.fecha ?? 0) >= desde);
+
     const t = normalizar(busqueda);
-    if (!t) return recibos ?? [];
-    return (recibos ?? []).filter((r) =>
+    if (!t) return enRango;
+    return enRango.filter((r) =>
       normalizar(`${r.recibo} ${r.nombre ?? ""} ${r.cedula ?? ""} ${r.codigo ?? ""}`).includes(t)
     );
-  }, [recibos, busqueda]);
+  }, [recibos, busqueda, dias]);
 
-  const sinImprimir = (recibos ?? []).filter((r) => (r.impreso ?? 0) === 0).length;
+  // Sobre lo VISIBLE y no sobre toda la historia: un recibo sin imprimir de hace un mes
+  // no es trabajo pendiente de hoy, y contarlo mandaría a buscar algo que ya no importa.
+  const sinImprimir = visibles.filter((r) => (r.impreso ?? 0) === 0).length;
 
   return (
     <View style={estilos.root}>
@@ -115,6 +137,8 @@ export function RecibosScreen({
         </View>
       ) : null}
 
+      <FiltroDias valor={dias} onCambiar={setDias} cuantas={visibles.length} />
+
       <TextInput
         style={estilos.buscador}
         value={busqueda}
@@ -134,9 +158,15 @@ export function RecibosScreen({
           recibos == null ? null : (
             <View style={estilos.vacio}>
               <Text style={estilos.vacioTexto}>
+                {/* El vacío tiene que decir QUÉ lo dejó vacío. Con el filtro puesto,
+                    "no hay recibos" es falso y manda a buscar un problema que no existe. */}
                 {busqueda.trim()
                   ? `Ningún recibo coincide con "${busqueda.trim()}".`
-                  : "Todavía no hay recibos en esta cosecha."}
+                  : dias === 1
+                    ? "Todavía no hay recibos hoy. Tocá «Todo» para ver los anteriores."
+                    : dias == null
+                      ? "Todavía no hay recibos en esta cosecha."
+                      : `No hay recibos en los últimos ${dias} días.`}
               </Text>
             </View>
           )
@@ -211,6 +241,7 @@ function Fila({ recibo, onPress }: Readonly<{ recibo: Recibo; onPress: () => voi
       <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
         <Estado recibo={recibo} anulado={anulado} />
         <Text style={estilos.filaSubtitulo}>{fmtFechaHora(recibo.fecha)}</Text>
+        <MarcaEnviado enviado={recibo.syncStatus === "synced"} />
       </View>
     </TouchableOpacity>
   );

@@ -55,6 +55,19 @@ export interface SesionState {
    */
   generacion: number;
   remontar: () => void;
+  /**
+   * Sube en uno cada vez que TERMINA una sincronización.
+   *
+   * ⚠️ Existe porque WatermelonDB marca las filas como enviadas escribiendo `_status`, que
+   * es una columna INTERNA suya: no está en el esquema, así que `observeWithColumns` no la
+   * puede vigilar y las listas no se enteran de que algo se envió. La marca "Enviado"
+   * aparecería recién al salir y volver a entrar a la pantalla — el mismo defecto que ya
+   * nos costó tres arreglos hoy, en otro disfraz.
+   *
+   * Las pantallas lo ponen en las dependencias de su suscripción y así vuelven a leer.
+   */
+  syncTick: number;
+  marcarSync: () => void;
   setReseteando: (v: boolean) => void;
   setPoliticas: (p: MapaPoliticas) => void;
   limpiar: () => Promise<void>;
@@ -67,6 +80,7 @@ export const useSesion = create<SesionState>((set) => ({
   recibidorNombre: null,
   politicas: {},
   generacion: 0,
+  syncTick: 0,
   hidratando: true,
   reseteando: false,
 
@@ -103,6 +117,8 @@ export const useSesion = create<SesionState>((set) => ({
   },
 
   remontar: () => set((e) => ({ generacion: e.generacion + 1 })),
+
+  marcarSync: () => set((e) => ({ syncTick: e.syncTick + 1 })),
   setReseteando: (reseteando) => set({ reseteando }),
   setPoliticas: (politicas) => set({ politicas }),
 
