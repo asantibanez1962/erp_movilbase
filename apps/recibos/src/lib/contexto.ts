@@ -14,6 +14,14 @@ import { getHttpClient } from "./api";
 export interface CosechaOpcion {
   codigo: string;
   descripcion: string | null;
+  /**
+   * ¿El servidor acepta recibos en esta cosecha? Sale de `re_cosechas.digitarrecibos`.
+   *
+   * ⚠️ `undefined` en servidores viejos que todavía no lo mandan. Quien filtre tiene que
+   * tratar la ausencia como "sí": dejar al recibidor sin ninguna cosecha por hablar con
+   * un BE desactualizado sería peor que el problema que esto resuelve.
+   */
+  permiteRecibos?: boolean;
 }
 
 export interface RecibidorContexto {

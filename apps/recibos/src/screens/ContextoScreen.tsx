@@ -8,7 +8,11 @@ import {
 } from "react-native";
 import { useAuthStore } from "@erp/shared-api";
 import { cliente } from "../branding";
-import { cargarContexto, type EmpresaContexto } from "../lib/contexto";
+import {
+  cargarContexto,
+  type CosechaOpcion,
+  type EmpresaContexto,
+} from "../lib/contexto";
 import { useSesion } from "../lib/sesion";
 import { PickerModal } from "./Picker";
 import { colores, estilos } from "./estilos";
@@ -26,6 +30,39 @@ import { colores, estilos } from "./estilos";
  * qué productores bajan y con qué precios, así que elegir el equivocado no da error,
  * da datos equivocados.
  */
+/**
+ * Las cosechas en las que el servidor ACEPTA recibos, de mayor a menor.
+ *
+ * ⚠️ El filtro y el default tienen que usar esta misma función. Si el default del web
+ * apunta a una cosecha filtrada —que es justo lo que pasa hoy: la preferencia de andrea
+ * es 2026-2027 y ésa no digita— quedaría elegida pero fuera de la lista, y al abrir el
+ * desplegable no se podría volver a ella. Un valor que la pantalla muestra y no ofrece.
+ *
+ * `?? true` porque un servidor viejo no manda el campo: sin eso, actualizar el APK contra
+ * un BE desactualizado dejaría la lista vacía y nadie podría entrar.
+ *
+ * El código es `2025-2026`, así que el orden de texto descendente ya es el cronológico
+ * inverso — no hace falta parsear el año.
+ */
+function cosechasUtiles(e: EmpresaContexto | null): CosechaOpcion[] {
+  return [...(e?.cosechas ?? [])]
+    .filter((c) => c.permiteRecibos ?? true)
+    .sort((a, b) => b.codigo.localeCompare(a.codigo));
+}
+
+/**
+ * El default que el usuario tiene configurado en el web, SÓLO si sirve para recibir.
+ *
+ * Se respeta la preferencia —es la que la persona eligió— pero no se acepta a ciegas: una
+ * que no digita deja al recibidor sin talonarios, sin precios y sin niveles, y el síntoma
+ * ("no hay talonario para este recibidor") no se parece en nada a la causa. Mejor sin
+ * elegir, que obliga a mirar la lista.
+ */
+function cosechaInicial(e: EmpresaContexto): string | null {
+  const def = e.cosechaDefault ?? null;
+  return def && cosechasUtiles(e).some((c) => c.codigo === def) ? def : null;
+}
+
 export function ContextoScreen() {
   const [cargando, setCargando] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -52,7 +89,7 @@ export function ContextoScreen() {
           const e = utiles[0]!;
           setEmpresaId(e.id);
           if (e.recibidores.length === 1) setRecibidor(e.recibidores[0]!.codigo);
-          setCosecha(e.cosechaDefault ?? null);
+          setCosecha(cosechaInicial(e));
         }
       } catch (e) {
         setError(
@@ -72,10 +109,7 @@ export function ContextoScreen() {
    * De mayor a menor. El código es `2025-2026`, así que el orden de texto descendente ya
    * es el cronológico inverso — no hace falta parsear el año.
    */
-  const cosechasOrdenadas = useMemo(
-    () => [...(empresa?.cosechas ?? [])].sort((a, b) => b.codigo.localeCompare(a.codigo)),
-    [empresa]
-  );
+  const cosechasOrdenadas = useMemo(() => cosechasUtiles(empresa), [empresa]);
 
   const confirmar = async () => {
     if (!listo || !empresa) return;
@@ -127,7 +161,7 @@ export function ContextoScreen() {
               onPress={() => {
                 setEmpresaId(e.id);
                 setRecibidor(e.recibidores.length === 1 ? e.recibidores[0]!.codigo : null);
-                setCosecha(e.cosechaDefault ?? null);
+                setCosecha(cosechaInicial(e));
               }}
             />
           ))}
