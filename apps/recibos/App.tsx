@@ -5,6 +5,7 @@ import { SafeAreaProvider } from "react-native-safe-area-context";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useAuthStore } from "@erp/shared-api";
 import { cliente } from "./src/branding";
+import { borrarSiEsOtroUsuario } from "./src/lib/alcance";
 import { bootstrapApi } from "./src/lib/api";
 import { useSesion } from "./src/lib/sesion";
 import { LoginScreen } from "./src/screens/LoginScreen";
@@ -31,6 +32,7 @@ export default function App() {
   const recibidor = useSesion((s) => s.recibidor);
   const cosecha = useSesion((s) => s.cosecha);
   const hidratarSesion = useSesion((s) => s.hidratar);
+  const usuario = useAuthStore((s) => s.user?.usuario ?? null);
 
   useEffect(() => {
     bootstrapApi()
@@ -42,6 +44,21 @@ export default function App() {
       });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /**
+   * ⚠️ SI LOS DATOS QUE HAY SON DE OTRO USUARIO, SE BORRAN ANTES DE MOSTRAR NADA.
+   *
+   * Cerrar sesión ya no borra —el mismo recibidor vuelve y encuentra su trabajo, sin
+   * rebajar 12.825 productores— pero entonces hay que impedir que ese trabajo, y los
+   * productores y precios de su zona, se le aparezcan al siguiente. El único momento en
+   * que se sabe quién es, es acá: cuando ya se autenticó y todavía no vio nada.
+   *
+   * Corre después del boot para no competir con la hidratación de la sesión.
+   */
+  useEffect(() => {
+    if (!bootDone || !isAuthenticated || !usuario) return;
+    void borrarSiEsOtroUsuario(usuario);
+  }, [bootDone, isAuthenticated, usuario]);
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

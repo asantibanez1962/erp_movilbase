@@ -74,6 +74,8 @@ export function ContextoScreen() {
 
   const elegir = useSesion((s) => s.elegir);
   const logout = useAuthStore((s) => s.logout);
+  // Quién queda como dueño de los datos que se van a bajar. Ver K_DUENO en lib/sesion.
+  const usuario = useAuthStore((s) => s.user?.usuario ?? "");
 
   useEffect(() => {
     void (async () => {
@@ -119,6 +121,7 @@ export function ContextoScreen() {
       cosecha: cosecha!,
       recibidor: recibidor!,
       recibidorNombre: r?.nombre ?? null,
+      usuario,
     });
   };
 

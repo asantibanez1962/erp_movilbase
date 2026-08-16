@@ -25,6 +25,19 @@ const K_EMPRESA = "recibos.companyId";
 const K_COSECHA = "recibos.cosecha";
 const K_RECIBIDOR = "recibos.recibidor";
 const K_RECIBIDOR_NOMBRE = "recibos.recibidorNombre";
+/**
+ * De QUIÉN son los datos que hay en este teléfono.
+ *
+ * Existe porque cerrar sesión ya NO borra la base: si vuelve el mismo recibidor encuentra
+ * su trabajo intacto y no baja 12.825 productores de nuevo. Pero si entra OTRO, hereda
+ * los productores, los precios y los recibos del anterior — y un delta jamás lo
+ * corregiría, porque esas filas no cambiaron del lado del servidor: simplemente dejaron
+ * de corresponderle.
+ *
+ * Guardarlo es lo que permite distinguir los dos casos AL ENTRAR, que es el único momento
+ * en que se sabe quién es. Ver `esOtroDueno()` y lib/alcance.ts.
+ */
+const K_DUENO = "recibos.duenoDatos";
 
 export interface SesionState {
   companyId: number | null;
@@ -45,6 +58,8 @@ export interface SesionState {
     cosecha: string;
     recibidor: string;
     recibidorNombre?: string | null;
+    /** Quién queda como dueño de los datos que se bajen. Ver `K_DUENO`. */
+    usuario: string;
   }) => Promise<void>;
   /**
    * Se incrementa para forzar que toda la app se vuelva a montar.
@@ -106,12 +121,15 @@ export const useSesion = create<SesionState>((set) => ({
     }
   },
 
-  elegir: async ({ companyId, cosecha, recibidor, recibidorNombre }) => {
+  elegir: async ({ companyId, cosecha, recibidor, recibidorNombre, usuario }) => {
     await Promise.all([
       SecureStore.setItemAsync(K_EMPRESA, String(companyId)),
       SecureStore.setItemAsync(K_COSECHA, cosecha),
       SecureStore.setItemAsync(K_RECIBIDOR, recibidor),
       SecureStore.setItemAsync(K_RECIBIDOR_NOMBRE, recibidorNombre ?? ""),
+      // Se sella acá y no al iniciar sesión: el dueño de los DATOS es quien eligió el
+      // contexto con el que se bajaron, no quien simplemente se autenticó.
+      SecureStore.setItemAsync(K_DUENO, usuario ?? ""),
     ]);
     set({ companyId, cosecha, recibidor, recibidorNombre: recibidorNombre ?? null });
   },
@@ -128,6 +146,7 @@ export const useSesion = create<SesionState>((set) => ({
       SecureStore.deleteItemAsync(K_COSECHA),
       SecureStore.deleteItemAsync(K_RECIBIDOR),
       SecureStore.deleteItemAsync(K_RECIBIDOR_NOMBRE),
+      SecureStore.deleteItemAsync(K_DUENO),
     ]);
     set({ companyId: null, cosecha: null, recibidor: null, recibidorNombre: null, politicas: {} });
   },
@@ -152,4 +171,24 @@ export function contextoActual(): {
     // se baja el país: el BE, al ver "todas las zonas autorizadas", omite el filtro.
     recibidor: s.recibidor,
   };
+}
+
+/**
+ * ¿Los datos que hay en el teléfono son de OTRO usuario?
+ *
+ * Se pregunta al entrar, que es el único momento en que se sabe quién es. Sin dueño
+ * sellado —teléfono nuevo, o sesión anterior a que esto existiera— se responde `false`:
+ * no hay datos ajenos que proteger, y borrar por las dudas costaría una descarga
+ * completa sin motivo.
+ */
+export async function esOtroDueno(usuario: string): Promise<boolean> {
+  try {
+    const dueno = await SecureStore.getItemAsync(K_DUENO);
+    if (!dueno) return false;
+    return dueno.trim().toLowerCase() !== usuario.trim().toLowerCase();
+  } catch {
+    // Si no se puede leer, se prefiere NO borrar: perder el día de alguien por no poder
+    // leer una preferencia sería mucho peor que mostrarle datos que igual va a re-bajar.
+    return false;
+  }
 }

@@ -1,7 +1,7 @@
 import { useAuthStore } from "@erp/shared-api";
 import { database } from "./db";
 import { olvidarClave } from "./clave";
-import { useSesion } from "./sesion";
+import { esOtroDueno, useSesion } from "./sesion";
 import { resumenPendientes, describirPendientes } from "./sync";
 
 /**
@@ -43,21 +43,30 @@ export async function borrarBaseLocal(): Promise<void> {
 }
 
 /**
- * Cierra la sesión de verdad: credenciales, contexto Y datos locales.
+ * Cierra la sesión: credenciales y contexto. **NO borra los datos.**
  *
- * Borrar la base no es exceso de celo. El cache pertenece a un usuario y a su recibidor;
- * si quedara, el próximo que entre heredaría los productores, los precios y —lo grave—
- * los recibos del anterior. Y un delta nunca lo corregiría, porque esas filas no
- * cambiaron del lado del servidor: simplemente dejaron de corresponderle.
+ * ── POR QUÉ YA NO BORRA ─────────────────────────────────────────────────────
  *
- * `descartar` existe porque cerrar sesión no puede ser una forma silenciosa de perder el
- * día de alguien. Si hay una bitácora sin cerrar, sus recibos sólo existen en este
- * teléfono.
+ * Borraba, y era de más. El caso normal es que el MISMO recibidor vuelva a entrar, y ahí
+ * el borrado no aportaba nada: costaba volver a bajar 12.825 productores por la LAN de un
+ * beneficio, y sobre todo **obligaba a descartar el trabajo sin enviar**. Un recibidor
+ * que cierra sesión por equivocación a las cuatro de la tarde perdía el día.
+ *
+ * El borrado se hace AL ENTRAR y sólo si cambió el dueño de los datos (ver
+ * `borrarSiEsOtroUsuario`). Ahí sí es necesario: el cache está recortado al recibidor y a
+ * su zona, y un delta nunca lo corregiría —esas filas no cambiaron del lado del servidor,
+ * simplemente dejaron de corresponderle.
+ *
+ * ⚠️ Los datos quedan en el teléfono entre un cierre y el próximo ingreso. Para verlos
+ * habría que saltarse la app; abrirla no alcanza, porque si entra otro usuario se borran
+ * antes de mostrarle nada.
+ *
+ * `descartar` se conserva porque la pantalla lo sigue ofreciendo, pero con esto ya casi
+ * no hace falta: lo pendiente sobrevive al cierre de sesión.
  */
 export async function cerrarSesion(opts: { descartar: boolean }): Promise<void> {
   await exigirNadaPendiente(opts.descartar);
 
-  await borrarBaseLocal();
   await useSesion.getState().limpiar();
   // ⚠️ SIN ESTO NO SE CIERRA NADA. Borrar el contexto deja las credenciales en
   // SecureStore, así que la app vuelve a entrar sola con el usuario anterior y sólo
@@ -67,6 +76,24 @@ export async function cerrarSesion(opts: { descartar: boolean }): Promise<void> 
   // La clave local muere con la sesión: sobrevivirle no protegería nada y dejaría al
   // próximo usuario del teléfono con una guarda que responde a la clave de otro.
   await olvidarClave();
+}
+
+/**
+ * Al ENTRAR: si los datos que hay son de otro usuario, se borran antes de mostrarle nada.
+ *
+ * Es la otra mitad de la decisión de arriba. Cerrar sesión conserva el trabajo para quien
+ * vuelve; esto impide que ese trabajo —y los productores, y los precios de su zona— se le
+ * aparezcan a otra persona.
+ *
+ * Devuelve si borró, para que quien llame sepa que hay que remontar el árbol.
+ */
+export async function borrarSiEsOtroUsuario(usuario: string): Promise<boolean> {
+  if (!(await esOtroDueno(usuario))) return false;
+
+  console.info(`[alcance] los datos locales son de otro usuario: se borran antes de entrar`);
+  await borrarBaseLocal();
+  await useSesion.getState().limpiar();
+  return true;
 }
 
 /**

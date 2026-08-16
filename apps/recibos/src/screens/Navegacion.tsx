@@ -383,7 +383,9 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
    */
   const salir = async (
     accion: (o: { descartar: boolean }) => Promise<void>,
-    titulo: string
+    titulo: string,
+    /** Si esta acción BORRA los datos del teléfono. Cambia el aviso entero. */
+    borra: boolean
   ) => {
     setUltimoError(null);
     const ejecutar = (descartar: boolean) =>
@@ -470,17 +472,17 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
       {/* Agrupadas y separadas del resto: las de arriba son inocuas y éstas cuestan
           bajar todo de nuevo. Mezcladas, un toque errado con una mano sale caro. */}
       <View style={estilosDrawer.separador}>
-        <Text style={estilosDrawer.seccion}>Borra los datos del teléfono</Text>
+        <Text style={estilosDrawer.seccion}>Salir</Text>
       </View>
 
       <DrawerItem
-        label="Cambiar recibidor"
-        onPress={() => void salir(cambiarRecibidor, "Cambiar recibidor")}
+        label="Cambiar recibidor y borrar datos"
+        onPress={() => void salir(cambiarRecibidor, "Cambiar recibidor", true)}
         labelStyle={estilosDrawer.label}
       />
       <DrawerItem
         label="Cerrar sesión"
-        onPress={() => void salir(cerrarSesion, "Cerrar sesión")}
+        onPress={() => void salir(cerrarSesion, "Cerrar sesión", false)}
         labelStyle={estilosDrawer.label}
       />
 
