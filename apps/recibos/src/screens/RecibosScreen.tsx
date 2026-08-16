@@ -36,7 +36,33 @@ export function RecibosScreen({
         // Los más nuevos arriba: se consulta lo recién emitido, no lo de la mañana.
         Q.sortBy("recibo", Q.desc)
       )
-      .observe()
+      /**
+       * ⚠️ `observeWithColumns` Y NO `observe`. La diferencia no es de eficiencia: es la
+       * que decide si esta pantalla dice la verdad.
+       *
+       * `observe()` avisa cuando cambia el CONJUNTO de filas —alguien agregó o borró un
+       * recibo—, pero NO cuando cambia un campo de una fila que ya estaba. Imprimir no
+       * agrega ni quita nada: sube `impreso` de 0 a 1 en una fila existente. Así que la
+       * lista nunca se enteraba y seguía dibujando SIN IMPRIMIR sobre datos viejos,
+       * mientras la ficha del recibo —que observa el registro, no la consulta— mostraba
+       * ORIGINAL. Los dos badges tienen el MISMO código: lo que discrepaba eran los
+       * datos, no la lógica.
+       *
+       * Van todas las columnas que la fila dibuja, no sólo `impreso`: un recibo sin
+       * imprimir todavía se puede editar, y con la lista abierta esos cambios tenían el
+       * mismo problema.
+       */
+      .observeWithColumns([
+        "impreso",
+        "observaciones", // de acá sale ANULADO
+        "recibo",
+        "rcantidad",
+        "rcantidadcuartillos",
+        "nombre",
+        "codigo",
+        "cedula",
+        "fecha",
+      ])
       .subscribe(setRecibos);
     return () => sub.unsubscribe();
   }, [recibidor, cosecha]);
@@ -64,8 +90,16 @@ export function RecibosScreen({
   return (
     <View style={estilos.root}>
       {sinImprimir > 0 ? (
-        // No es un adorno: un recibo sin imprimir no sincroniza, así que este número es
-        // exactamente el trabajo que todavía sólo existe en este teléfono.
+        /*
+         * No es un adorno: un recibo sin imprimir no sincroniza, así que este número es
+         * exactamente el trabajo que todavía sólo existe en este teléfono.
+         *
+         * ⚠️ DICE "HAY" Y NOMBRA EL TOTAL A PROPÓSITO. Antes decía "1 sin imprimir", y
+         * se leyó como el estado del recibo que se acababa de imprimir —que en su fila y
+         * en su ficha decía ORIGINAL, o sea lo contrario—. Un rótulo que cuenta OTRAS
+         * filas no puede parecerse a uno que describe la que estás mirando: el estado de
+         * cada recibo lo dice su badge, y los dos badges salen del mismo `impreso`.
+         */
         <View
           style={{
             backgroundColor: "#fef3c7",
@@ -74,7 +108,9 @@ export function RecibosScreen({
           }}
         >
           <Text style={{ color: "#92400e", fontSize: 13 }}>
-            {sinImprimir} sin imprimir — no sincronizan hasta salir en papel
+            {sinImprimir === 1
+              ? "Hay 1 recibo en la lista sin imprimir — no sincroniza hasta salir en papel"
+              : `Hay ${sinImprimir} recibos en la lista sin imprimir — no sincronizan hasta salir en papel`}
           </Text>
         </View>
       ) : null}

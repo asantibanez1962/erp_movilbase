@@ -1,9 +1,11 @@
 import { useEffect, useState } from "react";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import type { Bitacora } from "../db/models";
+import { Q } from "@nozbe/watermelondb";
+import type { Bitacora, Recibo } from "../db/models";
 import { cliente } from "../branding";
-import { todasLasBitacoras, recibosDe } from "../lib/bitacora";
+import { todasLasBitacoras } from "../lib/bitacora";
+import { database } from "../lib/db";
 import { useSesion } from "../lib/sesion";
 import { colores, estilos, fmtFecha } from "./estilos";
 import { useCatalogos, type Catalogos } from "./useCatalogos";
@@ -28,32 +30,60 @@ export function BitacorasScreen({
   const insets = useSafeAreaInsets();
   const catalogos = useCatalogos();
   const recibidor = useSesion((s) => s.recibidorNombre ?? s.recibidor);
+  // El CÓDIGO, aparte del nombre: el de arriba es para mostrar y éste para consultar.
+  const recibidorId = useSesion((s) => s.recibidor);
   const cosecha = useSesion((s) => s.cosecha);
   const [bitacoras, setBitacoras] = useState<Bitacora[] | null>(null);
   const [conteos, setConteos] = useState<Record<string, number>>({});
 
-  // observe() y no fetch(): al crear o cerrar una bitácora la lista se actualiza sola,
-  // sin que cada pantalla tenga que acordarse de refrescar a la vuelta.
+  // Observada y no leída con fetch(): al crear o cerrar una bitácora la lista se
+  // actualiza sola, sin que cada pantalla tenga que acordarse de refrescar a la vuelta.
+  //
+  // ⚠️ Pero tiene que ser `observeWithColumns`. `observe()` sólo avisa cuando cambia el
+  // CONJUNTO de filas —crear una bitácora—, y CERRARLA no crea ni borra nada: escribe
+  // `hora_final` sobre una fila que ya estaba. Con `observe()` la mitad "o cerrar" de
+  // este comentario era falsa, y la lista seguía mostrándola abierta. Ver la nota larga
+  // en RecibosScreen, donde el mismo defecto hacía decir SIN IMPRIMIR a un recibo ya
+  // impreso.
   useEffect(() => {
-    const sub = todasLasBitacoras().observe().subscribe(setBitacoras);
+    const sub = todasLasBitacoras()
+      .observeWithColumns([
+        "hora_final", // de acá sale `estaAbierta`
+        "impresiones",
+        "fecha",
+        "tipocafe",
+        "transportista",
+        "placacamion",
+      ])
+      .subscribe(setBitacoras);
     return () => sub.unsubscribe();
   }, []);
 
-  // El conteo de recibos va aparte: es una query por bitácora y no vale bloquear el
-  // render de la lista esperándolos.
+  /**
+   * El conteo de recibos, OBSERVANDO LA TABLA DE RECIBOS.
+   *
+   * ⚠️ Antes contaba una vez por cada bitácora y el efecto dependía de `bitacoras`. El
+   * problema es que agregar un recibo no cambia nada de la bitácora: la lista no se
+   * re-emitía, el efecto no volvía a correr, y los conteos quedaban congelados en el
+   * valor que tenían al abrir la pantalla. Se veía "0 recibos" en la lista y, al entrar
+   * a esa misma bitácora, los dos recibos ahí.
+   *
+   * Ahora se observa la consulta de recibos —donde el alta SÍ cambia el conjunto, así
+   * que `observe()` alcanza— y se agrupa por bitácora. De paso deja de ser una consulta
+   * por fila: es una sola, y siempre al día.
+   */
   useEffect(() => {
-    if (!bitacoras) return;
-    let vivo = true;
-    void (async () => {
-      const pares = await Promise.all(
-        bitacoras.map(async (b) => [b.id, await recibosDe(b.id).fetchCount()] as const)
-      );
-      if (vivo) setConteos(Object.fromEntries(pares));
-    })();
-    return () => {
-      vivo = false;
-    };
-  }, [bitacoras]);
+    const sub = database
+      .get<Recibo>("recibos")
+      .query(Q.where("recibidor", recibidorId ?? ""), Q.where("cosecha", cosecha ?? ""))
+      .observe()
+      .subscribe((rs) => {
+        const acc: Record<string, number> = {};
+        for (const r of rs) acc[r.idBitacora] = (acc[r.idBitacora] ?? 0) + 1;
+        setConteos(acc);
+      });
+    return () => sub.unsubscribe();
+  }, [recibidorId, cosecha]);
 
   return (
     <View style={estilos.root}>

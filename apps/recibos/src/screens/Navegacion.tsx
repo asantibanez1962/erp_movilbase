@@ -15,6 +15,7 @@ import {
   DrawerItem,
 } from "@react-navigation/drawer";
 import { useAuthStore } from "@erp/shared-api";
+import { PedirClave } from "./PedirClave";
 import { describirFallos } from "@erp/shared-sync";
 import type { Bitacora, Recibo, Remedida } from "../db/models";
 import { cliente } from "../branding";
@@ -122,7 +123,11 @@ function JornadasStack() {
         {({ navigation, route }) => (
           <BitacoraScreen
             bitacora={route.params.bitacora}
-            onVolver={() => navigation.navigate("Bitácoras")}
+            // ⚠️ "Bitacoras" SIN TILDE: es el NOMBRE de la ruta, no el título que se ve
+            // arriba. Con la tilde react-navigation no encuentra ninguna pantalla y tira
+            // "The action 'NAVIGATE' ... was not handled by any navigator" — justo al
+            // volver de imprimir, que es cuando más asusta.
+            onVolver={() => navigation.navigate("Bitacoras")}
             onNuevoRecibo={() =>
               navigation.navigate("Recibo", { bitacora: route.params.bitacora })
             }
@@ -336,6 +341,13 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
   const cosecha = useSesion((s) => s.cosecha);
   const [sincronizando, setSincronizando] = useState(false);
   const [ultimoError, setUltimoError] = useState<string | null>(null);
+  /** La acción destructiva esperando la clave. Null ⇒ el modal está cerrado. */
+  const [pedirClave, setPedirClave] = useState<{
+    titulo: string;
+    advertencia: string;
+    textoAccion: string;
+    ejecutar: () => void;
+  } | null>(null);
 
   const sincronizar = async () => {
     if (sincronizando) return;
@@ -358,9 +370,16 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
   };
 
   /**
-   * Las dos salidas borran la base local. Primero se dice QUÉ se pierde —la lista, no un
-   * número— y recién ahí se pide la confirmación destructiva: un número no alcanza para
-   * decidir si vale la pena descartar el trabajo de una mañana.
+   * Las dos salidas borran la base local, y ahora **piden la clave del usuario**.
+   *
+   * El orden es deliberado: primero se dice QUÉ se pierde —la lista, no un número— y
+   * recién ahí se pide la clave. Un número no alcanza para decidir si vale la pena
+   * descartar el trabajo de una mañana, y un "¿Seguro?" se acepta por reflejo.
+   *
+   * ⚠️ LO QUE HAY EN JUEGO. Si la bitácora del día no cerró, sus recibos **sólo existen
+   * en este teléfono**: no se imprimieron todos, no subieron, y no hay copia en ninguna
+   * parte. Dos toques en un menú, con el teléfono en una mano y bajo el sol, y se pierde
+   * el día entero. Ver `lib/clave.ts`.
    */
   const salir = async (
     accion: (o: { descartar: boolean }) => Promise<void>,
@@ -371,33 +390,18 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
       accion({ descartar }).catch((e: Error) => setUltimoError(e.message));
 
     const pendientes = await resumenPendientes();
-    if (pendientes.total === 0) {
-      Alert.alert(
-        titulo,
-        "Se borran los datos de este teléfono: pertenecen a tu usuario y a tu recibidor. " +
-          "No hay nada sin enviar, así que no se pierde trabajo.",
-        [
-          { text: "Cancelar", style: "cancel" },
-          { text: titulo, style: "destructive", onPress: () => void ejecutar(false) },
-        ]
-      );
-      return;
-    }
-
-    Alert.alert(
-      "Hay trabajo sin enviar",
-      `Todavía no subieron: ${describirPendientes(pendientes)}.\n\n` +
-        "Se borran los datos de este teléfono y ESO SE PIERDE. Cerrá la bitácora e " +
-        "imprimila primero.",
-      [
-        { text: "Cancelar", style: "cancel" },
-        {
-          text: "Salir y descartar",
-          style: "destructive",
-          onPress: () => void ejecutar(true),
-        },
-      ]
-    );
+    setPedirClave({
+      titulo,
+      textoAccion: pendientes.total === 0 ? titulo : "Salir y descartar",
+      advertencia:
+        pendientes.total === 0
+          ? "Se borran los datos de este teléfono: pertenecen a tu usuario y a tu " +
+            "recibidor. No hay nada sin enviar, así que no se pierde trabajo."
+          : `Todavía no subieron: ${describirPendientes(pendientes)}.\n\n` +
+            "Se borran los datos de este teléfono y ESO SE PIERDE. Si podés, cerrá la " +
+            "bitácora e imprimila primero.",
+      ejecutar: () => void ejecutar(pendientes.total > 0),
+    });
   };
 
   return (
@@ -478,6 +482,43 @@ function ContenidoDrawer(props: DrawerContentComponentProps) {
         label="Cerrar sesión"
         onPress={() => void salir(cerrarSesion, "Cerrar sesión")}
         labelStyle={estilosDrawer.label}
+      />
+
+      <PedirClave
+        visible={pedirClave != null}
+        usuario={user?.usuario ?? ""}
+        titulo={pedirClave?.titulo ?? ""}
+        advertencia={pedirClave?.advertencia ?? ""}
+        textoAccion={pedirClave?.textoAccion ?? ""}
+        onCancelar={() => setPedirClave(null)}
+        /**
+         * ⚠️ LA CLAVE NO REEMPLAZA AL "¿SEGURO?", VA ANTES.
+         *
+         * Escribir la clave y darle a Aceptar se despacha en un segundo, y el borrado
+         * arranca sin que haya un instante para arrepentirse. Son dos frenos distintos y
+         * los dos hacen falta: la clave obliga a DETENERSE —hay que pensar y teclear— y
+         * la confirmación obliga a DECIDIR, con lo que se pierde escrito enfrente.
+         *
+         * En este orden y no al revés: preguntar primero y pedir la clave después
+         * convertiría la clave en un trámite después de que ya dijiste que sí.
+         */
+        onConfirmar={() => {
+          const pendiente = pedirClave;
+          setPedirClave(null);
+          if (!pendiente) return;
+          Alert.alert(
+            pendiente.titulo,
+            `${pendiente.advertencia}\n\n¿Borro los datos de este teléfono?`,
+            [
+              { text: "No", style: "cancel" },
+              {
+                text: pendiente.textoAccion,
+                style: "destructive",
+                onPress: pendiente.ejecutar,
+              },
+            ]
+          );
+        }}
       />
     </DrawerContentScrollView>
   );

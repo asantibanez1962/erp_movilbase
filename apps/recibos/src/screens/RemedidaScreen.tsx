@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -283,16 +283,30 @@ export function RemedidaScreen({
     Alert.alert(numero ?? "Remedida", aviso, opciones);
   };
 
+  /**
+   * ⚠️ EL MENÚ SE LEE POR REFERENCIA. Ver la nota larga en ReciboScreen.
+   *
+   * Esta pantalla tenía el mismo defecto y peor: la lista de dependencias nombraba nueve
+   * estados y **le faltaban los defectos, las observaciones, el medidor, la placa y el
+   * transportista**. Todo eso se capturaba, se veía en pantalla y se grababa con el valor
+   * que tenía la última vez que el efecto corrió.
+   */
+  const menuRef = useRef(menu);
+  menuRef.current = menu;
+
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
-        <TouchableOpacity onPress={menu} hitSlop={10} style={{ paddingHorizontal: 10 }}>
+        <TouchableOpacity
+          onPress={() => menuRef.current()}
+          hitSlop={10}
+          style={{ paddingHorizontal: 10 }}
+        >
           <Text style={{ color: "#f1f5f9", fontSize: 22, fontWeight: "700" }}>⋮</Text>
         </TouchableOpacity>
       ),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation, listo, guardando, numero, elegidos, sifon, calidad, cajuelas, cuartillos]);
+  }, [navigation]);
 
   if (cargando) {
     return (

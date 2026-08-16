@@ -32,6 +32,16 @@ import type {
  * recibidor donde puede no haber señal, y ése es el problema central de la app.
  */
 
+/**
+ * Colones. Es `sy_Moneda.Moneda = 2`, y es la moneda de todo recibo de café en el país.
+ *
+ * Está acá como constante y no como catálogo bajado porque no es una elección del
+ * recibidor: el café se recibe en colones y el productor firma un papel en colones. Lo
+ * que sí varía —el precio de la fanega— viene del catálogo `precios`. Ver `imoneda` más
+ * abajo, donde se explica por qué esto no puede quedar nulo.
+ */
+const MONEDA_LOCAL = 2;
+
 // ─── Numeración ─────────────────────────────────────────────────────────────
 
 /**
@@ -93,6 +103,47 @@ export async function proximoNumero(): Promise<string> {
   const proximo = Math.max(proximoLocal, delServidor, 1);
 
   return `${recibidor.padStart(3, "0")}${String(proximo).padStart(6, "0")}`;
+}
+
+/**
+ * De qué talonario salió este número.
+ *
+ * El id del talonario es el `id` del registro local, porque la proyección lo baja como
+ * `CONVERT(NVARCHAR(30), base.Id) AS id` — o sea que el id de WatermelonDB **es** el
+ * `rc_Talonario.Id` del servidor. No hace falta llevar una columna aparte.
+ *
+ * Con varios talonarios abiertos —pasa cuando a un recibidor se le asigna un rango nuevo
+ * sin cerrar el anterior— se elige el que CUBRE el número. Si ninguno lo cubre se
+ * devuelve null en vez de adivinar: un talonario equivocado es peor que ninguno, porque
+ * cuadraría un rango con recibos que no le pertenecen.
+ */
+async function talonarioDe(numero: string): Promise<number | null> {
+  const { recibidor, cosecha } = useSesion.getState();
+  const talonarios = await database
+    .get<Talonario>("talonarios")
+    .query(Q.where("recibidor", recibidor ?? ""), Q.where("cosecha", cosecha ?? ""))
+    .fetch();
+
+  if (talonarios.length === 0) return null;
+
+  const elegido =
+    talonarios.length === 1
+      ? talonarios[0]
+      : talonarios.find((t) => {
+          const seq = secuenciaDe(numero);
+          const desde = Number.parseInt((t.inicio ?? "").trim(), 10);
+          const hasta = Number.parseInt((t.final ?? "").trim(), 10);
+          return (
+            seq != null &&
+            Number.isFinite(desde) &&
+            Number.isFinite(hasta) &&
+            seq >= desde &&
+            seq <= hasta
+          );
+        });
+
+  const id = Number(elegido?.id);
+  return Number.isFinite(id) && id > 0 ? id : null;
 }
 
 /** Los 6 últimos dígitos, que es donde vive la secuencia venga con guión o sin él. */
@@ -460,6 +511,7 @@ export interface DatosRecibo {
 export async function crearRecibo(d: DatosRecibo): Promise<Recibo> {
   const { recibidor, cosecha } = useSesion.getState();
   const numero = await proximoNumero();
+  const idTalonario = await talonarioDe(numero);
   const ahora = Date.now();
 
   return database.write(async () =>
@@ -476,6 +528,10 @@ export async function crearRecibo(d: DatosRecibo): Promise<Recibo> {
       // origen=1 ⇒ vino del móvil. Lo usa la oficina para distinguirlo de un digitado.
       r.origen = 1;
       r.agregado = ahora;
+      // De qué talonario salió el número. En el web lo pone el hook del consecutivo, que
+      // acá no corre porque el número lo asigna el teléfono: sin esto quedaba en NULL y
+      // el recibo del móvil era el único sin poder rastrear su talonario.
+      r.idtalonario = idTalonario;
       aplicarDatos(r, d);
     })
   );
@@ -544,7 +600,61 @@ function aplicarDatos(r: Recibo, d: DatosRecibo): void {
   // —el neto decimal— y no `rcantidad`, que son sólo las cajuelas enteras.
   r.idreprecio = d.precio?.idreprecio ?? null;
   r.precio = d.precio?.monto ?? null;
-  r.imoneda = d.precio?.moneda ?? null;
-  r.flete = d.precio?.flete ?? null;
+
+  /**
+   * ⚠️ EL FLETE DEL PRECIO ES UNA TARIFA, NO UNA BANDERA.
+   *
+   * `re_precios.flete` viene en colones —en esta cosecha hay 50,00 y −325,00— y
+   * `recibos.flete` es un TINYINT. Antes se asignaba uno al otro directo: un −325 en un
+   * TINYINT no cabe. Nunca explotó porque el servidor descartaba el campo por otro motivo,
+   * pero era un error dormido esperando que alguien lo "arreglara" registrándolo.
+   *
+   * Lo que se guarda es la MISMA decisión que toma el compute del web
+   * (`RcReciboComputeController:148`): si el precio trae tarifa, este recibo cobra flete.
+   * El monto no se guarda con el recibo —en los 38.550 de la cosecha `tarifaflete` está
+   * en cero— porque se resuelve por `idreprecio`, que sí viaja con la fila.
+   */
+  r.cobrarflete = (d.precio?.flete ?? 0) !== 0 ? 1 : 0;
+
+  /**
+   * `flete` acompaña a `cobrarflete` con el mismo valor.
+   *
+   * Son dos banderas para lo mismo y es cosa del legacy, no un diseño: en los recibos de
+   * la cosecha que tienen `flete` lleno, vale exactamente lo que vale `cobrarflete`.
+   * Escribirlo evita que el recibo del móvil sea el único con la columna en NULL.
+   *
+   * ⚠️ NO CONFUNDIR CON `re_precios.flete`, que es una TARIFA en colones. Asignar una a la
+   * otra fue un error real: `recibos.flete` es TINYINT y la tarifa de la zona 5 es −325.
+   */
+  r.flete = r.cobrarflete;
+
+  /**
+   * ⚠️ LA MONEDA NUNCA VA VACÍA, AUNQUE NO HAYA PRECIO.
+   *
+   * `imoneda` es obligatorio en el servidor (`mt.Fields`, etiquetado "Moneda"), y antes
+   * salía `null` cuando el productor no tenía precio genérico. El resultado no era un
+   * recibo sin precio: era un recibo que **el servidor rechazaba entero**, con
+   * `VALIDATION_ERROR: "Moneda es obligatorio"`, en cada sync, para siempre.
+   *
+   * Y le tocaba justo a los que más lo necesitan: 4.938 productores de las zonas 1, 2, 4
+   * y 5 no tienen precio genérico cargado, así que sus recibos salían impresos, firmados
+   * y entregados, y no subían nunca. En papel todo se veía bien.
+   *
+   * El arreglo es separar las dos cosas: **la moneda no es el precio**. Cuál es la
+   * moneda del beneficio se sabe siempre —Altura recibe en colones y los 38.550 recibos
+   * de la cosecha lo confirman: `imoneda = 2`, sin una sola excepción—; lo que puede
+   * faltar es cuánto vale la fanega, y eso se resuelve en la oficina.
+   */
+  r.imoneda = d.precio?.moneda ?? MONEDA_LOCAL;
+
+  /**
+   * El código de una letra del legacy, que acompaña a `imoneda` en la misma fila.
+   *
+   * Se llena sólo para colones porque es el único valor que existe en la base: los
+   * 38.530 recibos con moneda tienen `'C'`, y ninguno en dólares. Inventar la letra del
+   * dólar sería adivinar un dato que nadie puede verificar hoy — mejor dejarlo nulo, que
+   * se nota, que ponerle una letra equivocada, que no.
+   */
+  r.moneda = r.imoneda === MONEDA_LOCAL ? "C" : null;
   r.valor = d.precio ? Number((d.calculo.cantidad * d.precio.monto).toFixed(2)) : null;
 }

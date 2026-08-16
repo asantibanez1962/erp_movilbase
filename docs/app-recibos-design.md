@@ -971,6 +971,171 @@ quien. Sin eso, un anulado y un cero legítimo son indistinguibles en la base.
 ⚠️ Queda por averiguar qué hace `tr_rc_remedida_remdirty`, para cuando se encare la
 remedida (§8).
 
+### 9.5 ⚠️ Por qué durante dos semanas el push dijo "aceptado" y no subió nada
+
+El 15-ago-2026, con los tres documentos ya imprimiendo, se fue a verificar el push. El
+resultado: **ninguna fila del teléfono había llegado nunca al servidor**, y el log de
+sync no mostraba un solo error que lo dijera. Vale escribirlo entero porque las tres
+causas son independientes y cada una sola bastaba para romper el ciclo.
+
+**1. `ClientUuid` no era propiedad de EF.** La columna existía en las cuatro tablas y
+estaba declarada en `WritableFieldsJson`, pero `Recibo`, `Remedida`, `RemedidaRuta` y
+`BitacoraRecibidor` no la tenían como propiedad C#. `DynamicCreateService` trabaja por
+reflexión sobre el modelo EF, así que **descartaba el valor en silencio**: el push
+respondía `accepted`, la fila se creaba, y `ClientUuid` quedaba `NULL`.
+
+Lo que sigue es peor que un error, porque no se ve:
+
+  · El pull no puede devolver la fila con el id que el teléfono le puso ⇒ WatermelonDB
+    no la reconoce.
+  · WMDB la marca sincronizada igual —el servidor dijo que sí.
+  · Cualquier edición local posterior la vuelve `updated`, y el push la rechaza con
+    `NOT_SUPPORTED` **para siempre**.
+  · Cada reintento anterior ya había dejado **una fila duplicada** en el servidor.
+
+Quedaron cinco bitácoras y una remedida duplicadas, todas con `ClientUuid NULL`.
+
+⚠️ **Es el mismo defecto que dejó los campos nuevos vacíos en el web** — `ben_nota_recibo`
+y los defectos, que también estaban en la metadata y no en el modelo. La regla que sale
+de las dos veces: *en este BE, la metadata declara y el modelo EF habilita. Sin la
+propiedad, no hay error: hay silencio.*
+
+**2. `imoneda` viajaba nulo, y es obligatorio.** Se llenaba desde el precio
+(`d.precio?.moneda ?? null`), así que los productores **sin precio genérico** —4.938, en
+las zonas 1, 2, 4 y 5— producían recibos que el servidor rechazaba enteros con
+`VALIDATION_ERROR: "Moneda es obligatorio"`. El papel salía impreso y firmado; la fila no
+subía nunca.
+
+El arreglo es separar las dos cosas: **la moneda no es el precio**. Cuál es la moneda se
+sabe siempre —los 38.550 recibos de la cosecha son `imoneda = 2`, sin excepción—; lo que
+puede faltar es cuánto vale la fanega.
+
+**3. La bitácora subía ABIERTA.** Su política era `hasta-sync` sin campo de cierre, así
+que salía apenas se creaba, antes de tener hora final, placa ni transportista. Al
+cerrarla, el cambio viajaba como UPDATE — y sin `UpdatableFieldsJson`, `NOT_SUPPORTED`
+permanente.
+
+Se corrigió en `v1.71/RC/56`: `hasta-evento` con **`hora_final`** como campo de cierre,
+que es exactamente lo que el móvil ya considera "abierta" (`estaAbierta = horaFinal ==
+null`), así que no hay dos definiciones que mantener.
+
+**Y reimprimir tenía el mismo problema.** El contador sube sobre una fila ya
+sincronizada y la vuelve a ensuciar. Se habilitó `UpdatableFieldsJson` con **el contador
+y nada más** — `impreso` en recibo y remedida, `impresiones` en la bitácora, que para eso
+pasó a existir también en el servidor. El resto del documento sigue congelado al
+imprimirse.
+
+⚠️ **No agregar campos a esa lista a la ligera.** Todo lo que entre se vuelve editable
+desde el teléfono *después* de que el productor firmó el papel. El contador es seguro
+justamente porque no dice nada del café: dice cuántas veces se sacó ese papel.
+
+### 9.6 Las TRES puertas que un dato tiene que pasar, y las dos que no avisan
+
+Del arreglo de §9.5 salió una regla que conviene tener escrita, porque se cobró cuatro
+defectos distintos en un solo día. Para que un campo del teléfono llegue a la base:
+
+| | Puerta | Si falta |
+|---|---|---|
+| 1 | `WritableFieldsJson` en `mt.MobileCollections` | el campo ni se mira |
+| 2 | La propiedad en el **modelo EF** | se descarta **en silencio** |
+| 3 | Una fila en **`mt.Fields`** | se descarta, con un `Console.WriteLine` que nadie lee |
+
+Sólo la tercera deja rastro, y aun así el push responde `accepted`. Lo confirmó el log:
+
+    [AssignProperties:BitacoraRecibidor] skipping unknown field 'impresiones'
+    (not in mt.Fields). If this is a legit field, register it.
+
+**La consulta que lo destapa** vive en `v1.71/RC/58` y se puede correr cuando algo "llega
+vacío": cruza todo lo declarado escribible o actualizable contra `mt.Fields` y devuelve lo
+que se está cayendo. Ahí aparecieron diez campos del recibo, entre ellos `idbitacora`,
+`nombre` y las cajuelas.
+
+⚠️ **Y la lista de lo que se cae NO es la lista de lo que hay que registrar.** `flete`
+también estaba, y registrarlo habría metido una tarifa de −325 colones en un `TINYINT`.
+El campo estaba mal usado desde el móvil; lo que correspondía era sacarlo, no habilitarlo.
+
+**Un cuarto silencio, distinto y peor**: `DynamicCreateService.GetId` buscaba una
+propiedad llamada literalmente `Id` para saber qué id le tocó a la fila recién creada.
+`BitacoraRecibidor` tiene PK `idbitacora` y ninguna columna `Id`, así que devolvía null →
+`Convert.ToInt64(null)` → **0**. Ese cero se guardaba en `mt.MobileIdMap` como el id de la
+bitácora, y **todos los recibos llegaban con `idbitacora = 0`**: huérfanos, sueltos en el
+web, sin que nada fallara. Arreglado con fallback a la PK real del modelo de EF, más una
+red en `RememberIdAsync` que se niega a guardar un `ServerId` en cero — ninguna IDENTITY
+del sistema empieza en 0, así que un cero ahí sólo puede ser un id que no se pudo leer.
+
+### 9.7 `observe()` no avisa cuando cambia un CAMPO
+
+Las listas usaban `query.observe()`, que emite cuando cambia el **conjunto** de filas —se
+agregó o se borró una— pero **no** cuando cambia un campo de una que ya estaba.
+
+Imprimir no agrega ni quita nada: sube `impreso` de 0 a 1. Así que la lista seguía
+dibujando `SIN IMPRIMIR` sobre datos viejos mientras la ficha del recibo —que observa el
+*registro*, no la consulta— mostraba `ORIGINAL`. Los dos badges tienen el mismo código: lo
+que discrepaba eran los datos. Lo mismo con cerrar una bitácora (`hora_final`).
+
+La regla: **si la fila se puede editar sin salir de la lista, va `observeWithColumns` con
+todas las columnas que la fila dibuja** — no sólo la que motivó el arreglo.
+
+Un caso vecino y distinto: el conteo de recibos por bitácora dependía de la lista de
+bitácoras, y agregar un recibo no cambia nada de la bitácora. Ahí no alcanzaba con
+`observeWithColumns`: hay que observar **la tabla de recibos**, que es donde el alta sí
+cambia el conjunto.
+
+Y un tercero, la misma familia: `useCatalogos` leía los catálogos una sola vez al montar.
+Después de borrar la base están vacíos, el sync los llena, y nadie vuelve a leerlos — la
+pantalla mostraba `9` y `4` en vez de CONVENCIONAL y DIF C-01. **Si el dato puede llegar
+después de que la pantalla se montó, hay que observarlo, no leerlo.**
+
+### 9.8 ⭑ Los documentos SÓLO SUBEN
+
+Corrige lo escrito arriba: `bitacoras`, `recibos`, `remedidas` y `remedida_rutas` estaban
+como `bidirectional`. Pasan a **push-only** (`v1.71/RC/65`).
+
+El teléfono **emite**; el servidor **guarda**. Un recibo se numera, se imprime, se entrega
+firmado y se envía; a partir de ahí quien lo consulta es la oficina, en el web. Bajarlo de
+vuelta no resolvía nada y traía problemas propios:
+
+  · Bitácoras cerradas hacía semanas volvían a llenar la pantalla.
+  · Y peor: **los recibos no encontraban a su bitácora al volver**, porque las dos
+    colecciones usaban identidades distintas para el mismo padre —`bitacoras.id` era
+    `LOWER(ClientUuid)` y `recibos.id_bitacora` el id numérico del servidor—. Un teléfono
+    reiniciado arrancaba con un día que parecía vacío: "0 recibos" en la bitácora y los
+    recibos sueltos en su propia lista, sin un solo error.
+
+⚠️ **LO QUE HACE SEGURA ESTA DECISIÓN ES LA NUMERACIÓN, Y HAY QUE ENTENDER POR QUÉ.** Un
+teléfono sin historia local podría repetir números ya entregados en papel — el error caro
+de §4. No pasa porque el próximo número es `MAX(local, rc_Talonario.ultimo)` y ese
+contador lo avanza **`tr_recibos_talonario`** con semántica MAX, venga el recibo del web o
+del móvil. Comprobado: el talonario 2484 pasó a `000006` con un recibo que subió el
+teléfono.
+
+**Por eso `talonarios` SIGUE bajando, y no es un catálogo más: es la pieza que sostiene
+todo esto.** El script deja una verificación que falla si alguien lo apaga.
+
+⚠️ El BE rechaza el pull de una colección push-only, así que el móvil tiene que dejar de
+pedirlas (`SOLO_ENVIO` en `db/schema.ts`). Sin eso, cada sincronización registraría cuatro
+fallos, en todos los teléfonos, para siempre.
+
+### 9.9 Borrar los datos del teléfono pide la clave
+
+"Cambiar recibidor" y "Cerrar sesión" borran la base local, y existen para **reiniciar un
+teléfono** — no son operación diaria. Si la bitácora del día no cerró, ahí adentro está el
+único lugar donde existen los recibos de la mañana.
+
+Van **dos frenos distintos, en este orden**: la clave del usuario, que obliga a
+*detenerse* —hay que pensar y teclear—, y después el "¿Seguro?", que obliga a *decidir*
+con lo que se pierde escrito enfrente. Al revés, la clave sería un trámite después de que
+ya dijiste que sí.
+
+La clave se sella al iniciar sesión y se compara **local**: el momento en que esto importa
+es justo el que no tiene red. ⚠️ No es una barrera de seguridad — quien tenga el teléfono
+desbloqueado puede desinstalar la app y borrar todo igual. Evita el error, no el ataque.
+
+⚠️ El primer intento usó `expo-crypto` para guardar un hash. **Es un módulo NATIVO**:
+agregarlo al `package.json` no lo mete en el APK ya instalado, así que habría exigido
+recompilar el dev client y repartir un APK nuevo a cada teléfono. Va con
+`expo-secure-store`, que ya está en el APK y cifra contra el keystore de Android.
+
 ---
 
 ## 9.bis Lo que cambió al construirlo (13-ago-2026)

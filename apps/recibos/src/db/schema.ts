@@ -54,7 +54,7 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *        cuáles usa cada beneficio. ⚠️ SÓLO REGISTRAN: son control de calidad y no
  *        producen rebajo, así que el cálculo no cambia. Ver v1.71/RC/49.
  */
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 11;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -86,8 +86,36 @@ export const COLLECTIONS = [
   "fincas",
   "cuotas",
   "cuota_entregadores",
-  // Bidireccionales. El PADRE antes que sus hijos: el BE resuelve la FK del hijo contra
-  // mt.MobileIdMap, que sólo tiene la entrada del padre si el padre ya subió.
+  // Los documentos que el teléfono EMITE. El PADRE antes que sus hijos: el BE resuelve la
+  // FK del hijo contra mt.MobileIdMap, que sólo tiene la entrada del padre si el padre ya
+  // subió.
+  "bitacoras",
+  "recibos",
+  "remedidas",
+  "remedida_rutas",
+] as const;
+
+/**
+ * Los documentos que SÓLO SUBEN. No se piden de vuelta.
+ *
+ * ── POR QUÉ ─────────────────────────────────────────────────────────────────
+ *
+ * El recibo, la bitácora y la remedida nacen en el teléfono: se emiten en campo, se
+ * imprimen, se entregan firmados y se envían. Una vez en el servidor **el teléfono no los
+ * necesita más** — quien los consulta es la oficina, en el web.
+ *
+ * Bajarlos de vuelta no resolvía nada y traía problemas propios: bitácoras cerradas hace
+ * semanas llenando la pantalla, y —peor— recibos que no encontraban a su bitácora porque
+ * las dos colecciones usaban identidades distintas al bajar. Un teléfono reiniciado
+ * arrancaba con un día que parecía vacío.
+ *
+ * ⚠️ LO QUE HACE SEGURO NO BAJARLOS ES LA NUMERACIÓN. Un teléfono sin historia local
+ * podría repetir números ya entregados en papel; no pasa porque el próximo número es
+ * `MAX(local, rc_Talonario.ultimo)`, y el contador del servidor lo avanza
+ * `tr_recibos_talonario` con semántica MAX venga el recibo de donde venga. El talonario
+ * SÍ se sigue bajando, y es el que sostiene esto. Ver §4 del diseño.
+ */
+export const SOLO_ENVIO = [
   "bitacoras",
   "recibos",
   "remedidas",
@@ -263,6 +291,9 @@ export const schema = appSchema({
         { name: "tipo", type: "string", isOptional: true },
         { name: "zona", type: "string", isOptional: true },
         { name: "recibidor", type: "string", isOptional: true },
+        // 1 activo, 0 inactivo. El servidor RECHAZA los recibos de un productor
+        // inactivo, así que el selector no los ofrece. Ver v1.71/RC/63.
+        { name: "estado", type: "number" },
       ],
     }),
     tableSchema({
@@ -500,6 +531,9 @@ export const schema = appSchema({
         { name: "impreso", type: "number" },
         { name: "origen", type: "number" },
         { name: "agregado", type: "number", isOptional: true },
+        // De qué talonario salió el número. En el web lo pone el hook del consecutivo;
+        // acá el número lo asigna el teléfono, así que hay que llevarlo nosotros.
+        { name: "idtalonario", type: "number", isOptional: true },
       ],
     }),
 

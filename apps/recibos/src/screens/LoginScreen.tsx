@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { useAuthStore, AuthError } from "@erp/shared-api";
 import { cliente } from "../branding";
+import { recordarClave } from "../lib/clave";
 import { ServidorScreen } from "./ServidorScreen";
 
 export function LoginScreen() {
@@ -39,6 +40,11 @@ export function LoginScreen() {
     setLoading(true);
     try {
       await login(usuario.trim(), password);
+      // Sella la clave para poder pedirla antes de BORRAR los datos del teléfono. Es el
+      // único momento en que la app la tiene; de acá en adelante sólo guarda su hash.
+      // Ver `lib/clave.ts` — no es una barrera de seguridad, es contra el toque
+      // accidental que se lleva el trabajo de una mañana.
+      await recordarClave(usuario.trim(), password);
       // NO se sincroniza acá: el pull está scopeado por empresa y cosecha, y en
       // este punto el usuario todavía no las eligió. Antes se llamaba a syncNow()
       // y el BE respondía 400 MISSING_COMPANY. El primer sync lo dispara

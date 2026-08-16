@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ActivityIndicator,
   ScrollView,
@@ -10,6 +10,7 @@ import { useAuthStore } from "@erp/shared-api";
 import { cliente } from "../branding";
 import { cargarContexto, type EmpresaContexto } from "../lib/contexto";
 import { useSesion } from "../lib/sesion";
+import { PickerModal } from "./Picker";
 import { colores, estilos } from "./estilos";
 
 /**
@@ -32,6 +33,7 @@ export function ContextoScreen() {
   const [empresaId, setEmpresaId] = useState<number | null>(null);
   const [recibidor, setRecibidor] = useState<string | null>(null);
   const [cosecha, setCosecha] = useState<string | null>(null);
+  const [pickerCosecha, setPickerCosecha] = useState(false);
 
   const elegir = useSesion((s) => s.elegir);
   const logout = useAuthStore((s) => s.logout);
@@ -65,6 +67,15 @@ export function ContextoScreen() {
 
   const empresa = empresas.find((e) => e.id === empresaId) ?? null;
   const listo = empresaId != null && recibidor != null && cosecha != null;
+
+  /**
+   * De mayor a menor. El código es `2025-2026`, así que el orden de texto descendente ya
+   * es el cronológico inverso — no hace falta parsear el año.
+   */
+  const cosechasOrdenadas = useMemo(
+    () => [...(empresa?.cosechas ?? [])].sort((a, b) => b.codigo.localeCompare(a.codigo)),
+    [empresa]
+  );
 
   const confirmar = async () => {
     if (!listo || !empresa) return;
@@ -145,19 +156,39 @@ export function ContextoScreen() {
         </Seccion>
       ) : null}
 
+      {/*
+        La cosecha va en un desplegable y no en una lista abierta, que es la diferencia
+        entre elegir y scrollear: son ocho o más, todas se llaman casi igual
+        (`2025-2026`, `2024-2025`, …) y sólo una se usa. Desplegadas empujaban el botón
+        de Empezar fuera de la pantalla justo cuando ya no había nada más que decidir.
+
+        Ordenadas de mayor a menor ACÁ y no confiando en el servidor: la que se necesita
+        es siempre la última, y que quede arriba es la mitad del valor de esta pantalla.
+      */}
       {empresa ? (
         <Seccion titulo="Cosecha">
-          {empresa.cosechas.map((c) => (
-            <Opcion
-              key={c.codigo}
-              titulo={c.codigo}
-              detalle={c.descripcion ?? undefined}
-              activa={c.codigo === cosecha}
-              onPress={() => setCosecha(c.codigo)}
-            />
-          ))}
+          <Desplegable
+            valor={cosecha ?? "Elegir cosecha"}
+            detalle={cosechasOrdenadas.find((c) => c.codigo === cosecha)?.descripcion ?? undefined}
+            vacio={cosecha == null}
+            onPress={() => setPickerCosecha(true)}
+          />
         </Seccion>
       ) : null}
+
+      <PickerModal
+        visible={pickerCosecha}
+        titulo="Cosecha"
+        // Sin buscador: son ocho renglones y el teclado taparía la lista entera.
+        conBuscador={false}
+        opciones={cosechasOrdenadas.map((c) => ({
+          valor: c.codigo,
+          titulo: c.codigo,
+          subtitulo: c.descripcion ?? undefined,
+        }))}
+        onSeleccionar={setCosecha}
+        onCerrar={() => setPickerCosecha(false)}
+      />
 
       <View style={{ padding: 20, gap: 12 }}>
         <TouchableOpacity
@@ -199,6 +230,36 @@ function Seccion({ titulo, children }: Readonly<{ titulo: string; children: Reac
       <Text style={estilos.seccion}>{titulo}</Text>
       {children}
     </View>
+  );
+}
+
+/** Fila desplegable: muestra lo elegido y abre la lista al tocarla. */
+function Desplegable({
+  valor,
+  detalle,
+  vacio,
+  onPress,
+}: Readonly<{ valor: string; detalle?: string; vacio?: boolean; onPress: () => void }>) {
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      style={[estilos.fila, { flexDirection: "row", alignItems: "center", gap: 10 }]}
+    >
+      <View style={{ flex: 1 }}>
+        <Text
+          style={[
+            estilos.filaTitulo,
+            vacio ? { color: colores.textoTenue, fontWeight: "400" } : null,
+          ]}
+        >
+          {valor}
+        </Text>
+        {detalle ? <Text style={estilos.filaSubtitulo}>{detalle}</Text> : null}
+      </View>
+      {/* El triangulito que dice "esto se despliega". Sin él la fila se lee como un
+          renglón informativo y nadie la toca. */}
+      <Text style={{ color: colores.textoTenue, fontSize: 12 }}>▼</Text>
+    </TouchableOpacity>
   );
 }
 

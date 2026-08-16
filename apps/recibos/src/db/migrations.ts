@@ -19,6 +19,29 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // El estado del productor: el servidor rechaza los recibos de uno inactivo y el
+      // teléfono no tenía cómo saberlo. Ver v1.71/RC/63.
+      toVersion: 11,
+      steps: [
+        addColumns({
+          table: "productores",
+          columns: [{ name: "estado", type: "number" }],
+        }),
+      ],
+    },
+    {
+      // De qué talonario salió el número del recibo. En el web lo pone el hook del
+      // consecutivo; en el móvil el número lo asigna el teléfono, así que el hook no
+      // corre y el campo quedaba en NULL. Ver v1.71/RC/61.
+      toVersion: 10,
+      steps: [
+        addColumns({
+          table: "recibos",
+          columns: [{ name: "idtalonario", type: "number", isOptional: true }],
+        }),
+      ],
+    },
+    {
       // Los defectos de control de calidad. ⚠️ No castigan: el cálculo no cambia.
       // Ver v1.71/RC/49.
       toVersion: 9,

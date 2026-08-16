@@ -42,7 +42,20 @@ export function BitacoraScreen({
   const abierta = bitacora.estaAbierta;
 
   useEffect(() => {
-    const sub = recibosDe(bitacora.id).observe().subscribe(setRecibos);
+    // ⚠️ `observeWithColumns` y no `observe`: éste avisa cuando se agrega o se borra un
+    // recibo, pero no cuando cambia un campo de uno que ya estaba. Imprimir es
+    // exactamente eso —`impreso` de 0 a 1—, así que la lista se quedaba diciendo SIN
+    // IMPRIMIR con datos viejos. Ver la nota larga en RecibosScreen.
+    const sub = recibosDe(bitacora.id)
+      .observeWithColumns([
+        "impreso",
+        "recibo",
+        "rcantidad",
+        "rcantidadcuartillos",
+        "nombre",
+        "codigo",
+      ])
+      .subscribe(setRecibos);
     return () => sub.unsubscribe();
   }, [bitacora.id]);
 
@@ -55,7 +68,19 @@ export function BitacoraScreen({
     if (cerrando) return;
     setCerrando(true);
     try {
-      const { falloSync } = await cerrarBitacora(bitacora, () => imprimirBitacora(bitacora), { simulada });
+      /**
+       * ⚠️ "SIN PAPEL" NO IMPRIME. Suena obvio y sin embargo no lo era: `simulada` sólo
+       * viajaba como opción —para dejar la nota en las observaciones— y la función de
+       * impresión que se le pasaba era LA MISMA en los dos caminos. O sea que "Sin papel"
+       * salía igual a buscar la impresora y se quedaba colgado ahí, que es exactamente la
+       * situación de la que esa opción existe para rescatarte: se acabó el rollo a las
+       * cinco de la tarde y hay que cerrar el día igual.
+       */
+      const { falloSync } = await cerrarBitacora(
+        bitacora,
+        simulada ? async () => {} : () => imprimirBitacora(bitacora),
+        { simulada }
+      );
       if (falloSync) {
         Alert.alert(
           "Cerrada, pero sin enviar",

@@ -29,12 +29,21 @@ export function PickerModal({
   visible,
   titulo,
   opciones,
+  conBuscador = true,
   onSeleccionar,
   onCerrar,
 }: Readonly<{
   visible: boolean;
   titulo: string;
   opciones: OpcionPicker[];
+  /**
+   * El buscador viene prendido porque la mayoría de estas listas son enormes.
+   *
+   * Se apaga para las cortas —las cosechas son ocho— donde estorba más de lo que ayuda:
+   * tiene `autoFocus`, así que abre el teclado y tapa media pantalla para elegir entre
+   * ocho renglones que ya se ven completos.
+   */
+  conBuscador?: boolean;
   onSeleccionar: (valor: string) => void;
   onCerrar: () => void;
 }>) {
@@ -78,15 +87,17 @@ export function PickerModal({
           </Text>
         </View>
 
-        <TextInput
-          style={estilos.buscador}
-          value={busqueda}
-          onChangeText={setBusqueda}
-          placeholder="Buscar..."
-          placeholderTextColor={colores.textoTenue}
-          autoCorrect={false}
-          autoFocus
-        />
+        {conBuscador ? (
+          <TextInput
+            style={estilos.buscador}
+            value={busqueda}
+            onChangeText={setBusqueda}
+            placeholder="Buscar..."
+            placeholderTextColor={colores.textoTenue}
+            autoCorrect={false}
+            autoFocus
+          />
+        ) : null}
 
         <FlatList
           data={visibles}

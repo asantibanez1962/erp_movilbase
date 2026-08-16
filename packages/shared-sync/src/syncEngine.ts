@@ -57,6 +57,19 @@ export interface SyncOptions {
    */
   puedeEnviar?: (coleccion: string, fila: Record<string, unknown>) => boolean;
   /**
+   * Colecciones que SOLO SUBEN. No se les pide pull.
+   *
+   * Existe porque hay documentos que nacen en el telefono y no vuelven: el recibo, la
+   * bitacora y la remedida se emiten en campo, se imprimen, se entregan firmados y se
+   * envian. Una vez en el servidor, el telefono no los necesita mas — y bajarlos de
+   * nuevo trae problemas propios en vez de resolver ninguno.
+   *
+   * Ademas el BE las rechaza explicitamente en el pull ("es push-only"), asi que sin
+   * esta lista cada sincronizacion registraria un fallo por coleccion, en todos los
+   * teléfonos, para siempre.
+   */
+  soloEnvio?: readonly string[];
+  /**
    * Última pasada sobre la fila antes de mandarla. Devuelve lo que viaja.
    *
    * Existe por las FECHAS Y HORAS LOCALES. El teléfono guarda instantes en milisegundos
@@ -122,8 +135,12 @@ export async function runSync(
       // forma de diagnosticarlo desde el teléfono — hubo que ir a leer el log del
       // servidor.
       //
+      // Las push-only no se piden: el BE responde que no soporta pull, y el fallo seria
+      // permanente y ruidoso por algo que es de diseño.
+      const aBajar = opts.collections.filter((c) => !opts.soloEnvio?.includes(c));
+
       const resultados = await Promise.allSettled(
-        opts.collections.map(async (name) => {
+        aBajar.map(async (name) => {
           const resp = await opts.api.pull(name, {
             last_pulled_at: checkpoints[name] ?? null,
             schema_version: opts.schemaVersion,
@@ -134,7 +151,7 @@ export async function runSync(
 
       const responses: Array<{ name: string; resp: PullResponse }> = [];
       resultados.forEach((r, i) => {
-        const nombre = opts.collections[i] ?? "?";
+        const nombre = aBajar[i] ?? "?";
         if (r.status === "fulfilled") {
           responses.push(r.value);
           // El checkpoint se ANOTA acá pero se guarda recién después de que

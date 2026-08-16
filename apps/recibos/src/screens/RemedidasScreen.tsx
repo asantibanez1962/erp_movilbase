@@ -28,7 +28,18 @@ export function RemedidasScreen({
     const sub = database
       .get<Remedida>("remedidas")
       .query(Q.where("cosecha", cosecha ?? ""), Q.sortBy("recibo", Q.desc))
-      .observe()
+      // ⚠️ `observeWithColumns` y no `observe`: éste sólo avisa cuando cambia el conjunto
+      // de filas, no cuando cambia un campo de una que ya estaba. Imprimir es lo segundo,
+      // así que la lista se quedaba en SIN IMPRIMIR. Ver la nota larga en RecibosScreen.
+      .observeWithColumns([
+        "impreso",
+        "observaciones", // de acá sale ANULADA
+        "recibo",
+        "cantidad",
+        "placa",
+        "sifon",
+        "fecha",
+      ])
       .subscribe(setRemedidas);
     return () => sub.unsubscribe();
   }, [cosecha]);

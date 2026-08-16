@@ -2,7 +2,7 @@ import { Q } from "@nozbe/watermelondb";
 import { runSync, type FalloPull } from "@erp/shared-sync";
 import { database } from "./db";
 import { getSyncClient } from "./api";
-import { COLLECTIONS } from "../db/schema";
+import { COLLECTIONS, SOLO_ENVIO } from "../db/schema";
 import type { Remedida } from "../db/models";
 import { config } from "./config";
 import { useSesion } from "./sesion";
@@ -57,6 +57,9 @@ export async function syncNow(): Promise<FalloPull[]> {
   const { fallos } = await runSync(database, {
     api,
     collections: [...COLLECTIONS],
+    // Los documentos no se piden de vuelta: el teléfono los emite y el servidor los
+    // guarda. Ver SOLO_ENVIO en db/schema.ts.
+    soloEnvio: SOLO_ENVIO,
     schemaVersion: config.schemaVersion,
     // Retiene las filas que todavía no cumplen su condición de cierre. Para los recibos
     // esa condición es `impreso`: un recibo sin imprimir es trabajo a medio hacer.

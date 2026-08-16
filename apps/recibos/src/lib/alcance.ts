@@ -1,5 +1,6 @@
 import { useAuthStore } from "@erp/shared-api";
 import { database } from "./db";
+import { olvidarClave } from "./clave";
 import { useSesion } from "./sesion";
 import { resumenPendientes, describirPendientes } from "./sync";
 
@@ -63,6 +64,9 @@ export async function cerrarSesion(opts: { descartar: boolean }): Promise<void> 
   // pregunta el recibidor. El síntoma —"no me pide usuario"— no se parece a "faltó
   // borrar el token", y manda a buscar por el lado de la pantalla de login.
   await useAuthStore.getState().logout();
+  // La clave local muere con la sesión: sobrevivirle no protegería nada y dejaría al
+  // próximo usuario del teléfono con una guarda que responde a la clave de otro.
+  await olvidarClave();
 }
 
 /**

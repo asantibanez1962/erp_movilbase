@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -153,7 +153,20 @@ export function ReciboScreen({
    * pase al motor y cambie números ya validados contra la cosecha entera.
    */
   const [defectos, setDefectos] = useState<Array<{ campo: CampoDefecto; etiqueta: string }>>([]);
-  const [extras, setExtras] = useState<Partial<Record<CampoDefecto, number>>>({});
+  /**
+   * Los defectos de control de calidad ya capturados.
+   *
+   * ⚠️ SE INICIALIZAN DESDE EL RECIBO, no en vacío. Arrancaban en `{}` siempre, también
+   * al abrir uno guardado: la pantalla mostraba 0 en el campo y al grabar escribía ese 0
+   * encima del valor real. Un recibo capturado con pintón, guardado sin imprimir y
+   * reabierto para imprimirlo salía en papel y al servidor con el defecto BORRADO — y sin
+   * ningún aviso, porque lo que se ve en pantalla es lo que se acaba de guardar.
+   */
+  const [extras, setExtras] = useState<Partial<Record<CampoDefecto, number>>>(() =>
+    recibo
+      ? { pinton: recibo.pinton, granopasa: recibo.granopasa, flotenegro: recibo.flotenegro }
+      : {}
+  );
 
   const [medida, setMedida] = useState<MedidaCapturada>({
     cantidadinicial: 0,
@@ -181,7 +194,21 @@ export function ReciboScreen({
       try {
         const [c, prods, cals, certs, nivs, tcs] = await Promise.all([
           catalogosDelCalculo(),
-          database.get<Productor>("productores").query(Q.sortBy("nombre", Q.asc)).fetch(),
+          /**
+           * ⚠️ SÓLO LOS ACTIVOS. El servidor rechaza con
+           * `BUSINESS_RULE_VIOLATION — "El productor está inactivo"` todo recibo de uno
+           * dado de baja, y para cuando eso pasa el papel ya está impreso y firmado: el
+           * recibo no se puede corregir y no sube nunca.
+           *
+           * No es un caso raro. De los 12.852 productores, **6.347 están inactivos** —
+           * casi la mitad de lo que ofrecía el selector era gente a la que no se le puede
+           * recibir. Igual que con el precio: la app no debe ofrecer lo que el servidor
+           * no va a aceptar.
+           */
+          database
+            .get<Productor>("productores")
+            .query(Q.where("estado", 1), Q.sortBy("nombre", Q.asc))
+            .fetch(),
           database.get<Calidad>("calidades").query(Q.sortBy("calidad", Q.asc)).fetch(),
           database.get<Certificado>("certificados").query(Q.sortBy("nombre", Q.asc)).fetch(),
           database.get<Nivel>("niveles").query().fetch(),
@@ -410,8 +437,33 @@ export function ReciboScreen({
   const menuAcciones = () => {
     const opciones: Array<{ text: string; style?: "cancel" | "destructive"; onPress?: () => void }> = [];
     if (listo) {
-      opciones.push({ text: "Imprimir recibo", onPress: () => void guardar({ imprimir: true }) });
-      opciones.push({ text: "Guardar sin imprimir", onPress: () => void guardar({ imprimir: false }) });
+      /**
+       * ⚠️ SIN PRECIO NO SE IMPRIME, aunque el papel no muestre el monto.
+       *
+       * El servidor tiene una regla de negocio —`ReciboValidationHook`— que rechaza todo
+       * recibo sin `idreprecio`: "No hay precio definido.". No es negociable desde acá.
+       *
+       * Y el recibo se congela al imprimirse. O sea que imprimir sin precio produce
+       * exactamente el estado que esta app existe para evitar: **un papel firmado por el
+       * productor que el sistema no va a aceptar nunca**, y que además traba el cierre de
+       * la bitácora, porque cerrarla exige que todo haya subido.
+       *
+       * Por eso frena ACÁ y no en el sync: acá todavía no hay papel. Y el mensaje nombra
+       * la combinación que falta, porque el arreglo es de la oficina y toma un minuto —
+       * cargan el precio, el teléfono sincroniza y el recibo sale.
+       *
+       * En Altura hoy hay precio genérico sólo para (tipo 2, calidad M) en las zonas 0, 3
+       * y 6, (tipo 1, M) en la 1 y (tipo 9, M) en la 5. Cualquier otra combinación cae acá.
+       */
+      if (!precio) {
+        opciones.push({
+          text: "Guardar sin imprimir",
+          onPress: () => void guardar({ imprimir: false }),
+        });
+      } else {
+        opciones.push({ text: "Imprimir recibo", onPress: () => void guardar({ imprimir: true }) });
+        opciones.push({ text: "Guardar sin imprimir", onPress: () => void guardar({ imprimir: false }) });
+      }
     }
     opciones.push({
       text: "Descartar",
@@ -424,13 +476,22 @@ export function ReciboScreen({
     });
     opciones.push({ text: "Cancelar", style: "cancel" });
 
-    Alert.alert(
-      numero ?? "Recibo",
-      listo
-        ? undefined
-        : "Faltan datos para poder grabar: bitácora, productor, calidad, tipo de café y medida.",
-      opciones
-    );
+    let aviso: string | undefined;
+    if (!listo) {
+      aviso = "Faltan datos para poder grabar: bitácora, productor, calidad, tipo de café y medida.";
+    } else if (!precio) {
+      // Se nombra la combinación exacta: es lo que la oficina necesita para cargarlo, y
+      // sin eso el recibidor sólo puede decir "no me deja", que no alcanza por teléfono.
+      aviso =
+        `NO HAY PRECIO para ${nombreTipoCafe(tiposCafe, tipoCafe)}, calidad ` +
+        `${calidades.find((c) => c.calidad === calidad)?.nombre ?? "?"}, en esta cosecha.\n\n` +
+        "El servidor rechaza los recibos sin precio, y una vez impreso el recibo ya no se " +
+        "puede corregir.\n\n" +
+        "Guardalo sin imprimir y pedí a la oficina que cargue el precio: al sincronizar, " +
+        "abrís este mismo recibo y ya se puede imprimir. No hay que capturarlo de nuevo.";
+    }
+
+    Alert.alert(numero ?? "Recibo", aviso, opciones);
   };
 
   const guardar = async (opts: { imprimir: boolean }) => {
@@ -486,14 +547,33 @@ export function ReciboScreen({
     }
   };
 
-  // El botón de acciones vive en el header del Stack. Se re-registra cuando cambia algo
-  // que el menú necesita leer: sin las dependencias, el closure guardaría el estado del
-  // primer render y grabaría un recibo vacío.
+  /**
+   * El botón de acciones vive en el header del Stack, y desde ahí se graba.
+   *
+   * ⚠️ EL MENÚ SE LEE POR REFERENCIA, NO SE VUELVE A REGISTRAR EN CADA CAMBIO.
+   *
+   * Antes el efecto se re-ejecutaba con una lista de dependencias que enumeraba a mano
+   * cada estado que el menú necesita leer. Eso funciona hasta que alguien agrega un campo
+   * y no lo agrega a la lista — y entonces el botón sigue llamando a un `guardar`
+   * congelado, que escribe el valor viejo de ese campo.
+   *
+   * Pasó con los defectos de control de calidad: `extras` no estaba en la lista, así que
+   * se capturaba un 5 en pintón, se veía un 5 en pantalla, y se grababa 0. El log lo dejó
+   * en evidencia — `onChange pinton = 5` seguido de `al grabar {"pinton":0}` — pero desde
+   * afuera parecía que el dato "no se guardaba", y costó tres intentos.
+   *
+   * Con la ref, el header siempre invoca el menú del último render. La lista de
+   * dependencias deja de existir, y con ella la clase entera de defecto: no hay nada que
+   * acordarse de agregar cuando entre el próximo campo.
+   */
+  const menuRef = useRef(menuAcciones);
+  menuRef.current = menuAcciones;
+
   useEffect(() => {
     navigation.setOptions({
       headerRight: () => (
         <TouchableOpacity
-          onPress={menuAcciones}
+          onPress={() => menuRef.current()}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
           style={{ paddingHorizontal: 10 }}
         >
@@ -501,9 +581,7 @@ export function ReciboScreen({
         </TouchableOpacity>
       ),
     });
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [navigation, listo, guardando, numero, productor, noRegistrado, nombre, cedula,
-      calidad, tipoCafe, medida, idFinca, idCertificado, cldd, observaciones]);
+  }, [navigation]);
 
   if (cargando) {
     return (
@@ -861,6 +939,11 @@ export function ReciboScreen({
               key={d.campo}
               etiqueta={d.etiqueta}
               valor={extras[d.campo] ?? 0}
+              // ⚠️ SON PORCENTAJES: sin `decimal` el input usa parseInt y teclado de
+              // enteros, así que un 2,5 se guardaba como 2 y un 0,5 como 0 — o sea que el
+              // dato "no se guardaba". Las columnas son decimal(18,3), igual que verdes y
+              // los flotes, que sí lo tenían.
+              decimal
               castigo={null}
               onChange={(v) => setExtras((x) => ({ ...x, [d.campo]: v }))}
             />
@@ -1211,6 +1294,9 @@ export function ReciboScreen({
           key={d.campo}
           etiqueta={d.etiqueta}
           valor={extras[d.campo] ?? 0}
+          // ⚠️ SON PORCENTAJES: ver la nota en el otro maquetado. Este bloque está DOS
+          // veces —tableta y teléfono— y hay que tocar los dos.
+          decimal
           castigo={null}
           onChange={(v) => setExtras((x) => ({ ...x, [d.campo]: v }))}
         />

@@ -173,6 +173,14 @@ export class Productor extends Model {
   @readonly @field("tipo") tipo!: string | null;
   @readonly @field("zona") zona!: string | null;
   @readonly @field("recibidor") recibidor!: string | null;
+  /**
+   * 1 activo, 0 inactivo.
+   *
+   * ⚠️ NO ES INFORMATIVO. El servidor rechaza con BUSINESS_RULE_VIOLATION todo recibo de
+   * un productor inactivo, y para entonces el papel ya está firmado. El selector filtra
+   * por esto para que no se pueda elegir uno.
+   */
+  @readonly @field("estado") estado!: number;
 }
 
 /**
@@ -392,6 +400,8 @@ export class Recibo extends Model {
   @field("impreso") impreso!: number;
   @field("origen") origen!: number;
   @field("agregado") agregado!: number | null;
+  /** `rc_Talonario.Id` del que salió el número. Ver `talonarioDe()` en lib/recibo.ts. */
+  @field("idtalonario") idtalonario!: number | null;
 
   /** Mientras no se imprima, el recibo se queda en el teléfono. */
   get retenido(): boolean {

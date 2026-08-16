@@ -28,26 +28,27 @@ export function useCatalogos(): Catalogos {
   const [transportistas, setTransportistas] = useState<Transportista[]>([]);
   const [niveles, setNiveles] = useState<Nivel[]>([]);
 
+  /**
+   * ⚠️ SE OBSERVAN, NO SE LEEN UNA VEZ.
+   *
+   * Antes esto era un `fetch()` al montar. El problema aparece justo después de borrar la
+   * base —cambiar recibidor, cerrar sesión, un teléfono nuevo—: los catálogos están
+   * vacíos, el hook lee cero filas, y cuando el sync los llena **nadie vuelve a leerlos**.
+   * La pantalla se queda mostrando `9` y `4` en vez de CONVENCIONAL y DIF C-01, hasta que
+   * el usuario sale y entra a la pantalla.
+   *
+   * Con `observe()` alcanza y no hace falta `observeWithColumns`: acá lo que cambia es el
+   * CONJUNTO —el catálogo pasa de cero filas a tenerlas— y eso `observe()` sí lo avisa.
+   */
   useEffect(() => {
-    let vivo = true;
-    void (async () => {
-      const [tc, ca, ce, tr, nv] = await Promise.all([
-        database.get<TipoCafe>("tipos_cafe").query().fetch(),
-        database.get<Calidad>("calidades").query().fetch(),
-        database.get<Certificado>("certificados").query().fetch(),
-        database.get<Transportista>("transportistas").query().fetch(),
-        database.get<Nivel>("niveles").query().fetch(),
-      ]);
-      if (!vivo) return;
-      setTipos(tc);
-      setCalidades(ca);
-      setCertificados(ce);
-      setTransportistas(tr);
-      setNiveles(nv);
-    })();
-    return () => {
-      vivo = false;
-    };
+    const subs = [
+      database.get<TipoCafe>("tipos_cafe").query().observe().subscribe(setTipos),
+      database.get<Calidad>("calidades").query().observe().subscribe(setCalidades),
+      database.get<Certificado>("certificados").query().observe().subscribe(setCertificados),
+      database.get<Transportista>("transportistas").query().observe().subscribe(setTransportistas),
+      database.get<Nivel>("niveles").query().observe().subscribe(setNiveles),
+    ];
+    return () => subs.forEach((s) => s.unsubscribe());
   }, []);
 
   // Si el catálogo todavía no bajó se devuelve el código: es peor mostrar un vacío, que
