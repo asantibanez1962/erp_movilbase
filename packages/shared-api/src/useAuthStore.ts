@@ -46,7 +46,15 @@ interface AuthState {
   _api: AuthApi | null;
   _store: TokenStore | null;
 
-  init: (cfg: { baseURL: string; tokenStore: TokenStore }) => Promise<void>;
+  /**
+   * `baseURL` acepta una FUNCION para que la direccion del backend se resuelva en
+   * cada llamada. Ver la nota en AuthApi: congelarla dejaba el login yendo al
+   * servidor viejo despues de cambiarlo desde el drawer.
+   */
+  init: (cfg: {
+    baseURL: string | (() => string);
+    tokenStore: TokenStore;
+  }) => Promise<void>;
   login: (usuario: string, password: string) => Promise<void>;
   refresh: () => Promise<string | null>;
   logout: () => Promise<void>;

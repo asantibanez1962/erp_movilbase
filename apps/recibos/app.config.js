@@ -105,11 +105,12 @@ module.exports = ({ config }) => {
         // si fuera un color.
         ...(cliente.acento ? { acento: cliente.acento } : {}),
         tieneLogo: Boolean(logo),
-        // El productor "PENDIENTE" de ESTE cliente. Se hornea en el APK porque hoy vive
-        // en un .ini del legacy y varía por empresa. ⚠️ El servidor lo valida al recibir:
-        // si el del APK y el suyo difieren, los recibos se atribuirían a otro productor
-        // sin ningún error.
-        idSocioGenerico: cliente.idSocioGenerico,
+        // ⚠️ EL PRODUCTOR GENÉRICO YA NO VA ACÁ. Estaba horneado en el APK con el MISMO
+        // número para los seis clientes —el 5109 de Altura— y en la base de otro cliente
+        // ese id es un productor cualquiera: el café de alguien sin registrar se le habría
+        // cargado a una persona real, sin ningún error. Ahora sale de
+        // `ge_companias.ben_socio_generico`, o sea de la base de cada beneficio, y como
+        // código en vez de id. Ver v1.71/RC/66.
       },
     },
   };

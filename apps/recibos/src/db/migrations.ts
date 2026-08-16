@@ -19,6 +19,17 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // El código del productor genérico, que estaba compilado en el APK con el mismo
+      // valor para todos los clientes. Ver v1.71/RC/66.
+      toVersion: 12,
+      steps: [
+        addColumns({
+          table: "companias",
+          columns: [{ name: "ben_socio_generico", type: "string", isOptional: true }],
+        }),
+      ],
+    },
+    {
       // El estado del productor: el servidor rechaza los recibos de uno inactivo y el
       // teléfono no tenía cómo saberlo. Ver v1.71/RC/63.
       toVersion: 11,

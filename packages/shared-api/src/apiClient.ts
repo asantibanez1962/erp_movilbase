@@ -7,7 +7,12 @@ import { TokenStore, TOKEN_KEYS } from "./tokenStore";
  * authApi de cada app para evitar dependencia circular).
  */
 export interface ApiClientConfig {
-  baseURL: string;
+  /**
+   * Direccion del backend. Como FUNCION para que se resuelva en cada request:
+   * axios congela `baseURL` al crear la instancia, y cambiar de servidor desde el
+   * drawer no tenia efecto hasta reiniciar la app. Ver la nota en AuthApi.
+   */
+  baseURL: string | (() => string);
   tokenStore: TokenStore;
   /** Llamada cuando el access token devuelve 401. Debe intentar refresh y
    *  resolver con el nuevo access token, o rechazar para forzar logout. */
@@ -17,8 +22,11 @@ export interface ApiClientConfig {
 }
 
 export function createApiClient(config: ApiClientConfig): AxiosInstance {
+  const resolverBase = () =>
+    typeof config.baseURL === "function" ? config.baseURL() : config.baseURL;
+
   const client = axios.create({
-    baseURL: config.baseURL,
+    baseURL: resolverBase(),
     timeout: 30_000,
     headers: { "Content-Type": "application/json" },
   });
@@ -30,6 +38,10 @@ export function createApiClient(config: ApiClientConfig): AxiosInstance {
       req.headers.set("Authorization", `Bearer ${access}`);
     }
     req.headers.set("X-Client-Kind", "mobile");
+
+    // La direccion, en CADA request. El `baseURL` del axios.create() de arriba es
+    // solo el valor inicial; este lo pisa con el vigente.
+    req.baseURL = resolverBase();
 
     // Device-Id solo en endpoints de sync (donde el BE lo requiere).
     const url = req.url ?? "";

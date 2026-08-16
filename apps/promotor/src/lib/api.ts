@@ -25,20 +25,23 @@ let syncClient: SyncApi | null = null;
 
 export async function bootstrapApi(): Promise<void> {
   // 0. La dirección del servidor ANTES que nada: el auth store y el cliente axios
-  //    la capturan al construirse, así que leerla después no tendría efecto hasta
-  //    el siguiente arranque.
+  //    la resuelven en cada llamada, así que esto es sólo para que la primera request
+  //    no tenga que esperar a SecureStore.
   await cargarUrlServidor();
 
   // 1. Hidrata auth store desde SecureStore (refresh token vivo → arrancamos
   //    logueado sin pedir credenciales).
+  //    ⚠️ La dirección va como FUNCIÓN, no como valor. Con el valor, cambiar de servidor
+  //    desde el drawer mostraba la dirección nueva en pantalla mientras las requests
+  //    seguían yendo a la vieja, hasta reiniciar la app.
   await useAuthStore.getState().init({
-    baseURL: config.apiBaseUrl,
+    baseURL: () => config.apiBaseUrl,
     tokenStore,
   });
 
   // 2. Crear axios + sync API una sola vez.
   httpClient = createApiClient({
-    baseURL: config.apiBaseUrl,
+    baseURL: () => config.apiBaseUrl,
     tokenStore,
     onUnauthorized: () => useAuthStore.getState().refresh(),
     getDeviceId: getOrCreateDeviceId,

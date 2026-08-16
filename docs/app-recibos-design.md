@@ -716,7 +716,8 @@ identificación, nombre y apellidos, **sólo para imprimir**.
 - **Los datos de la persona se pierden.** En esos recibos, `cedula` guarda `3101000000`
   —la del propio "PENDIENTE"— no la de quien entregó. El WinDev los capturaba en local
   para el papel y nunca salían del dispositivo.
-- **El código genérico vive hoy en un `.ini`** del legacy.
+- **El código genérico vive hoy en un `.ini`** del legacy. ⭑ Ahora vive en
+  `ge_companias.ben_socio_generico` — ver §7.ter.
 - `recibos` **no tiene** columnas de nombre ni apellidos. Sí tiene `cedula`, y se llena
   en el 100 % de los recibos (38.550 de 38.550 en la cosecha actual).
 
@@ -803,6 +804,29 @@ se puede hacer bien.
 dice ese nombre, y una copia tiene que reproducir el original. Queda como el registro de
 lo que se imprimió, aunque el `idsocio` ya apunte al productor definitivo.
 
+### 7.ter ⭑ El genérico sale de la BASE, no del APK
+
+Corrige lo de arriba. Estuvo compilado en `clientes.json` —`idSocioGenerico`— y con el
+**mismo número, 5109, para los seis clientes**. Ese es el PENDIENTE de Altura; cada
+beneficio tiene su propia base, así que en la de otro cliente el 5109 es un productor
+cualquiera. El café de alguien sin registrar se le habría cargado a una persona real, con
+el recibo impreso y firmado, sincronizando sin un solo error — se descubre cuando a ese
+productor le aparece café que no entregó.
+
+Va en **`ge_companias.ben_socio_generico`** (`v1.71/RC/66`), y como **CÓDIGO, no id**:
+alguien lo teclea una vez al instalar, y `5019` en lugar de `5109` es un productor válido
+pero equivocado que nadie nota, mientras que un `C00000` mal escrito no resuelve y la app
+lo dice. Un dato que no se puede verificar de un vistazo conviene que falle fuerte.
+
+⚠️ **NO se registra en `mt.Fields` ni en `mt.EntityTabDetails`, a propósito**: el web arma
+sus formularios desde `EntityTabDetails`, así que una columna sin fila ahí no existe para
+el formulario y nadie la mueve por accidente. No hace falta `mt.Fields` porque `companias`
+es pull-only — eso sólo se necesita para ESCRIBIR. Y como tampoco está en `vw_Compania`,
+que es la fuente de la entidad del web, queda con doble candado.
+
+Si el código no resuelve, la app **no ofrece** la opción "No está registrado" en vez de
+ofrecerla y atribuir el café a quien no corresponde.
+
 ---
 
 ## 8. Remedida — falta definir
@@ -818,6 +842,36 @@ bitácora: ahí aparece solo el cuadre que hoy debe hacerse a mano — *lo que e
 despachó contra lo que llegó*.
 
 Si la placa es otra cosa, esto se cae y hay que rediseñarlo.
+
+### 8.1 ⭑ El flete lo calcula el servidor
+
+El móvil captura 12 de los 22 campos de la remedida; tarifa, monto y retención son de la
+oficina. El problema no era ése —esa decisión es correcta— sino que **nadie los llenaba**:
+lo hacía el `wf_tarifa` de PowerBuilder, en el cliente, y al portar la pantalla se quedó
+atrás. Se verificó: en toda la base **ningún** procedimiento, vista, trigger o hook leía
+`rc_tarifasflete`. Una remedida creada desde el web nuevo aterrizaba con el flete vacío.
+
+Va en un hook del servidor (`RemedidaTarifaHook`, `IInTxAfterCreateHook`) y no en cada
+pantalla: el móvil **no puede** calcularlo —captura sin red, donde la tabla de tarifas no
+está— y duplicar la regla en web y teléfono es garantizar que con el tiempo se separen.
+
+    monto     = cantidad / 20 * tarifa     ← cantidad en cajuelas, tarifa por FANEGA
+    retencion = monto * (retencion% / 100)
+
+Tres reglas que sólo estaban en el código legacy, no en los datos:
+
+- **Sólo la tarifa del PRIMER recibidor.** Un viaje es un flete; el camión pasa por varios
+  y se paga una vez. Las demás líneas van en cero.
+- **El mínimo NO se aplica.** La comparación estaba comentada. Se guarda para referencia.
+- **La tarifa no depende del transportista.** Ese filtro también estaba comentado, y la
+  columna está en NULL en las 68 filas de cada cosecha desde 2021-2022.
+
+Verificado contra 12 remedidas reales: monto y retención coinciden **al céntimo**.
+
+⚠️ **La historia no cumple la primera regla.** En el legacy, `row2` se declara y nunca se
+asigna, así que la guarda `if row2 > 1` no dispara y **todas** las líneas terminaban con
+monto: la remedida 2119 tiene tres recibidores con 81 600 cada uno. Queda por decidir si
+se corrigen las históricas.
 
 ---
 

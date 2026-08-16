@@ -23,6 +23,7 @@ import {
   defaultsDeProductor,
   esGenerico,
   idSocioGenerico,
+  resolverSocioGenerico,
   marcarImpreso,
   nivelDelRecibidor,
   precioDe,
@@ -216,6 +217,10 @@ export function ReciboScreen({
         ]);
         setCat(c);
         setDefectos([...(await defectosDeLaEmpresa())]);
+        // El genérico se resuelve ACÁ y no al construir el módulo: sale de `companias`,
+        // que baja del servidor, así que antes del primer sync no existe. Ver
+        // `resolverSocioGenerico` en lib/recibo.ts.
+        await resolverSocioGenerico();
         if (recibo) {
           setExtras({
             pinton: recibo.pinton,

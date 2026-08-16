@@ -54,7 +54,7 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *        cuáles usa cada beneficio. ⚠️ SÓLO REGISTRAN: son control de calidad y no
  *        producen rebajo, así que el cálculo no cambia. Ver v1.71/RC/49.
  */
-export const SCHEMA_VERSION = 11;
+export const SCHEMA_VERSION = 12;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -339,6 +339,10 @@ export const schema = appSchema({
         { name: "ben_nota_recibo", type: "string", isOptional: true },
         // Lista separada por comas de los defectos que esta empresa registra.
         { name: "ben_defectos", type: "string", isOptional: true },
+        // CÓDIGO del productor genérico ("PENDIENTE"), al que se le carga el café de
+        // quien todavía no está registrado. Vive acá y no en el APK: cada beneficio
+        // tiene su propia base y el mismo número apunta a personas distintas.
+        { name: "ben_socio_generico", type: "string", isOptional: true },
       ],
     }),
     tableSchema({

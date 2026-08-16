@@ -16,7 +16,23 @@ import type {
  */
 
 export class AuthApi {
-  constructor(private readonly baseURL: string) {}
+  /**
+   * La direccion se resuelve EN CADA LLAMADA, no al construir.
+   *
+   * Cada beneficio corre su backend en su red, y la pantalla de Servidor deja
+   * corregir la direccion desde el drawer. Con la URL congelada en el constructor,
+   * cambiarla mostraba la nueva en pantalla mientras el login seguia yendo a la
+   * vieja: "error de red" mientras todo dice que esta bien, hasta reiniciar la app.
+   * Es justo el escenario para el que existe esa pantalla — quien instala en un
+   * beneficio corrige la IP y espera seguir.
+   *
+   * Acepta un string por compatibilidad, pero la app pasa una funcion.
+   */
+  constructor(private readonly url: string | (() => string)) {}
+
+  private get baseURL(): string {
+    return typeof this.url === "function" ? this.url() : this.url;
+  }
 
   async login(req: LoginRequest): Promise<LoginResponse> {
     return this.postAuth("/api/auth/login", req);

@@ -14,8 +14,6 @@
     "Para compilar un cliente:  EXPO_PUBLIC_CLIENTE=altura npx expo prebuild ...",
     "Sin la variable se compila el perfil 'dev', que es el de siempre.",
     "",
-    "idSocioGenerico: el productor \"PENDIENTE\" al que se le cargan los recibos de",
-    "quien todavía no está registrado. Se identifica por idsocio y NO por código,",
     "porque el formato del código varía por cliente (C00000 en unos, 00-00000 en",
     "otros). Hoy ese valor vive en un .ini del legacy. 5109 es el de Altura; hay que",
     "confirmarlo cliente por cliente antes de generar su APK."
@@ -31,8 +29,7 @@
     "apiBaseUrl": "http://10.0.2.2:5249",
     "_logoImpresoNota": "dev apunta a la base de Altura, asi que imprime su logo. Sin esto las pruebas salen sin logo y el defecto recien aparece al compilar para un cliente real.",
     "logoImpreso": "altura.png",
-    "logo": null,
-    "idSocioGenerico": 5109
+    "logo": null
   },
   "altura": {
     "nombre": "Recibos Altura",
@@ -41,8 +38,7 @@
     "package": "cr.confeldan.recibos.altura",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "altura.png",
-    "logoImpreso": "altura.png",
-    "idSocioGenerico": 5109
+    "logoImpreso": "altura.png"
   },
   "laeva": {
     "nombre": "Recibos La Eva",
@@ -51,8 +47,7 @@
     "package": "cr.confeldan.recibos.laeva",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "laeva.png",
-    "logoImpreso": null,
-    "idSocioGenerico": 5109
+    "logoImpreso": null
   },
   "diamante": {
     "nombre": "Recibos Diamante",
@@ -61,8 +56,7 @@
     "package": "cr.confeldan.recibos.diamante",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "diamante.png",
-    "logoImpreso": null,
-    "idSocioGenerico": 5109
+    "logoImpreso": null
   },
   "santacruz": {
     "nombre": "Recibos Santa Cruz",
@@ -71,8 +65,7 @@
     "package": "cr.confeldan.recibos.santacruz",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "santacruz.png",
-    "logoImpreso": null,
-    "idSocioGenerico": 5109
+    "logoImpreso": null
   },
   "marespi": {
     "nombre": "Recibos Marespi",
@@ -81,7 +74,6 @@
     "package": "cr.confeldan.recibos.marespi",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "marespi.png",
-    "logoImpreso": null,
-    "idSocioGenerico": 5109
+    "logoImpreso": null
   }
 }

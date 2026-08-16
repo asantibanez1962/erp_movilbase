@@ -25,9 +25,11 @@ let httpClient: ReturnType<typeof createApiClient> | null = null;
 let syncClient: SyncApi | null = null;
 
 export async function bootstrapApi(): Promise<void> {
-  // 0. La dirección del servidor ANTES que nada: el auth store y el cliente axios
-  //    la capturan al construirse, así que leerla después no tendría efecto hasta
-  //    el siguiente arranque.
+  // 0. La dirección del servidor, del almacenamiento del teléfono a memoria.
+  //
+  //    Ya no hay apuro por el orden —el auth store y el cliente axios la resuelven en
+  //    cada llamada, no al construirse— pero se lee acá igual para que la primera
+  //    request no tenga que esperar a SecureStore.
   await cargarUrlServidor();
 
   // El modo de impresión es preferencia del teléfono, igual que la dirección: se lee acá
@@ -36,14 +38,19 @@ export async function bootstrapApi(): Promise<void> {
 
   // 1. Hidrata auth store desde SecureStore (refresh token vivo → arrancamos
   //    logueado sin pedir credenciales).
+  //    ⚠️ La dirección va como FUNCIÓN, no como valor. Con el valor, cambiar de
+  //    servidor desde el drawer mostraba la dirección nueva en pantalla mientras las
+  //    requests seguían yendo a la vieja — "error de red" con todo diciendo que está
+  //    bien, hasta reiniciar la app. Es justo el escenario para el que existe esa
+  //    pantalla: quien instala en un beneficio corrige la IP y sigue.
   await useAuthStore.getState().init({
-    baseURL: config.apiBaseUrl,
+    baseURL: () => config.apiBaseUrl,
     tokenStore,
   });
 
   // 2. Crear axios + sync API una sola vez.
   httpClient = createApiClient({
-    baseURL: config.apiBaseUrl,
+    baseURL: () => config.apiBaseUrl,
     tokenStore,
     onUnauthorized: () => useAuthStore.getState().refresh(),
     getDeviceId: getOrCreateDeviceId,

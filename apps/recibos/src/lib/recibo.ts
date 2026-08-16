@@ -9,12 +9,12 @@ import {
 import { database } from "./db";
 import { crearConUuid } from "./crear";
 import { useSesion } from "./sesion";
-import { cliente } from "../branding";
 import type { CampoDefecto } from "./defectos";
 import type {
   Bitacora,
   CastigoBroca,
   CastigoCosecha,
+  Compania,
   Cuota,
   CuotaEntregador,
   Finca,
@@ -459,18 +459,62 @@ export async function marcarImpreso(recibo: Recibo): Promise<void> {
  * el alta exige revisión fiscal— pero el café SÍ se le recibe. Se usa el productor
  * genérico ("PENDIENTE"), y el nombre y la identificación de la persona se guardan EN EL
  * RECIBO, que es lo que el legacy perdía: capturaba esos datos sólo para el papel y nunca
- * salían del dispositivo.
+ * salían del dispositivo. Ver docs/app-recibos-design.md §7.bis.
  *
- * El genérico se identifica por `idsocio` y no por código: el formato del código varía
- * por cliente (C00000 en unos, 00-00000 en otros) y no hay nada que parsear.
+ * ── DE DÓNDE SALE ───────────────────────────────────────────────────────────
+ *
+ * De `ge_companias.ben_socio_generico`, o sea de la base de CADA beneficio, y no del APK.
+ *
+ * Antes venía compilado en `clientes.json`, con el mismo número —5109— para los seis
+ * clientes. Ese es el PENDIENTE de Altura; en la base de otro cliente el 5109 es un
+ * productor cualquiera. El café de alguien sin registrar se le habría cargado a una
+ * persona real, con el recibo impreso y firmado y sincronizando sin un solo error.
+ *
+ * Y es el CÓDIGO, no el id, porque alguien lo teclea una vez al instalar: `5019` en vez
+ * de `5109` es un productor válido pero equivocado; un `C00000` mal escrito no resuelve y
+ * la app lo dice en pantalla. Un dato que no se puede verificar de un vistazo conviene
+ * que falle fuerte.
  */
-export function esGenerico(idSocio: number | null): boolean {
-  return idSocio != null && idSocio === cliente.idSocioGenerico;
+let idGenericoResuelto: number | null = null;
+
+/**
+ * Resuelve el código configurado contra los productores del teléfono. Se llama al abrir
+ * la pantalla de recibo; el resultado queda en memoria porque no cambia durante la sesión.
+ *
+ * `null` ⇒ no hay genérico configurado, o el código no resuelve. En los dos casos la app
+ * no ofrece la opción "No está registrado", que es preferible a ofrecerla y cargarle el
+ * café a quien no corresponde.
+ */
+export async function resolverSocioGenerico(): Promise<number | null> {
+  const empresas = await database.get<Compania>("companias").query().fetch();
+  const codigo = (empresas[0]?.socioGenerico ?? "").trim();
+  if (!codigo) {
+    idGenericoResuelto = null;
+    return null;
+  }
+
+  const encontrados = await database
+    .get<Productor>("productores")
+    .query(Q.where("codigo", codigo))
+    .fetch();
+
+  idGenericoResuelto = encontrados[0] ? Number(encontrados[0].id) : null;
+  if (idGenericoResuelto == null) {
+    console.info(
+      `[generico] el codigo "${codigo}" de ge_companias.ben_socio_generico no resuelve ` +
+        "a ningun productor del telefono"
+    );
+  }
+  return idGenericoResuelto;
 }
 
-/** `null` ⇒ el APK se compiló sin el dato y la app no ofrece la opción. */
+export function esGenerico(idSocio: number | null): boolean {
+  return idSocio != null && idSocio === idGenericoResuelto;
+}
+
+/** `null` ⇒ no está configurado o no resuelve, y la app no ofrece la opción. */
 export function idSocioGenerico(): number | null {
-  return cliente.idSocioGenerico;
+  return idGenericoResuelto;
 }
 
 // ─── Alta ───────────────────────────────────────────────────────────────────
@@ -550,7 +594,7 @@ function aplicarDatos(r: Recibo, d: DatosRecibo): void {
   r.tipoCafe = d.tipoCafe;
   r.nivel = d.nivel;
 
-  r.idSocio = d.productor ? Number(d.productor.id) : cliente.idSocioGenerico;
+  r.idSocio = d.productor ? Number(d.productor.id) : idSocioGenerico();
   if (r.idSocio == null) {
     throw new Error(
       "Este APK se compiló sin el productor genérico, así que no puede recibirle a " +

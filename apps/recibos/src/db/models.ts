@@ -221,6 +221,15 @@ export class Compania extends Model {
    * al día.
    */
   @readonly @field("ben_defectos") defectos!: string | null;
+  /**
+   * CÓDIGO del productor genérico ("PENDIENTE"): a quién se le carga el café de alguien
+   * que todavía no está registrado.
+   *
+   * El código y no el id, porque alguien lo teclea una vez al instalar: un `5019` en vez
+   * de `5109` es un productor válido pero equivocado y nadie lo nota; un `C00000` mal
+   * escrito no resuelve y la app lo dice. Ver `socioGenerico()` en lib/recibo.ts.
+   */
+  @readonly @field("ben_socio_generico") socioGenerico!: string | null;
 }
 
 export class Finca extends Model {

@@ -29,8 +29,6 @@ interface ClienteExtra {
   /** Fijo en clientes.json; si viene null se deriva del color de marca. */
   acento?: string | null;
   tieneLogo: boolean;
-  /** `idsocio` del productor genérico ("PENDIENTE") de este cliente. */
-  idSocioGenerico?: number;
 }
 
 /**
@@ -169,11 +167,16 @@ export const cliente = {
       ? extra.acento
       : aclararHastaContraste(extra.color, chrome, 3),
   logo: LOGOS[extra.id] ?? null,
-  /**
-   * El productor genérico de este cliente. `null` si el APK se compiló sin el dato: la
-   * app entonces NO ofrece recibir a un no registrado, en vez de mandar el recibo a un
-   * idsocio inventado. Un recibo mal atribuido no da error y se descubre tarde.
-   */
-  idSocioGenerico:
-    typeof extra.idSocioGenerico === "number" ? extra.idSocioGenerico : null,
 };
+
+/*
+ * ⚠️ EL PRODUCTOR GENÉRICO YA NO VIVE ACÁ, y conviene saber por qué antes de volver a
+ * ponerlo: estaba compilado en el APK con el MISMO número —5109— para los seis clientes.
+ * Ese es el PENDIENTE de Altura; en la base de otro beneficio el 5109 es un productor
+ * cualquiera, y el café de alguien sin registrar se le habría cargado a una persona real
+ * sin que nada fallara.
+ *
+ * Ahora sale de `ge_companias.ben_socio_generico`, o sea de la base de cada cliente, y
+ * como CÓDIGO en vez de id. Ver `resolverSocioGenerico()` en lib/recibo.ts y
+ * v1.71/RC/66.
+ */
