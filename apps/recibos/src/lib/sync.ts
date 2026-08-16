@@ -3,7 +3,7 @@ import { runSync, type FalloPull } from "@erp/shared-sync";
 import { database } from "./db";
 import { getSyncClient } from "./api";
 import { COLLECTIONS, SOLO_ENVIO } from "../db/schema";
-import type { Remedida } from "../db/models";
+import type { Bitacora, Remedida } from "../db/models";
 import { config } from "./config";
 import { useSesion } from "./sesion";
 import { cargarPoliticas, puedeEnviarse } from "./politicas";
@@ -54,6 +54,27 @@ export async function syncNow(): Promise<FalloPull[]> {
     ).map((r) => r.id)
   );
 
+  /**
+   * Las bitácoras TODAVÍA ABIERTAS, para retener también sus recibos.
+   *
+   * Mismo caso que las rutas, y por eso está al lado: el recibo se suelta al imprimirse,
+   * pero su bitácora espera a cerrarse (`hora_final`). Entre una cosa y otra hay un rato
+   * largo —toda la jornada— en el que el recibo ya está firme y su padre no ha subido, y
+   * ahí el BE lo rechazaba con UNRESOLVED_PARENT en CADA sincronización del día.
+   *
+   * No perdía nada —al cerrar la bitácora suben los dos juntos— pero llenaba el log del
+   * servidor de rechazos que no son errores, que es justo lo que hace difícil ver los que
+   * sí lo son.
+   */
+  const bitacorasAbiertas = new Set(
+    (
+      await database
+        .get<Bitacora>("bitacoras")
+        .query(Q.where("hora_final", null))
+        .fetch()
+    ).map((b) => b.id)
+  );
+
   const { fallos } = await runSync(database, {
     api,
     collections: [...COLLECTIONS],
@@ -67,6 +88,10 @@ export async function syncNow(): Promise<FalloPull[]> {
       // La ruta espera a su remedida: sin ella el servidor no tiene a qué colgarla.
       if (coleccion === "remedida_rutas") {
         return !remedidasRetenidas.has(String(fila.id_remedida ?? ""));
+      }
+      // Y el recibo espera a que su bitácora cierre, por lo mismo.
+      if (coleccion === "recibos" && bitacorasAbiertas.has(String(fila.id_bitacora ?? ""))) {
+        return false;
       }
       return puedeEnviarse(politicas, coleccion, fila);
     },
@@ -113,6 +138,27 @@ export async function resumenPendientes(): Promise<{
         .fetch()
     ).map((r) => r.id)
   );
+
+  /**
+   * Las bitácoras TODAVÍA ABIERTAS, para retener también sus recibos.
+   *
+   * Mismo caso que las rutas, y por eso está al lado: el recibo se suelta al imprimirse,
+   * pero su bitácora espera a cerrarse (`hora_final`). Entre una cosa y otra hay un rato
+   * largo —toda la jornada— en el que el recibo ya está firme y su padre no ha subido, y
+   * ahí el BE lo rechazaba con UNRESOLVED_PARENT en CADA sincronización del día.
+   *
+   * No perdía nada —al cerrar la bitácora suben los dos juntos— pero llenaba el log del
+   * servidor de rechazos que no son errores, que es justo lo que hace difícil ver los que
+   * sí lo son.
+   */
+  const bitacorasAbiertas = new Set(
+    (
+      await database
+        .get<Bitacora>("bitacoras")
+        .query(Q.where("hora_final", null))
+        .fetch()
+    ).map((b) => b.id)
+  );
   let porEnviar = 0;
   let retenidas = 0;
 
@@ -125,7 +171,12 @@ export async function resumenPendientes(): Promise<{
       // `_raw` y no la instancia: puedeEnviarse lee el campo de cierre por nombre de
       // columna, y el modelo lo expone camelCase.
       const raw = fila._raw as unknown as Record<string, unknown>;
-      if (puedeEnviarse(politicas, nombre, raw)) porEnviar++;
+      // Mismo criterio que el sync, incluida la espera del padre: un recibo ya impreso
+      // cuya bitácora sigue abierta está RETENIDO, no listo para enviar. Contarlo como
+      // "por enviar" hacía que el drawer prometiera un envío que no iba a ocurrir.
+      const esperaAlPadre =
+        nombre === "recibos" && bitacorasAbiertas.has(String(raw.id_bitacora ?? ""));
+      if (!esperaAlPadre && puedeEnviarse(politicas, nombre, raw)) porEnviar++;
       else retenidas++;
     }
   }

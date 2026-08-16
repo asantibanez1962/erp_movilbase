@@ -476,6 +476,7 @@ export async function marcarImpreso(recibo: Recibo): Promise<void> {
  * que falle fuerte.
  */
 let idGenericoResuelto: number | null = null;
+let codigoGenericoResuelto: string | null = null;
 
 /**
  * Resuelve el código configurado contra los productores del teléfono. Se llama al abrir
@@ -490,6 +491,7 @@ export async function resolverSocioGenerico(): Promise<number | null> {
   const codigo = (empresas[0]?.socioGenerico ?? "").trim();
   if (!codigo) {
     idGenericoResuelto = null;
+    codigoGenericoResuelto = null;
     return null;
   }
 
@@ -499,6 +501,7 @@ export async function resolverSocioGenerico(): Promise<number | null> {
     .fetch();
 
   idGenericoResuelto = encontrados[0] ? Number(encontrados[0].id) : null;
+  codigoGenericoResuelto = idGenericoResuelto != null ? codigo : null;
   if (idGenericoResuelto == null) {
     console.info(
       `[generico] el codigo "${codigo}" de ge_companias.ben_socio_generico no resuelve ` +
@@ -601,7 +604,16 @@ function aplicarDatos(r: Recibo, d: DatosRecibo): void {
         "alguien no registrado."
     );
   }
-  r.codigo = d.productor?.codigo ?? null;
+  /**
+   * El código del productor, y con el genérico el CÓDIGO DEL GENÉRICO — no null.
+   *
+   * ⚠️ Antes quedaba nulo: al elegir "No está registrado" no hay productor seleccionado y
+   * `d.productor?.codigo` no da nada. Eso dejaba la fila distinta de como la guarda el
+   * legacy —que escribe `idsocio = 5109` Y `codigo = 'C00000'`— y, peor, el servidor no
+   * podía reconocer que era el genérico para exceptuarlo de la validación de zona: el
+   * recibo rebotaba con "La zona del precio no concuerda", con el papel ya firmado.
+   */
+  r.codigo = d.productor?.codigo ?? codigoGenericoResuelto;
   // El nombre se guarda EN EL RECIBO y la impresión sale siempre de acá, nunca del
   // maestro: una copia impresa meses después tiene que reproducir el original que firmó
   // la persona, aunque el productor se haya corregido desde entonces.
