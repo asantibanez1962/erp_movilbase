@@ -105,7 +105,8 @@ export async function imprimirRecibo(recibo: Recibo): Promise<void> {
         // El legacy imprime `Usuarios.usuario`, no un campo del recibo: es quien está
         // operando la app en ese momento.
         medidor: useAuthStore.getState().user?.usuario ?? "",
-        agregado: comoFechaHora(recibo.agregado),
+        // Sin hora, a propósito — ver la nota en `agregado` del comprobante.
+        agregado: comoFecha(recibo.agregado),
         defectos: datos.defectos,
       })
     );
@@ -167,7 +168,16 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
     cosecha: cosecha?.descripcion ?? recibo.cosecha,
     recibo: recibo.recibo ?? "",
     fecha: comoFecha(recibo.fecha),
-    agregado: comoFechaHora(recibo.agregado),
+    // ⚠️ SIN HORA, A PROPÓSITO. `agregado` en la base lo sella el SERVIDOR al recibir el
+    // push (ReciboConsecutivoHook), no el teléfono: se usa para saber si hay recibos
+    // nuevos desde el último pago, y para eso el reloj del teléfono no es autoridad —hubo
+    // recibos que llegaron ocho horas después de capturarse—.
+    //
+    // Pero el papel que se lleva el productor se imprime en el sitio de recepción, con la
+    // hora del teléfono. Imprimir sólo la FECHA evita que el tiquete contradiga al sistema:
+    // el día coincide, y la hora —que difiere— no se muestra.
+    agregado: comoFecha(recibo.agregado),
+    // `hoy` sí lleva hora: es el momento de imprimir, no un dato del recibo.
     hoy: comoFechaHora(Date.now()),
     // ⚠️ EL ORDEN DEL NOMBRE DIFIERE DEL WEB. La vista arma "APELLIDO1 APELLIDO2 NOMBRE";
     // el teléfono baja el nombre ya concatenado como "NOMBRE APELLIDO1 APELLIDO2". Es la
