@@ -1,0 +1,15 @@
+{
+  "name": "@erp/recibos-calc",
+  "version": "0.1.0",
+  "private": true,
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "scripts": {
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "build:cjs": "tsc src/index.ts src/calculo.ts src/precio.ts src/decimal.ts src/tipos.ts --outDir dist-cjs --module commonjs --moduleResolution node --target ES2022 --skipLibCheck",
+    "verificar": "pnpm run build:cjs && node scripts/verificar.cjs"
+  },
+  "devDependencies": {
+    "typescript": "^5.3.0"
+  }
+}

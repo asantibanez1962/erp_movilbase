@@ -54,3 +54,9 @@ coverage/
 .cache/
 .turbo/
 .metro-cache/
+
+# Credenciales de firma que baja `eas credentials`. El .jks ya esta cubierto arriba, pero
+# `credentials.json` lleva las CONTRASENAS en claro y es lo que de verdad no puede subir:
+# quien tenga el keystore sin ellas no puede firmar nada; con ellas, si.
+credentials.json
+**/credentials.json

@@ -1,0 +1,53 @@
+{
+  "cli": {
+    "version": ">= 19.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      },
+      "env": {
+        "EXPO_PUBLIC_API_URL": "http://192.168.100.10:5249"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "altura": {
+      "extends": "preview",
+      "env": { "EXPO_PUBLIC_CLIENTE": "altura" }
+    },
+    "laeva": {
+      "extends": "preview",
+      "env": { "EXPO_PUBLIC_CLIENTE": "laeva" }
+    },
+    "diamante": {
+      "extends": "preview",
+      "env": { "EXPO_PUBLIC_CLIENTE": "diamante" }
+    },
+    "santacruz": {
+      "extends": "preview",
+      "env": { "EXPO_PUBLIC_CLIENTE": "santacruz" }
+    },
+    "marespi": {
+      "extends": "preview",
+      "env": { "EXPO_PUBLIC_CLIENTE": "marespi" }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

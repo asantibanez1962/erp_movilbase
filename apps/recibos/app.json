@@ -1,0 +1,57 @@
+{
+  "expo": {
+    "name": "Recibos",
+    "slug": "recibos",
+    "version": "0.1.0",
+    "orientation": "default",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0f172a"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "cr.confeldan.recibos",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE",
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_CONNECT",
+        "BLUETOOTH_SCAN"
+      ],
+      "softwareKeyboardLayoutMode": "pan"
+    },
+    "extra": {
+      "apiBaseUrl": "http://10.0.2.2:5249",
+      "cliente": {
+        "id": "dev",
+        "nombre": "Recibos",
+        "nombreLargo": "Recibos (desarrollo)",
+        "color": "#0f172a",
+        "acento": "#3b82f6",
+        "tieneLogo": false,
+        "idSocioGenerico": 5109
+      },
+      "eas": {
+        "projectId": "89dd0c5a-95e8-4fc2-90e3-ac5658b9b57e"
+      }
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ]
+    ],
+    "owner": "alfredosantibanez"
+  }
+}

@@ -56,6 +56,37 @@ export interface SyncOptions {
    * Sin la función, se envía todo (comportamiento de `automatica` y `hasta-sync`).
    */
   puedeEnviar?: (coleccion: string, fila: Record<string, unknown>) => boolean;
+  /**
+   * Colecciones que SOLO SUBEN. No se les pide pull.
+   *
+   * Existe porque hay documentos que nacen en el telefono y no vuelven: el recibo, la
+   * bitacora y la remedida se emiten en campo, se imprimen, se entregan firmados y se
+   * envian. Una vez en el servidor, el telefono no los necesita mas — y bajarlos de
+   * nuevo trae problemas propios en vez de resolver ninguno.
+   *
+   * Ademas el BE las rechaza explicitamente en el pull ("es push-only"), asi que sin
+   * esta lista cada sincronizacion registraria un fallo por coleccion, en todos los
+   * teléfonos, para siempre.
+   */
+  soloEnvio?: readonly string[];
+  /**
+   * Última pasada sobre la fila antes de mandarla. Devuelve lo que viaja.
+   *
+   * Existe por las FECHAS Y HORAS LOCALES. El teléfono guarda instantes en milisegundos
+   * —cómodo para ordenar y mostrar— pero varias columnas del servidor son `date` o
+   * `time`, que no llevan zona horaria. El BE convierte los milisegundos como UTC, y en
+   * Costa Rica (UTC−6) eso corre seis horas: una jornada abierta a las 20:13 se guardaba
+   * con la fecha del DÍA SIGUIENTE, en una columna `date` donde el error ya no se puede
+   * distinguir de un dato bueno.
+   *
+   * El arreglo es mandar lo que el modelo espera —una fecha local y una hora local— y no
+   * un instante. Va acá y no en cada pantalla porque es una regla del transporte, no del
+   * dominio: quien crea la fila sigue trabajando con timestamps.
+   */
+  prepararEnvio?: (
+    coleccion: string,
+    fila: Record<string, unknown>
+  ) => Record<string, unknown>;
 }
 
 type ChangeBucket = {
@@ -104,8 +135,12 @@ export async function runSync(
       // forma de diagnosticarlo desde el teléfono — hubo que ir a leer el log del
       // servidor.
       //
+      // Las push-only no se piden: el BE responde que no soporta pull, y el fallo seria
+      // permanente y ruidoso por algo que es de diseño.
+      const aBajar = opts.collections.filter((c) => !opts.soloEnvio?.includes(c));
+
       const resultados = await Promise.allSettled(
-        opts.collections.map(async (name) => {
+        aBajar.map(async (name) => {
           const resp = await opts.api.pull(name, {
             last_pulled_at: checkpoints[name] ?? null,
             schema_version: opts.schemaVersion,
@@ -116,7 +151,7 @@ export async function runSync(
 
       const responses: Array<{ name: string; resp: PullResponse }> = [];
       resultados.forEach((r, i) => {
-        const nombre = opts.collections[i] ?? "?";
+        const nombre = aBajar[i] ?? "?";
         if (r.status === "fulfilled") {
           responses.push(r.value);
           // El checkpoint se ANOTA acá pero se guarda recién después de que
@@ -258,9 +293,17 @@ export async function runSync(
             [collName]: {
               // Los creados van completos: la fila no existe en el servidor, así que
               // todo lo que trae es información nueva.
-              created: bucket.created.map((f) => limpiarMetadatos(f)),
+              created: bucket.created.map((f) =>
+                opts.prepararEnvio
+                  ? opts.prepararEnvio(collName, limpiarMetadatos(f))
+                  : limpiarMetadatos(f)
+              ),
               // Los modificados van MÍNIMOS — sólo lo que cambió. Ver soloLoCambiado.
-              updated: bucket.updated.map((f) => soloLoCambiado(f)),
+              updated: bucket.updated.map((f) =>
+                opts.prepararEnvio
+                  ? opts.prepararEnvio(collName, soloLoCambiado(f))
+                  : soloLoCambiado(f)
+              ),
               deleted: bucket.deleted,
             },
           },
