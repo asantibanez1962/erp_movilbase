@@ -58,6 +58,16 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
 
   const columnas = m.columnas(m.ancho - bordes.left - bordes.right, 240);
 
+  // Los permisos se releen CADA VEZ que se vuelve al menu, no solo al entrar.
+  // Cambian del lado del servidor —se le suma un permiso a un rol, o se agrega
+  // una opcion nueva— y la app no puede exigir que el operario cierre sesion
+  // para enterarse. Ya paso: la opcion de OT quedo en solo lectura porque la
+  // respuesta guardada era anterior a que existiera ca.ot.update.
+  React.useEffect(
+    () => navigation.addListener("focus", () => { void refrescarOpciones(); }),
+    [navigation, refrescarOpciones],
+  );
+
   function salir() {
     Alert.alert(
       "Cerrar sesión",

@@ -157,7 +157,13 @@ export function OtDetalleScreen({ route, navigation }: Props<"OtDetalle">) {
               <Text style={[s.circuloTexto, v.avance === p && s.circuloTextoActivo]}>{p}%</Text>
             </Pressable>
           ))}
-          <View style={[s.circulo, terminada && s.circuloActivo, s.circuloFijo]}>
+          {/* No se toca —lo pone Finalizar— pero tampoco puede verse mas
+              encendido que los que si se tocan: se apaga con los demas. */}
+          <View style={[
+            s.circulo,
+            terminada && s.circuloActivo,
+            !terminada && s.circuloApagado,
+          ]}>
             <Text style={[s.circuloTexto, terminada && s.circuloTextoActivo]}>100%</Text>
           </View>
         </View>
@@ -257,9 +263,6 @@ function crearEstilos(m: Medidas) {
     },
     circuloActivo: { backgroundColor: VERDE, borderColor: VERDE },
     circuloApagado: { opacity: 0.4 },
-    // El de 100% no se toca: lo pone Finalizar. Se muestra para que se entienda
-    // que la escala llega hasta ahí.
-    circuloFijo: { opacity: 0.9 },
     circuloTexto: { fontSize: m.e(15), fontWeight: "700", color: "#334155" },
     circuloTextoActivo: { color: "#fff" },
     notas: {
