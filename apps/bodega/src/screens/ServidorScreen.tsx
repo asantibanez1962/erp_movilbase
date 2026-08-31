@@ -57,6 +57,7 @@ export function ServidorScreen({ navigation }: Readonly<Props<"Servidor">>) {
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
+          disableFullscreenUI
           placeholder="192.168.1.50:5249"
           placeholderTextColor="#94a3b8"
           returnKeyType="done"

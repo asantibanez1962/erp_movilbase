@@ -3,6 +3,7 @@ import { View, Text, Pressable, ScrollView, Alert, StyleSheet } from "react-nati
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "@erp/shared-api";
 import { useSesion } from "../lib/sesion";
+import { useOpciones } from "../lib/opciones";
 import { useMedidas, Medidas } from "../lib/pantalla";
 import type { Props } from "../lib/rutas";
 import { VERDE } from "./BuscarScreen";
@@ -16,10 +17,20 @@ import { VERDE } from "./BuscarScreen";
  * otro turno, y las opciones que todavía no existen— y sin ellas la app no se
  * puede usar en una bodega con varios operarios.
  *
- * LO QUE FALTA SE MUESTRA APAGADO, NO ESCONDIDO. "Toma Física" y "Estado de
- * OT" están en el legacy y el operario los va a buscar. Verlos en gris dice
- * "todavía no", que es la verdad; no verlos dice "esta app no lo hace", que
- * no lo es.
+ * LAS OPCIONES SALEN DE LOS PERMISOS DEL USUARIO, no de una lista fija. Se
+ * piden a /api/ca/movil/opciones: lo que no tiene permitido no aparece.
+ * Mostrarlo y que reviente con 403 al tocarlo enseña a la gente a ignorar los
+ * errores. Y como el mapeo vive en el servidor, sumar una opción no obliga a
+ * repartir un APK nuevo a cada tableta.
+ *
+ * Esconder un botón NO es un control de acceso: cada endpoint exige su permiso
+ * por su cuenta. Esto es comodidad para el que usa la app.
+ *
+ * LO QUE TIENE PERMISO PERO NO EXISTE TODAVIA SE MUESTRA APAGADO. "Estado de
+ * OT" está en el legacy y el operario lo va a buscar. Verlo en gris dice
+ * "todavía no", que es la verdad; no verlo diría "esta app no lo hace", que no
+ * lo es. Lo que NO tiene permiso, en cambio, no se muestra: ahí la respuesta
+ * honesta es que ese usuario no lo hace.
  */
 
 interface Opcion {
@@ -37,6 +48,10 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
   const bordes = useSafeAreaInsets();
 
   const nombreBodega = useSesion((st) => st.nombreBodega);
+  const opciones = useOpciones((st) => st.opciones);
+  const errorOpciones = useOpciones((st) => st.error);
+  const cargandoOpciones = useOpciones((st) => st.cargando);
+  const refrescarOpciones = useOpciones((st) => st.refrescar);
   const soltarBodega = useSesion((st) => st.soltarBodega);
   const cerrarSesion = useSesion((st) => st.cerrar);
   const logout = useAuthStore((st) => st.logout);
@@ -64,29 +79,41 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
     );
   }
 
-  const opciones: Opcion[] = [
-    {
+  const items: Opcion[] = [];
+
+  if (opciones.cambioUbicacion.mover || opciones.cambioUbicacion.ver) {
+    items.push({
       clave: "cambio",
       titulo: "Cambio de ubicación",
       detalle: "Mover una partida a otra ubicación de la bodega",
       color: VERDE,
       activa: true,
       alTocar: () => navigation.navigate("Buscar"),
-    },
-    {
+    });
+  }
+
+  if (opciones.tomaFisica.ver) {
+    items.push({
       clave: "toma",
       titulo: "Toma física",
-      detalle: "Todavía no disponible",
-      color: "#94a3b8",
-      activa: false,
-    },
-    {
+      detalle: "Contar el inventario de la bodega",
+      color: "#0e7490",
+      activa: true,
+      alTocar: () => navigation.navigate("TomaFisica"),
+    });
+  }
+
+  if (opciones.ot.ver) {
+    items.push({
       clave: "ot",
       titulo: "Estado de OT",
       detalle: "Todavía no disponible",
       color: "#94a3b8",
       activa: false,
-    },
+    });
+  }
+
+  items.push(...[
     {
       clave: "bodega",
       titulo: "Cambiar de bodega",
@@ -111,7 +138,16 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
       activa: true,
       alTocar: salir,
     },
-  ];
+  ]);
+
+  // Sin permisos verificados el menú queda con lo que no los necesita. Se dice
+  // por qué y se ofrece reintentar: así el operario entiende que le falta
+  // conexión y no que le quitaron el acceso.
+  const aviso = cargandoOpciones
+    ? "Leyendo permisos…"
+    : errorOpciones
+      ? `No se pudieron leer los permisos: ${errorOpciones}`
+      : null;
 
   return (
     <ScrollView
@@ -120,7 +156,15 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
         { paddingLeft: m.e(6) + bordes.left, paddingRight: m.e(6) + bordes.right },
       ]}
     >
-      {opciones.map((o) => (
+      {aviso && (
+        <View style={[s.celda, { width: "100%" }]}>
+          <Pressable style={s.aviso} onPress={() => void refrescarOpciones()} disabled={cargandoOpciones}>
+            <Text style={s.avisoTexto}>{aviso}</Text>
+            {!cargandoOpciones && <Text style={s.avisoAccion}>Tocá para reintentar</Text>}
+          </Pressable>
+        </View>
+      )}
+      {items.map((o) => (
         <View key={o.clave} style={[s.celda, { width: `${100 / columnas}%` }]}>
           <Pressable
             style={[s.tarjeta, !o.activa && s.tarjetaApagada]}
@@ -158,5 +202,11 @@ function crearEstilos(m: Medidas) {
     titulo: { fontSize: m.e(19), fontWeight: "700", color: "#0f172a" },
     textoApagado: { color: "#64748b" },
     detalle: { fontSize: m.e(13), color: "#64748b", marginTop: m.e(3) },
+    aviso: {
+      backgroundColor: "#fef3c7", borderColor: "#fcd34d", borderWidth: 1,
+      borderRadius: 10, padding: m.e(12), minHeight: m.t(56), justifyContent: "center",
+    },
+    avisoTexto: { fontSize: m.e(14), color: "#92400e" },
+    avisoAccion: { fontSize: m.e(13), color: "#b45309", fontWeight: "700", marginTop: m.e(2) },
   });
 }

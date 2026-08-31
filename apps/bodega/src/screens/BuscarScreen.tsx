@@ -109,6 +109,7 @@ export function BuscarScreen({ navigation }: Props<"Buscar">) {
           autoCapitalize="none"
           returnKeyType="search"
           onSubmitEditing={buscar}
+          disableFullscreenUI
         />
 
         <Text style={s.etiqueta}>Ubicación</Text>

@@ -18,8 +18,14 @@
     "no hay cola de pendientes, ni base local, ni resolucion de conflictos entre",
     "los varios operarios de una misma bodega. Eso la hace mucho mas chica.",
     "",
-    "Si algun dia hiciera falta trabajar sin señal, se suma shared-sync; pero",
-    "agregarlo 'por las dudas' traeria toda la complejidad sin necesitarla."
+    "TOMA FISICA SI ES OFFLINE, y aun asi no lleva shared-sync. El operario",
+    "recorre la bodega anotando sin señal, pero lo que guarda es un conjunto",
+    "acotado y de un dia —las partidas de UNA bodega en UNA fecha— que se",
+    "descarga entero, se digita y se manda. No hay deltas ni resolucion de",
+    "conflictos por fila: eso lo decide el servidor al recibir. Un archivo",
+    "JSON con expo-file-system alcanza y se entiende leyendolo; WatermelonDB",
+    "traeria un esquema, migraciones y un motor de sync para un caso que no",
+    "los necesita."
   ],
   "dependencies": {
     "@erp/shared-api": "workspace:*",
@@ -32,6 +38,7 @@
     "expo-build-properties": "~1.0.10",
     "expo-constants": "~18.0.13",
     "expo-dev-client": "~6.0.21",
+    "expo-file-system": "~19.0.23",
     "expo-secure-store": "~15.0.8",
     "expo-status-bar": "~3.0.9",
     "expo-system-ui": "~6.0.9",

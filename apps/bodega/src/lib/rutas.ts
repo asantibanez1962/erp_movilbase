@@ -13,6 +13,7 @@ export type Rutas = {
   Bodega: undefined;
   Menu: undefined;
   Buscar: undefined;
+  TomaFisica: undefined;
   Mover: { partida: Partida };
 };
 

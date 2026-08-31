@@ -62,6 +62,7 @@ export function ListaOpciones<T extends Opcion>(
           placeholderTextColor="#94a3b8"
           autoCapitalize="none"
           autoCorrect={false}
+          disableFullscreenUI
           clearButtonMode="while-editing"
         />
       )}

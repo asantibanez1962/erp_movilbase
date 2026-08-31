@@ -11,12 +11,14 @@ import { useAuthStore, TokenStore } from "@erp/shared-api";
 
 import { cargarUrlServidor, urlServidor } from "./src/lib/servidor";
 import { useSesion } from "./src/lib/sesion";
+import { useOpciones } from "./src/lib/opciones";
 import { useMedidas, Medidas } from "./src/lib/pantalla";
 import type { Rutas, Props as PropsRuta } from "./src/lib/rutas";
 import { cargarBodegas, cargarEmpresas, Bodega, Empresa } from "./src/lib/bodegaApi";
 import { BuscarScreen, mensajeDeError, VERDE } from "./src/screens/BuscarScreen";
 import { MenuScreen } from "./src/screens/MenuScreen";
 import { MoverScreen } from "./src/screens/MoverScreen";
+import { TomaFisicaScreen } from "./src/screens/TomaFisicaScreen";
 import { ServidorScreen } from "./src/screens/ServidorScreen";
 
 /**
@@ -54,6 +56,8 @@ export default function App() {
   const autenticado = useAuthStore((s) => s.isAuthenticated);
   const iniciando = useAuthStore((s) => s.isInitializing);
 
+  const refrescarOpciones = useOpciones((s) => s.refrescar);
+  const limpiarOpciones = useOpciones((s) => s.limpiar);
   const restaurar = useSesion((s) => s.restaurar);
   const cargandoSesion = useSesion((s) => s.cargando);
   const idBodega = useSesion((s) => s.idBodega);
@@ -71,6 +75,14 @@ export default function App() {
       await restaurar();
     })();
   }, [initAuth, restaurar]);
+
+  // Los permisos se piden al entrar y se sueltan al salir: el menú de un
+  // usuario no puede quedar armado con lo que podía el anterior. En una bodega
+  // se turnan varios operarios en la misma tableta.
+  React.useEffect(() => {
+    if (autenticado) void refrescarOpciones();
+    else limpiarOpciones();
+  }, [autenticado, refrescarOpciones, limpiarOpciones]);
 
   if (!urlLista || iniciando || cargandoSesion) {
     return (
@@ -107,6 +119,8 @@ export default function App() {
               <Stack.Screen name="Buscar" component={BuscarScreen}
                             options={{ title: "Cambio de ubicación" }} />
               <Stack.Screen name="Mover" component={MoverScreen} options={{ title: "Mover partida" }} />
+              <Stack.Screen name="TomaFisica" component={TomaFisicaScreen}
+                            options={{ title: "Toma física" }} />
               <Stack.Screen name="Servidor" component={ServidorScreen}
                             options={{ title: "Servidor" }} />
             </>
@@ -163,6 +177,9 @@ function LoginScreen({ navigation }: Readonly<PropsRuta<"Login">>) {
         <TextInput
           style={s.input} value={usuario} onChangeText={setUsuario}
           autoCapitalize="none" autoCorrect={false}
+          // En horizontal, Android abre un editor a pantalla completa que tapa
+          // la app entera. Esta app es horizontal siempre: va en cada campo.
+          disableFullscreenUI
           placeholder="usuario" placeholderTextColor="#94a3b8"
           returnKeyType="next" onSubmitEditing={() => campoClave.current?.focus()}
         />
@@ -172,6 +189,7 @@ function LoginScreen({ navigation }: Readonly<PropsRuta<"Login">>) {
           ref={campoClave}
           style={s.input} value={clave} onChangeText={setClave}
           secureTextEntry placeholder="••••••••" placeholderTextColor="#94a3b8"
+          disableFullscreenUI
           returnKeyType="go" onSubmitEditing={entrar}
         />
 
