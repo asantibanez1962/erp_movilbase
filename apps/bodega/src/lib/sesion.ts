@@ -28,6 +28,8 @@ interface EstadoSesion {
   restaurar: () => Promise<void>;
   fijarEmpresa: (companyId: number) => Promise<void>;
   fijarBodega: (id: number, nombre: string) => Promise<void>;
+  /** Olvida la bodega y deja la sesión abierta: para cambiar de bodega. */
+  soltarBodega: () => Promise<void>;
   cerrar: () => Promise<void>;
 }
 
@@ -63,6 +65,14 @@ export const useSesion = create<EstadoSesion>((set) => ({
     await SecureStore.setItemAsync(K_BODEGA, String(id));
     await SecureStore.setItemAsync(K_BODEGA_NOMBRE, nombre);
     set({ idBodega: id, nombreBodega: nombre });
+  },
+
+  soltarBodega: async () => {
+    await Promise.all([
+      SecureStore.deleteItemAsync(K_BODEGA),
+      SecureStore.deleteItemAsync(K_BODEGA_NOMBRE),
+    ]);
+    set({ idBodega: null, nombreBodega: null });
   },
 
   cerrar: async () => {

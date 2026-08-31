@@ -30,8 +30,15 @@ export interface Medidas {
   e: (n: number) => number;
   /** Escala una altura tocable, sin bajar de 44dp. */
   t: (n: number) => number;
-  /** Columnas que caben en un ancho dado, con botones de ~`min` dp. */
-  columnas: (anchoDisponible: number, min?: number) => number;
+  /**
+   * Columnas que caben en un ancho MEDIDO, con botones de ~`min` dp.
+   *
+   * El ancho hay que medirlo con onLayout, no calcularlo restando el panel al
+   * ancho de pantalla: esa cuenta ya fallo una vez —daba 2 columnas donde
+   * cabia 1— y el sintoma fue un boton con el nombre de la ubicacion cortado,
+   * que es justo el dato que el operario necesita leer.
+   */
+  columnas: (anchoMedido: number, min?: number) => number;
 }
 
 export function useMedidas(): Medidas {
@@ -48,8 +55,10 @@ export function useMedidas(): Medidas {
     tableta,
     e: (n) => Math.round(n * k),
     t: (n) => Math.max(TOQUE_MINIMO, Math.round(n * k)),
-    columnas: (disponible, min = 200) =>
-      Math.max(1, Math.floor(disponible / (min * (tableta ? 1.2 : 1)))),
+    columnas: (medido, min = 200) => {
+      if (!medido || medido <= 0) return 1;   // antes del primer onLayout
+      return Math.max(1, Math.floor(medido / (min * (tableta ? 1.2 : 1))));
+    },
   };
 }
 

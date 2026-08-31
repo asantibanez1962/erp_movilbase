@@ -1,10 +1,12 @@
 import React from "react";
 import {
-  View, Text, TextInput, Pressable, FlatList, ScrollView, ActivityIndicator, StyleSheet,
+  View, Text, TextInput, Pressable, FlatList, ActivityIndicator, StyleSheet,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSesion } from "../lib/sesion";
 import type { Props } from "../lib/rutas";
 import { useMedidas, anchoPanel, Medidas } from "../lib/pantalla";
+import { ListaOpciones } from "../components/ListaOpciones";
 import { cargarPartidas, cargarUbicaciones, Partida, Ubicacion } from "../lib/bodegaApi";
 
 /**
@@ -22,8 +24,9 @@ import { cargarPartidas, cargarUbicaciones, Partida, Ubicacion } from "../lib/bo
  *
  * DECISIONES PENSADAS PARA UN MONTACARGUISTA CON GUANTES:
  *
- * - Las ubicaciones son botones, no una lista desplegable. Se tocan sin
- *   apuntar, y de un vistazo se ve cuál está activa.
+ * - Las ubicaciones son una lista con filtro, no botones en rejilla. Una
+ *   bodega puede tener cincuenta carriles: en rejilla hay que barrer la
+ *   pantalla con la vista para encontrar uno.
  * - Cada partida es una tarjeta entera tocable, no una fila de tabla. La
  *   grilla de cuatro columnas del legacy es de mouse.
  * - "Buscar" es explícito, no búsqueda mientras se teclea: la lista no se le
@@ -37,6 +40,7 @@ export function BuscarScreen({ navigation }: Props<"Buscar">) {
 
   const m = useMedidas();
   const s = React.useMemo(() => crearEstilos(m), [m]);
+  const bordes = useSafeAreaInsets();
 
   const [ubicaciones, setUbicaciones] = React.useState<Ubicacion[]>([]);
   const [ubicSel, setUbicSel] = React.useState<number | null>(null);
@@ -45,10 +49,11 @@ export function BuscarScreen({ navigation }: Props<"Buscar">) {
   const [cargando, setCargando] = React.useState(false);
   const [buscado, setBuscado] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  const [anchoLista, setAnchoLista] = React.useState(0);
 
-  // Cuántas tarjetas caben a lo ancho de la columna derecha: tres en la
-  // tableta, una o dos en el teléfono.
-  const columnas = m.columnas(m.ancho - anchoPanel(m) - m.e(24), 260);
+  // Cuántas tarjetas caben, sobre el ancho MEDIDO de esta columna. Restarle el
+  // panel al ancho de pantalla daba de más, y las tarjetas salían cortadas.
+  const columnas = m.columnas(anchoLista, 260);
 
   // Nombre de ubicación por id, para no pedirlo por cada fila.
   const nombrePorId = React.useMemo(() => {
@@ -92,15 +97,14 @@ export function BuscarScreen({ navigation }: Props<"Buscar">) {
   return (
     <View style={s.pantalla}>
       {/* ── Columna izquierda: filtros ─────────────────────────────── */}
-      <View style={s.panel}>
+      <View style={[s.panel, { paddingLeft: m.e(10) + bordes.left }]}>
         <Text style={s.bodega} numberOfLines={1}>{nombreBodega ?? "Sin bodega"}</Text>
 
-        <Text style={s.etiqueta}>Partida</Text>
         <TextInput
           style={s.input}
           value={textoPartida}
           onChangeText={setTextoPartida}
-          placeholder="número o parte"
+          placeholder="N° de partida"
           placeholderTextColor="#94a3b8"
           autoCapitalize="none"
           returnKeyType="search"
@@ -108,16 +112,18 @@ export function BuscarScreen({ navigation }: Props<"Buscar">) {
         />
 
         <Text style={s.etiqueta}>Ubicación</Text>
-        {/* La lista de ubicaciones puede ser larga y el alto es justo lo que
-            falta: se le da su propio scroll para que el botón Buscar no se
-            vaya nunca fuera de la pantalla. */}
-        <ScrollView style={s.scrollChips} contentContainerStyle={s.chips}>
-          <Chip s={s} texto="Todas" activo={ubicSel == null} onPress={() => setUbicSel(null)} />
-          {ubicaciones.map((u) => (
-            <Chip key={u.id} s={s} texto={u.nombre} activo={ubicSel === u.id}
-                  onPress={() => setUbicSel(u.id)} />
-          ))}
-        </ScrollView>
+        <ListaOpciones
+          m={m}
+          opciones={ubicaciones}
+          seleccionado={ubicSel}
+          alElegir={(u) => setUbicSel(u.id)}
+          encabezado={{
+            texto: "Todas",
+            activo: ubicSel == null,
+            alTocar: () => setUbicSel(null),
+          }}
+          vacio="Esta bodega no tiene ubicaciones por documento."
+        />
 
         <Pressable style={s.btnBuscar} onPress={buscar} disabled={cargando}>
           {cargando
@@ -127,7 +133,10 @@ export function BuscarScreen({ navigation }: Props<"Buscar">) {
       </View>
 
       {/* ── Columna derecha: resultados ────────────────────────────── */}
-      <View style={s.resultados}>
+      <View
+        style={[s.resultados, { paddingRight: bordes.right }]}
+        onLayout={(e) => setAnchoLista(e.nativeEvent.layout.width)}
+      >
         {error && <Text style={s.error}>{error}</Text>}
 
         {cargando ? (
@@ -173,17 +182,6 @@ export function BuscarScreen({ navigation }: Props<"Buscar">) {
   );
 }
 
-function Chip(
-  { s, texto, activo, onPress }:
-  { s: Estilos; texto: string; activo: boolean; onPress: () => void },
-) {
-  return (
-    <Pressable style={[s.chip, activo && s.chipActivo]} onPress={onPress}>
-      <Text style={[s.chipTexto, activo && s.chipTextoActivo]} numberOfLines={1}>{texto}</Text>
-    </Pressable>
-  );
-}
-
 function formatear(n: number) {
   return n.toLocaleString("es-CR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
@@ -195,35 +193,26 @@ export function mensajeDeError(e: unknown): string {
 
 export const VERDE = "#3f8f2e";
 
-type Estilos = ReturnType<typeof crearEstilos>;
-
 function crearEstilos(m: Medidas) {
   return StyleSheet.create({
     pantalla: { flex: 1, flexDirection: "row", backgroundColor: "#f8fafc" },
+    // paddingLeft lo pone el componente, sumando el recorte de la cámara.
     panel: {
       width: anchoPanel(m),
       backgroundColor: "#fff",
-      padding: m.e(12),
+      paddingVertical: m.e(10),
+      paddingRight: m.e(10),
       borderRightWidth: 1,
       borderRightColor: "#e2e8f0",
     },
-    bodega: { fontSize: m.e(18), fontWeight: "700", color: VERDE, marginBottom: m.e(6) },
-    etiqueta: { fontSize: m.e(13), color: "#64748b", marginTop: m.e(8), marginBottom: m.e(4) },
+    bodega: { fontSize: m.e(18), fontWeight: "700", color: VERDE, marginBottom: m.e(8) },
+    etiqueta: { fontSize: m.e(13), color: "#64748b", marginTop: m.e(10), marginBottom: m.e(4) },
     input: {
-      height: m.t(48), borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8,
+      height: m.t(46), borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8,
       paddingHorizontal: m.e(12), fontSize: m.e(17), backgroundColor: "#fff", color: "#0f172a",
     },
-    scrollChips: { flex: 1 },
-    chips: { flexDirection: "row", flexWrap: "wrap", gap: m.e(6), paddingBottom: m.e(6) },
-    chip: {
-      paddingHorizontal: m.e(14), justifyContent: "center", minHeight: m.t(44), borderRadius: 8,
-      backgroundColor: "#f1f5f9", borderWidth: 1, borderColor: "#cbd5e1", maxWidth: "100%",
-    },
-    chipActivo: { backgroundColor: VERDE, borderColor: VERDE },
-    chipTexto: { fontSize: m.e(15), color: "#334155" },
-    chipTextoActivo: { color: "#fff", fontWeight: "700" },
     btnBuscar: {
-      height: m.t(52), borderRadius: 8, backgroundColor: VERDE, marginTop: m.e(8),
+      height: m.t(50), borderRadius: 8, backgroundColor: VERDE, marginTop: m.e(8),
       alignItems: "center", justifyContent: "center",
     },
     btnBuscarTexto: { color: "#fff", fontSize: m.e(17), fontWeight: "700" },

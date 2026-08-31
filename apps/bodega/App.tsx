@@ -3,7 +3,7 @@ import {
   View, Text, TextInput, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
-import { SafeAreaProvider, SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
 import { NavigationContainer } from "@react-navigation/native";
 import { createNativeStackNavigator } from "@react-navigation/native-stack";
 import * as SecureStore from "expo-secure-store";
@@ -13,8 +13,9 @@ import { cargarUrlServidor, urlServidor } from "./src/lib/servidor";
 import { useSesion } from "./src/lib/sesion";
 import { useMedidas, Medidas } from "./src/lib/pantalla";
 import type { Rutas, Props as PropsRuta } from "./src/lib/rutas";
-import { cargarBodegas, Bodega } from "./src/lib/bodegaApi";
+import { cargarBodegas, cargarEmpresas, Bodega, Empresa } from "./src/lib/bodegaApi";
 import { BuscarScreen, mensajeDeError, VERDE } from "./src/screens/BuscarScreen";
+import { MenuScreen } from "./src/screens/MenuScreen";
 import { MoverScreen } from "./src/screens/MoverScreen";
 import { ServidorScreen } from "./src/screens/ServidorScreen";
 
@@ -33,10 +34,11 @@ import { ServidorScreen } from "./src/screens/ServidorScreen";
  * anterior: sin empresa no se pueden pedir bodegas, y sin bodega no hay
  * partidas que listar.
  *
- * NO HAY MENU LATERAL, a diferencia de las otras apps. El operario hace una
- * sola cosa; esconderla detrás de un menú sería agregarle un toque a cada
- * movimiento sin darle nada a cambio. "Toma Física" y las demás opciones del
- * legacy se agregarán cuando existan, y ahí se verá si hace falta un menú.
+ * Con la bodega ya elegida, la primera pantalla es el MENU y no el cambio de
+ * ubicación. Cuesta un toque más, pero es el único lugar donde pueden vivir
+ * cerrar sesión —en una bodega se turnan varios operarios en la misma
+ * tableta—, cambiar de bodega, y las opciones del legacy que todavía no
+ * existen.
  */
 
 const tokenStore: TokenStore = {
@@ -80,7 +82,10 @@ export default function App() {
 
   return (
     <SafeAreaProvider>
-      <StatusBar style="light" />
+      {/* Iconos oscuros: la barra de estado cruza las dos mitades de la
+          pantalla, y sobre el fondo claro del formulario los blancos
+          desaparecian. Sobre el verde se leen igual. */}
+      <StatusBar style="dark" />
       <NavigationContainer>
         <Stack.Navigator
           screenOptions={{
@@ -98,9 +103,12 @@ export default function App() {
             <Stack.Screen name="Bodega" component={BodegaScreen} options={{ title: "Elegir bodega" }} />
           ) : (
             <>
+              <Stack.Screen name="Menu" component={MenuScreen} options={{ title: "Bodega" }} />
               <Stack.Screen name="Buscar" component={BuscarScreen}
                             options={{ title: "Cambio de ubicación" }} />
               <Stack.Screen name="Mover" component={MoverScreen} options={{ title: "Mover partida" }} />
+              <Stack.Screen name="Servidor" component={ServidorScreen}
+                            options={{ title: "Servidor" }} />
             </>
           )}
         </Stack.Navigator>
@@ -120,6 +128,12 @@ function LoginScreen({ navigation }: Readonly<PropsRuta<"Login">>) {
   const m = useMedidas();
   const s = React.useMemo(() => estilosLogin(m), [m]);
 
+  // El panel verde SANGRA hasta el borde y son los textos los que respetan el
+  // recorte, no el panel. Acostado, el recorte de la camara queda sobre la
+  // franja izquierda: con un SafeAreaView envolviendo todo, el verde arrancaba
+  // 57px adentro y se veia una tira clara al costado, como un error de dibujo.
+  const bordes = useSafeAreaInsets();
+
   const [usuario, setUsuario] = React.useState("");
   const [clave, setClave] = React.useState("");
   const [ocupado, setOcupado] = React.useState(false);
@@ -138,13 +152,13 @@ function LoginScreen({ navigation }: Readonly<PropsRuta<"Login">>) {
   }
 
   return (
-    <SafeAreaView style={s.pantalla}>
-      <View style={s.marca}>
+    <View style={s.pantalla}>
+      <View style={[s.marca, { paddingLeft: m.e(30) + bordes.left }]}>
         <Text style={s.titulo}>Bodega</Text>
         <Text style={s.sub}>Cambios de ubicación</Text>
       </View>
 
-      <View style={s.formulario}>
+      <View style={[s.formulario, { paddingRight: m.e(28) + bordes.right }]}>
         <Text style={s.etiqueta}>Usuario</Text>
         <TextInput
           style={s.input} value={usuario} onChangeText={setUsuario}
@@ -169,20 +183,21 @@ function LoginScreen({ navigation }: Readonly<PropsRuta<"Login">>) {
           <Text style={s.enlace}>Configurar servidor</Text>
         </Pressable>
       </View>
-    </SafeAreaView>
+    </View>
   );
 }
 
 function estilosLogin(m: Medidas) {
   return StyleSheet.create({
     pantalla: { flex: 1, flexDirection: "row", backgroundColor: "#f8fafc" },
+    // paddingLeft y paddingRight los pone el componente, sumando el recorte.
     marca: {
-      flex: 1, justifyContent: "center", paddingHorizontal: m.e(30),
+      flex: 1, justifyContent: "center", paddingRight: m.e(30),
       backgroundColor: VERDE,
     },
     titulo: { fontSize: m.e(40), fontWeight: "700", color: "#fff" },
     sub: { fontSize: m.e(17), color: "#dcfce7", marginTop: m.e(4) },
-    formulario: { flex: 1, justifyContent: "center", paddingHorizontal: m.e(28) },
+    formulario: { flex: 1, justifyContent: "center", paddingLeft: m.e(28) },
     etiqueta: { fontSize: m.e(14), color: "#475569", marginTop: m.e(12), marginBottom: m.e(4) },
     input: {
       height: m.t(50), borderWidth: 1, borderColor: "#cbd5e1", borderRadius: 8,
@@ -200,32 +215,46 @@ function estilosLogin(m: Medidas) {
 
 // ─────────────────────────────────────────────────────────────────────────
 /**
- * Elegir bodega. Con una sola no se pregunta: se entra directo. Un operario
- * trabaja en una, y hacerle tocar un botón para confirmar lo único posible es
- * ruido.
+ * Elegir empresa y bodega, en ese orden. Con una sola opción no se pregunta:
+ * se entra directo. Un operario trabaja en una bodega, y hacerle tocar un
+ * botón para confirmar lo único posible es ruido.
+ *
+ * LA EMPRESA NO SALE DEL USUARIO LOGUEADO. `UserSummary` del store de auth es
+ * solo { id, usuario }; la empresa vive en los claims del JWT y la resuelve el
+ * servidor en /api/mobile/contexto. Leerla del objeto de usuario con un cast
+ * compila igual y devuelve undefined para siempre: esta pantalla se quedaba
+ * girando sin pedir nada y sin dar un error. Por eso ahora TODO estado —sin
+ * empresas, sin bodegas, error de red— tiene su mensaje en pantalla, y el
+ * indicador de carga sale sólo cuando de verdad hay una llamada en curso.
  */
 function BodegaScreen() {
   const fijarBodega = useSesion((st) => st.fijarBodega);
   const fijarEmpresa = useSesion((st) => st.fijarEmpresa);
   const companyId = useSesion((st) => st.companyId);
-  const usuario = useAuthStore((st) => st.user);
 
   const m = useMedidas();
   const s = React.useMemo(() => estilosBodega(m), [m]);
   const columnas = m.columnas(m.ancho, 240);
 
+  const [empresas, setEmpresas] = React.useState<Empresa[] | null>(null);
   const [bodegas, setBodegas] = React.useState<Bodega[] | null>(null);
   const [error, setError] = React.useState<string | null>(null);
 
   React.useEffect(() => {
-    // La compañía sale del usuario logueado. Sin ella el backend rechaza todo
-    // con "X-Company-Id header is required".
-    const cia = (usuario as { companyId?: number } | null)?.companyId;
-    if (cia && companyId !== cia) void fijarEmpresa(cia);
-  }, [usuario, companyId, fijarEmpresa]);
+    if (companyId != null) return;
+    setError(null);
+    cargarEmpresas()
+      .then((es) => {
+        setEmpresas(es);
+        const unica = es.length === 1 ? es[0] : null;
+        if (unica) void fijarEmpresa(unica.id);
+      })
+      .catch((e) => setError(mensajeDeError(e)));
+  }, [companyId, fijarEmpresa]);
 
   React.useEffect(() => {
     if (companyId == null) return;
+    setError(null);
     cargarBodegas()
       .then((bs) => {
         setBodegas(bs);
@@ -235,35 +264,75 @@ function BodegaScreen() {
       .catch((e) => setError(mensajeDeError(e)));
   }, [companyId, fijarBodega]);
 
-  if (error) return <View style={base.centro}><Text style={base.error}>{error}</Text></View>;
-  if (!bodegas) return <View style={base.centro}><ActivityIndicator size="large" color={VERDE} /></View>;
+  if (error) return <Aviso texto={error} />;
 
-  if (bodegas.length === 0) {
+  // Paso 1: la empresa.
+  if (companyId == null) {
+    if (!empresas) return <Cargando />;
+    if (empresas.length === 0) {
+      return <Aviso texto="Su usuario no tiene empresas asignadas. Avise a la oficina." />;
+    }
     return (
-      <View style={base.centro}>
-        <Text style={base.error}>
-          No tiene bodegas asignadas. Pida en la oficina que le asignen la suya.
-        </Text>
-      </View>
+      <Rejilla
+        s={s} columnas={columnas} titulo="Empresa"
+        opciones={empresas}
+        alElegir={(e) => fijarEmpresa(e.id)}
+      />
     );
   }
 
+  // Paso 2: la bodega.
+  if (!bodegas) return <Cargando />;
+  if (bodegas.length === 0) {
+    return <Aviso texto="No tiene bodegas asignadas. Pida en la oficina que le asignen la suya." />;
+  }
+  return (
+    <Rejilla
+      s={s} columnas={columnas} titulo="Bodega"
+      opciones={bodegas}
+      alElegir={(b) => fijarBodega(b.id, b.nombre)}
+    />
+  );
+}
+
+function Cargando() {
+  return <View style={base.centro}><ActivityIndicator size="large" color={VERDE} /></View>;
+}
+
+function Aviso({ texto }: { texto: string }) {
+  return <View style={base.centro}><Text style={base.error}>{texto}</Text></View>;
+}
+
+function Rejilla<T extends { id: number; nombre: string }>(
+  { s, columnas, titulo, opciones, alElegir }: {
+    s: ReturnType<typeof estilosBodega>;
+    columnas: number;
+    titulo: string;
+    opciones: T[];
+    alElegir: (o: T) => void;
+  },
+) {
   return (
     <ScrollView contentContainerStyle={s.rejilla}>
-      {bodegas.map((b) => (
-        <View key={b.id} style={[s.celda, { width: `${100 / columnas}%` }]}>
-          <Pressable style={s.bodega} onPress={() => fijarBodega(b.id, b.nombre)}>
-            <Text style={s.bodegaTexto} numberOfLines={2}>{b.nombre}</Text>
-          </Pressable>
-        </View>
-      ))}
+      <Text style={s.titulo}>{titulo}</Text>
+      <View style={s.fila}>
+        {opciones.map((o) => (
+          <View key={o.id} style={[s.celda, { width: `${100 / columnas}%` }]}>
+            <Pressable style={s.bodega} onPress={() => alElegir(o)}>
+              <Text style={s.bodegaTexto} numberOfLines={2}>{o.nombre}</Text>
+            </Pressable>
+          </View>
+        ))}
+      </View>
     </ScrollView>
   );
 }
 
 function estilosBodega(m: Medidas) {
   return StyleSheet.create({
-    rejilla: { flexDirection: "row", flexWrap: "wrap", padding: m.e(8) },
+    rejilla: { padding: m.e(8) },
+    titulo: { fontSize: m.e(14), color: "#64748b", marginLeft: m.e(6), marginBottom: m.e(4) },
+    fila: { flexDirection: "row", flexWrap: "wrap" },
     celda: { padding: m.e(6) },
     bodega: {
       minHeight: m.t(80), justifyContent: "center",

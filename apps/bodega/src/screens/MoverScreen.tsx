@@ -2,8 +2,10 @@ import React from "react";
 import {
   View, Text, Pressable, ScrollView, ActivityIndicator, Alert, StyleSheet,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useSesion } from "../lib/sesion";
 import { useMedidas, anchoPanel, Medidas } from "../lib/pantalla";
+import { ListaOpciones } from "../components/ListaOpciones";
 import { cargarUbicaciones, moverPartida, Ubicacion } from "../lib/bodegaApi";
 import type { Props } from "../lib/rutas";
 import { mensajeDeError, VERDE } from "./BuscarScreen";
@@ -12,7 +14,9 @@ import { mensajeDeError, VERDE } from "./BuscarScreen";
  * Pantalla de movimiento — el "Cambio de Ubicación" del legacy.
  *
  * A la izquierda la partida elegida, sólo lectura. A la derecha lo único que
- * se decide —a qué ubicación va— y los botones. La misma división de dos
+ * se decide —a qué ubicación va— y los botones. El destino es una LISTA con
+ * filtro y no botones en rejilla: una bodega puede tener cincuenta carriles, y
+ * en rejilla eso es una pared de botones donde hay que buscar con la vista. La misma división de dos
  * columnas que la pantalla anterior, por la misma razón: en horizontal el alto
  * es el recurso escaso, y con la ficha arriba las ubicaciones quedarían en una
  * franja donde no se puede tocar nada sin apuntar.
@@ -35,16 +39,13 @@ export function MoverScreen({ route, navigation }: Props<"Mover">) {
 
   const m = useMedidas();
   const s = React.useMemo(() => crearEstilos(m), [m]);
+  const bordes = useSafeAreaInsets();
 
   const [ubicaciones, setUbicaciones] = React.useState<Ubicacion[]>([]);
   const [destino, setDestino] = React.useState<Ubicacion | null>(null);
   const [enviando, setEnviando] = React.useState(false);
 
   const uuid = React.useRef(nuevoUuid()).current;
-
-  // Los destinos son botones grandes en rejilla. En la tableta entran tres o
-  // cuatro por fila; en el teléfono, dos.
-  const columnas = m.columnas(m.ancho - anchoPanel(m) - m.e(24), 190);
 
   React.useEffect(() => {
     if (!idBodega) return;
@@ -82,39 +83,32 @@ export function MoverScreen({ route, navigation }: Props<"Mover">) {
   return (
     <View style={s.pantalla}>
       {/* ── Columna izquierda: qué se está moviendo ────────────────── */}
-      <ScrollView style={s.panel} contentContainerStyle={s.panelContenido}>
-        <Text style={s.partida} numberOfLines={1} adjustsFontSizeToFit>
-          {partida.partida}
-        </Text>
-        <Dato s={s} etiqueta="Sacos" valor={formatear(partida.sacos)} />
-        <Dato s={s} etiqueta="Peso neto" valor={`${formatear(partida.peso)} kg`} />
-        {partida.calidad ? <Dato s={s} etiqueta="Calidad" valor={partida.calidad} /> : null}
-        <Dato s={s} etiqueta="Ubicación" valor={partida.ubicacion} />
-      </ScrollView>
+      {/* El ancho va en un View y NO en el ScrollView: un ScrollView con
+          width propio se estira con su contenido y esta ficha se comia dos
+          tercios de la pantalla, dejando los destinos sin lugar. */}
+      <View style={[s.panel, { paddingLeft: bordes.left }]}>
+        <ScrollView contentContainerStyle={s.panelContenido}>
+          <Text style={s.partida} numberOfLines={1} adjustsFontSizeToFit>
+            {partida.partida}
+          </Text>
+          <Dato s={s} etiqueta="Sacos" valor={formatear(partida.sacos)} />
+          <Dato s={s} etiqueta="Peso neto" valor={`${formatear(partida.peso)} kg`} />
+          {partida.calidad ? <Dato s={s} etiqueta="Calidad" valor={partida.calidad} /> : null}
+          <Dato s={s} etiqueta="Ubicación" valor={partida.ubicacion} />
+        </ScrollView>
+      </View>
 
       {/* ── Columna derecha: a dónde va, y el botón ────────────────── */}
-      <View style={s.derecha}>
+      <View style={[s.derecha, { paddingRight: bordes.right }]}>
         <Text style={s.titulo}>Mover a</Text>
 
-        <ScrollView contentContainerStyle={s.destinos}>
-          {ubicaciones.length === 0 && (
-            <Text style={s.vacio}>No hay otra ubicación disponible en esta bodega.</Text>
-          )}
-          {ubicaciones.map((u) => {
-            const activo = destino?.id === u.id;
-            return (
-              <Pressable
-                key={u.id}
-                style={[s.destino, { width: `${100 / columnas}%` }, activo && s.destinoActivo]}
-                onPress={() => setDestino(u)}
-              >
-                <Text style={[s.destinoTexto, activo && s.destinoTextoActivo]} numberOfLines={2}>
-                  {u.nombre}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </ScrollView>
+        <ListaOpciones
+          m={m}
+          opciones={ubicaciones}
+          seleccionado={destino?.id ?? null}
+          alElegir={setDestino}
+          vacio="No hay otra ubicación disponible en esta bodega."
+        />
 
         <View style={s.pie}>
           <Pressable style={s.btnCancelar} onPress={() => navigation.goBack()} disabled={enviando}>
@@ -168,6 +162,9 @@ function crearEstilos(m: Medidas) {
       borderRightWidth: 1,
       borderRightColor: "#e2e8f0",
     },
+    // El ancho de arriba manda: sin esto, un nombre de ubicacion largo
+    // ensancha la columna y se la quita a los destinos.
+
     panelContenido: { padding: m.e(14) },
     partida: { fontSize: m.e(26), fontWeight: "700", color: "#0f172a", marginBottom: m.e(8) },
     dato: { flexDirection: "row", justifyContent: "space-between", gap: m.e(8), paddingVertical: m.e(5) },
@@ -175,23 +172,6 @@ function crearEstilos(m: Medidas) {
     datoValor: { flexShrink: 1, fontSize: m.e(16), color: "#0f172a", fontWeight: "600", textAlign: "right" },
     derecha: { flex: 1 },
     titulo: { fontSize: m.e(14), color: "#64748b", marginLeft: m.e(12), marginTop: m.e(8) },
-    // gap no aplica a hijos con width en porcentaje sin descuadrar la rejilla:
-    // el aire va como padding dentro de cada botón.
-    destinos: { flexDirection: "row", flexWrap: "wrap", padding: m.e(6) },
-    destino: {
-      padding: m.e(6),
-    },
-    destinoActivo: {},
-    destinoTexto: {
-      minHeight: m.t(56), textAlignVertical: "center", textAlign: "center",
-      paddingHorizontal: m.e(10), paddingVertical: m.e(14), borderRadius: 10,
-      backgroundColor: "#fff", borderWidth: 2, borderColor: "#e2e8f0",
-      fontSize: m.e(17), color: "#334155", overflow: "hidden",
-    },
-    destinoTextoActivo: {
-      borderColor: VERDE, backgroundColor: "#f0fdf4", color: VERDE, fontWeight: "700",
-    },
-    vacio: { color: "#64748b", fontSize: m.e(15), padding: m.e(16), textAlign: "center" },
     pie: {
       flexDirection: "row", gap: m.e(10), padding: m.e(10),
       borderTopWidth: 1, borderTopColor: "#e2e8f0", backgroundColor: "#fff",

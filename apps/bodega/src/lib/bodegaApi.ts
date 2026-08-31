@@ -11,6 +11,11 @@ import { api } from "./api";
  * una regla, el móvil y el web se separen sin que nadie lo note.
  */
 
+export interface Empresa {
+  id: number;
+  nombre: string;
+}
+
 export interface Bodega {
   id: number;
   nombre: string;
@@ -43,6 +48,26 @@ function campo(fila: Record<string, unknown>, ...nombres: string[]): unknown {
     if (fila[alt] !== undefined) return fila[alt];
   }
   return undefined;
+}
+
+/**
+ * Las empresas del usuario.
+ *
+ * Va por /api/mobile/contexto y NO por el token: `UserSummary` del store de
+ * auth trae solo id y usuario. La empresa sale de los claims del JWT del lado
+ * del servidor, que es el unico que sabe si el usuario es admin —y ve todas—
+ * o tiene un claim `company[]` acotado.
+ *
+ * Es la primera llamada de la app y la unica que NO manda X-Company-Id:
+ * justamente es la que dice cual mandar.
+ */
+export async function cargarEmpresas(): Promise<Empresa[]> {
+  const { data } = await api.get("/api/mobile/contexto");
+  const filas = ((data as { companias?: unknown[] } | null)?.companias ?? []) as Record<string, unknown>[];
+  return filas.map((f) => ({
+    id: numero(campo(f, "Id")),
+    nombre: texto(campo(f, "Nombre")),
+  }));
 }
 
 export async function cargarBodegas(): Promise<Bodega[]> {

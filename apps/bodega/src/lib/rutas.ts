@@ -11,6 +11,7 @@ export type Rutas = {
   Login: undefined;
   Servidor: undefined;
   Bodega: undefined;
+  Menu: undefined;
   Buscar: undefined;
   Mover: { partida: Partida };
 };
