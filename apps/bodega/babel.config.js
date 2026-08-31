@@ -1,20 +1,23 @@
-// Babel config:
-//   - babel-preset-expo: default RN/Expo
-//   - @babel/plugin-proposal-decorators legacy: WMDB models usan decorators
-//     (@field, @relation). DEBE ir al principio para que corra antes que
-//     cualquier otro plugin que transforme classes.
-//   - react-native-worklets/plugin: requerido por react-native-reanimated v4
-//     (que a su vez requiere @react-navigation/drawer + bottom-tabs animations).
-//     DEBE ir AL FINAL — el plugin transforma "worklet" functions y necesita
-//     ver el code ya transformado por todo lo demás.
+// Babel config: solo babel-preset-expo.
+//
+// Las otras apps del monorepo suman dos plugins que ACA NO VAN, y que se
+// colaron al copiar el andamiaje:
+//
+//   - @babel/plugin-proposal-decorators — lo piden los modelos de WatermelonDB
+//     (@field, @relation). Esta app no tiene base local, asi que no hay
+//     modelos que decorar.
+//   - react-native-worklets/plugin — lo pide reanimated v4, que a su vez lo
+//     piden el Drawer y los bottom-tabs. Aca la navegacion es un native-stack
+//     pelado.
+//
+// Ninguno de los dos esta en las dependencias de esta app: dejarlos en la
+// lista hace que Babel los busque, los encuentre por hoisting del workspace
+// —o no los encuentre— segun como quede node_modules ese dia. Un bundle que
+// compila o no segun el linker es peor que uno que no compila nunca.
 
 module.exports = function babelConfig(api) {
   api.cache(true);
   return {
     presets: ["babel-preset-expo"],
-    plugins: [
-      ["@babel/plugin-proposal-decorators", { legacy: true }],
-      "react-native-worklets/plugin",
-    ],
   };
 };
