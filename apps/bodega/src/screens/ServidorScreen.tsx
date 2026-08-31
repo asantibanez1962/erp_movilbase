@@ -2,7 +2,7 @@ import React from "react";
 import { View, Text, TextInput, Pressable, Alert, StyleSheet } from "react-native";
 import { useMedidas, Medidas } from "../lib/pantalla";
 import type { Props } from "../lib/rutas";
-import { VERDE } from "./BuscarScreen";
+import { VERDE } from "../branding";
 import {
   guardarUrlServidor, hayOverride, restaurarUrlServidor,
   urlCompilada, urlServidor,

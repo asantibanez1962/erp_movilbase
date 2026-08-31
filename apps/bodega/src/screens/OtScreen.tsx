@@ -12,7 +12,8 @@ import {
   COLOR_ESTADO, ESTADOS, OtsLocales, borrarOts, guardarOts, leerOts,
   pendientesDeEnviar, trasEnviarOts, vigente,
 } from "../lib/otLocal";
-import { mensajeDeError, VERDE } from "./BuscarScreen";
+import { mensajeDeError } from "./BuscarScreen";
+import { VERDE } from "../branding";
 
 /**
  * Lista de OT abiertas de la bodega — la primera pantalla del legacy.

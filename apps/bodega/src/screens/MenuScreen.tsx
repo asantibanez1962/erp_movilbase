@@ -6,7 +6,7 @@ import { useSesion } from "../lib/sesion";
 import { useOpciones } from "../lib/opciones";
 import { useMedidas, Medidas } from "../lib/pantalla";
 import type { Props } from "../lib/rutas";
-import { VERDE } from "./BuscarScreen";
+import { VERDE } from "../branding";
 
 /**
  * Menú principal, como el del legacy.

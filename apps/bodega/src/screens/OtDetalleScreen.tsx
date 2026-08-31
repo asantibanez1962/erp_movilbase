@@ -11,7 +11,7 @@ import {
   CambioOt, COLOR_ESTADO, EST_EN_ESPERA, EST_INICIADA, EST_TERMINADA, ESTADOS,
   OtLocal, OtsLocales, conCambio, guardarOts, horaAhora, leerOts, vigente,
 } from "../lib/otLocal";
-import { VERDE } from "./BuscarScreen";
+import { VERDE } from "../branding";
 
 /**
  * Ficha de una OT — la segunda pantalla del legacy.

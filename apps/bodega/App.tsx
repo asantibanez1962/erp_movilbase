@@ -1,6 +1,6 @@
 import React from "react";
 import {
-  View, Text, TextInput, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert,
+  View, Text, TextInput, Pressable, ActivityIndicator, ScrollView, StyleSheet, Alert, Image,
 } from "react-native";
 import { StatusBar } from "expo-status-bar";
 import { SafeAreaProvider, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,7 +15,8 @@ import { useOpciones } from "./src/lib/opciones";
 import { useMedidas, Medidas } from "./src/lib/pantalla";
 import type { Rutas, Props as PropsRuta } from "./src/lib/rutas";
 import { cargarBodegas, cargarEmpresas, Bodega, Empresa } from "./src/lib/bodegaApi";
-import { BuscarScreen, mensajeDeError, VERDE } from "./src/screens/BuscarScreen";
+import { BuscarScreen, mensajeDeError } from "./src/screens/BuscarScreen";
+import { cliente, VERDE } from "./src/branding";
 import { MenuScreen } from "./src/screens/MenuScreen";
 import { MoverScreen } from "./src/screens/MoverScreen";
 import { OtScreen } from "./src/screens/OtScreen";
@@ -172,8 +173,10 @@ function LoginScreen({ navigation }: Readonly<PropsRuta<"Login">>) {
   return (
     <View style={s.pantalla}>
       <View style={[s.marca, { paddingLeft: m.e(30) + bordes.left }]}>
-        <Text style={s.titulo}>Bodega</Text>
-        <Text style={s.sub}>Cambios de ubicación</Text>
+        {cliente.logo
+          ? <Image source={cliente.logo} style={s.logo} resizeMode="contain" />
+          : <Text style={s.titulo}>{cliente.nombre}</Text>}
+        <Text style={s.sub}>{cliente.nombreLargo}</Text>
       </View>
 
       <View style={[s.formulario, { paddingRight: m.e(28) + bordes.right }]}>
@@ -217,7 +220,10 @@ function estilosLogin(m: Medidas) {
       flex: 1, justifyContent: "center", paddingRight: m.e(30),
       backgroundColor: VERDE,
     },
-    titulo: { fontSize: m.e(40), fontWeight: "700", color: "#fff" },
+    titulo: { fontSize: m.e(36), fontWeight: "700", color: "#fff" },
+    // Ancho tope y no alto: los logos de los beneficios son apaisados, y
+    // limitarlos por alto los dejaba diminutos en el teléfono acostado.
+    logo: { width: "100%", maxWidth: m.e(260), height: m.e(90), marginBottom: m.e(6) },
     sub: { fontSize: m.e(17), color: "#dcfce7", marginTop: m.e(4) },
     formulario: { flex: 1, justifyContent: "center", paddingLeft: m.e(28) },
     etiqueta: { fontSize: m.e(14), color: "#475569", marginTop: m.e(12), marginBottom: m.e(4) },

@@ -8,7 +8,8 @@ import { useMedidas, anchoPanel, Medidas } from "../lib/pantalla";
 import { ListaOpciones } from "../components/ListaOpciones";
 import { cargarUbicaciones, moverPartida, Ubicacion } from "../lib/bodegaApi";
 import type { Props } from "../lib/rutas";
-import { mensajeDeError, VERDE } from "./BuscarScreen";
+import { mensajeDeError } from "./BuscarScreen";
+import { VERDE } from "../branding";
 
 /**
  * Pantalla de movimiento — el "Cambio de Ubicación" del legacy.

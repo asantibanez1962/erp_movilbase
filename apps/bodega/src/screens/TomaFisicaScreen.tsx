@@ -13,7 +13,8 @@ import {
   FilaToma, TomaLocal, borrarToma, conConteo, guardarToma, hoyLocal, leerToma,
   resumenLocal, trasEnviar, valorDe,
 } from "../lib/tomaLocal";
-import { mensajeDeError, VERDE } from "./BuscarScreen";
+import { mensajeDeError } from "./BuscarScreen";
+import { VERDE } from "../branding";
 
 /**
  * Toma física de inventario.

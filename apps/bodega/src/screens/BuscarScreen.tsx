@@ -8,6 +8,7 @@ import type { Props } from "../lib/rutas";
 import { useMedidas, anchoPanel, Medidas } from "../lib/pantalla";
 import { ListaOpciones } from "../components/ListaOpciones";
 import { cargarPartidas, cargarUbicaciones, Partida, Ubicacion } from "../lib/bodegaApi";
+import { VERDE } from "../branding";
 
 /**
  * Pantalla de búsqueda — el "Mover Carril" del legacy.
@@ -191,8 +192,6 @@ export function mensajeDeError(e: unknown): string {
   const err = e as { response?: { data?: { message?: string } }; message?: string };
   return err?.response?.data?.message ?? err?.message ?? "No se pudo completar la operación.";
 }
-
-export const VERDE = "#3f8f2e";
 
 function crearEstilos(m: Medidas) {
   return StyleSheet.create({

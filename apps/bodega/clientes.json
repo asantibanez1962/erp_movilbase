@@ -1,0 +1,83 @@
+{
+  "_nota": [
+    "Catálogo de clientes de la app de bodega (CA). Una entrada por empresa.",
+    "Lo leen DOS consumidores, y por eso es JSON y no un .ts:",
+    "  - app.config.js (Node, en build time) → nombre, package, ícono, splash",
+    "  - src/branding/index.ts (Metro, en runtime) → logo y colores de la UI",
+    "Tenerlo en un solo lugar evita que el color del APK y el de la pantalla se separen.",
+    "",
+    "Para compilar un cliente:",
+    "  $env:EXPO_PUBLIC_CLIENTE='coricafe'; npx expo prebuild --platform android --clean",
+    "  cd android; .\\gradlew.bat assembleRelease",
+    "Sin la variable se compila el perfil 'dev', que es el del dev-client instalado.",
+    "",
+    "⚠ FALTAN DATOS REALES en las cuatro empresas nuevas: apiBaseUrl, color y logo.",
+    "Cada una lo dice en su clave _falta. Mientras estén así NO hay que generar su",
+    "APK: el package y el color quedan horneados, y corregirlos después obliga a",
+    "desinstalar y reinstalar en cada tableta.",
+    "",
+    "apiBaseUrl: el backend de CADA cliente es local a su beneficio. Si no se sabe al",
+    "momento de compilar no bloquea — se corrige desde el menú → Servidor —, pero el",
+    "color y el package sí quedan fijos en el APK."
+  ],
+
+  "dev": {
+    "nombre": "Bodega",
+    "nombreLargo": "Bodega (desarrollo)",
+    "_colorNota": "El verde de siempre, para que el dev-client ya instalado no cambie de aspecto.",
+    "color": "#3f8f2e",
+    "package": "cr.confeldan.bodega",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null
+  },
+
+  "altura": {
+    "nombre": "Bodega Altura",
+    "nombreLargo": "Café Altura de San Ramón Especial S.A.",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.bodega.altura",
+    "apiBaseUrl": "http://192.168.10.5:5249",
+    "logo": "altura.png",
+    "_nota": "Mismos color, IP y logo que su APK de promotor. Es el cliente contra el que se probó la app."
+  },
+
+  "coricafe": {
+    "nombre": "Bodega Coricafe",
+    "nombreLargo": "Coricafe",
+    "color": "#475569",
+    "package": "cr.confeldan.bodega.coricafe",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+  },
+
+  "cafex": {
+    "nombre": "Bodega Cafex",
+    "nombreLargo": "Cafex",
+    "color": "#475569",
+    "package": "cr.confeldan.bodega.cafex",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+  },
+
+  "valles": {
+    "nombre": "Bodega Valles",
+    "nombreLargo": "Valles",
+    "color": "#475569",
+    "package": "cr.confeldan.bodega.valles",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+  },
+
+  "tesoros": {
+    "nombre": "Bodega Tesoros",
+    "nombreLargo": "Tesoros",
+    "color": "#475569",
+    "package": "cr.confeldan.bodega.tesoros",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+  }
+}
