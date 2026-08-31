@@ -64,6 +64,7 @@ const extra = (Constants.expoConfig?.extra?.cliente as ClienteExtra | undefined)
 const LOGOS: Record<string, ImageSourcePropType | null> = {
   dev: null,
   altura: require("../../assets/clientes/altura.png"),
+  laeva: require("../../assets/clientes/laeva.png"),
 };
 
 // ─── Color ───────────────────────────────────────────────────────────

@@ -11,14 +11,19 @@
     "  cd android; .\\gradlew.bat assembleRelease",
     "Sin la variable se compila el perfil 'dev', que es el del dev-client instalado.",
     "",
-    "⚠ FALTAN DATOS REALES en las cuatro empresas nuevas: apiBaseUrl, color y logo.",
-    "Cada una lo dice en su clave _falta. Mientras estén así NO hay que generar su",
-    "APK: el package y el color quedan horneados, y corregirlos después obliga a",
-    "desinstalar y reinstalar en cada tableta.",
+    "⚠ COLOR PROVISIONAL: las empresas sin color propio llevan el verde de Altura",
+    "(#5caa3b) como marcador, no porque sea el suyo. Cada una lo dice en su clave",
+    "_falta. NO generar su APK mientras siga ahí: el color y el package quedan",
+    "horneados, y corregirlos después obliga a desinstalar y reinstalar en cada",
+    "tableta — y desinstalar se lleva la toma física sin enviar.",
     "",
     "apiBaseUrl: el backend de CADA cliente es local a su beneficio. Si no se sabe al",
     "momento de compilar no bloquea — se corrige desde el menú → Servidor —, pero el",
-    "color y el package sí quedan fijos en el APK."
+    "color y el package sí quedan fijos en el APK.",
+    "",
+    "El logo, además del PNG en assets/clientes/, necesita su línea en el mapa LOGOS",
+    "de src/branding/index.ts: Metro exige rutas literales, y requerir un archivo que",
+    "no está rompe el bundle entero."
   ],
 
   "dev": {
@@ -38,46 +43,68 @@
     "package": "cr.confeldan.bodega.altura",
     "apiBaseUrl": "http://192.168.10.5:5249",
     "logo": "altura.png",
-    "_nota": "Mismos color, IP y logo que su APK de promotor. Es el cliente contra el que se probó la app."
+    "_nota": "Completa. Mismos color, IP y logo que su APK de promotor. Es el cliente contra el que se probó la app."
+  },
+
+  "laeva": {
+    "nombre": "Bodega La Eva",
+    "nombreLargo": "Beneficio La Eva",
+    "_colorNota": "Su azul real, tomado de su APK de promotor. NO es provisional.",
+    "color": "#095ee9",
+    "package": "cr.confeldan.bodega.laeva",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "laeva.png",
+    "_nota": "Completa. Reutiliza color, IP y logo del catálogo de promotor."
   },
 
   "coricafe": {
     "nombre": "Bodega Coricafe",
-    "nombreLargo": "Coricafe",
-    "color": "#475569",
+    "nombreLargo": "Coricafe, S.A.",
+    "color": "#5caa3b",
     "package": "cr.confeldan.bodega.coricafe",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+    "_falta": ["color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
   },
 
   "cafex": {
     "nombre": "Bodega Cafex",
-    "nombreLargo": "Cafex",
-    "color": "#475569",
+    "nombreLargo": "Cafex S.A.",
+    "_colorNota": "Café oscuro SACADO A OJO del logo, no dado por el cliente. Confirmar el hex antes de generar el APK.",
+    "color": "#3e2618",
     "package": "cr.confeldan.bodega.cafex",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo cafex.png)"]
   },
 
   "valles": {
-    "nombre": "Bodega Valles",
-    "nombreLargo": "Valles",
-    "color": "#475569",
+    "nombre": "Bodega Los Valles",
+    "nombreLargo": "Los Valles",
+    "color": "#5caa3b",
     "package": "cr.confeldan.bodega.valles",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+    "_falta": ["color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
   },
 
   "tesoros": {
-    "nombre": "Bodega Tesoros",
-    "nombreLargo": "Tesoros",
-    "color": "#475569",
+    "nombre": "Bodega Tesoros del Café",
+    "nombreLargo": "Tesoros del Café",
+    "color": "#5caa3b",
     "package": "cr.confeldan.bodega.tesoros",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["nombreLargo (razón social)", "color de marca", "apiBaseUrl", "logo"]
+    "_falta": ["color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
+  },
+
+  "cantaro": {
+    "nombre": "Bodega El Cántaro",
+    "nombreLargo": "Café El Cántaro",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.bodega.cantaro",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar que es cliente", "color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
   }
 }
