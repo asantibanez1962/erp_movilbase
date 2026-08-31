@@ -32,7 +32,7 @@
     "nombreLargo": "Café Altura de San Ramón Especial S.A.",
     "color": "#5caa3b",
     "package": "cr.confeldan.promotor.altura",
-    "apiBaseUrl": "http://192.168.100.10:5249",
+    "apiBaseUrl": "http://192.168.10.5:5249",
     "logo": "altura.png"
   },
 

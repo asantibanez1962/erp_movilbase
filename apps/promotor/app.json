@@ -59,7 +59,9 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "./plugins/monorepo-entry",
+      "./plugins/firma-release"
     ],
     "owner": "alfredosantibanez"
   }
