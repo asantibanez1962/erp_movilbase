@@ -173,8 +173,19 @@ function LoginScreen({ navigation }: Readonly<PropsRuta<"Login">>) {
   return (
     <View style={s.pantalla}>
       <View style={[s.marca, { paddingLeft: m.e(30) + bordes.left }]}>
+        {/* El logo va sobre una tarjeta CLARA y no directo sobre el panel de
+            marca. Todos los logos de los beneficios están hechos para fondo
+            blanco —el de Altura trae su propio recuadro, el de Cafex es marrón
+            oscuro, el de El Cántaro es negro— así que sobre el color de marca
+            desaparecen o se ven como un parche sin querer. Puesta a propósito,
+            la tarjeta se lee como parte del diseño y sirve para todos sin
+            pedirle a nadie una versión en negativo. */}
         {cliente.logo
-          ? <Image source={cliente.logo} style={s.logo} resizeMode="contain" />
+          ? (
+            <View style={s.marcoLogo}>
+              <Image source={cliente.logo} style={s.logo} resizeMode="contain" />
+            </View>
+          )
           : <Text style={s.titulo}>{cliente.nombre}</Text>}
         <Text style={s.sub}>{cliente.nombreLargo}</Text>
       </View>
@@ -221,9 +232,17 @@ function estilosLogin(m: Medidas) {
       backgroundColor: VERDE,
     },
     titulo: { fontSize: m.e(36), fontWeight: "700", color: "#fff" },
+    marcoLogo: {
+      // Blanco PURO y no un gris claro: varios de los PNG traen su propio fondo
+      // blanco, y con la tarjeta apenas grisada se veían dos recuadros
+      // anidados. En blanco, el fondo del archivo se funde con el de la
+      // tarjeta y se lee como una sola pieza.
+      alignSelf: "flex-start", backgroundColor: "#ffffff",
+      borderRadius: m.e(12), padding: m.e(12), marginBottom: m.e(10),
+    },
     // Ancho tope y no alto: los logos de los beneficios son apaisados, y
     // limitarlos por alto los dejaba diminutos en el teléfono acostado.
-    logo: { width: "100%", maxWidth: m.e(260), height: m.e(90), marginBottom: m.e(6) },
+    logo: { width: m.e(230), height: m.e(84) },
     sub: { fontSize: m.e(17), color: "#dcfce7", marginTop: m.e(4) },
     formulario: { flex: 1, justifyContent: "center", paddingLeft: m.e(28) },
     etiqueta: { fontSize: m.e(14), color: "#475569", marginTop: m.e(12), marginBottom: m.e(4) },

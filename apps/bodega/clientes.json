@@ -14,8 +14,11 @@
     "⚠ COLORES SACADOS DEL LOGO A OJO, no dados por el cliente: Coricafé, Cafex,",
     "Los Valles y Tesoros. Cada una lo dice en su _colorNota y en su _falta. Es más",
     "cerca que un marcador, pero sigue siendo una estimación: confirmar el hex",
-    "antes de generar el APK. El que todavía no tiene ningún dato (El Cántaro)",
-    "lleva el verde de Altura como marcador, no porque sea el suyo.",
+    "antes de generar el APK.",
+    "",
+    "Los logos van sobre una tarjeta CLARA dentro del panel de marca, así que no",
+    "hace falta una versión en negativo de ninguno: todos los que tenemos están",
+    "hechos para fondo claro.",
     "",
     "NO generar el APK de una empresa con _falta pendiente: el color y el package",
     "quedan horneados, y corregirlos después obliga a desinstalar y reinstalar en",
@@ -105,14 +108,25 @@
     "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo tesoros.png)"]
   },
 
+  "sacos": {
+    "nombre": "Bodega Sacos e Impresiones",
+    "nombreLargo": "Sacos e Impresiones de Costa Rica",
+    "_colorNota": "El naranja del logo, SACADO A OJO. Se elige sobre el café oscuro del texto a propósito: Cafex y Tesoros ya son cafés oscuros, y tres apps de marca casi idéntica no se distinguirían en la tableta, que es justo lo que el branding tiene que resolver. Confirmar el hex.",
+    "color": "#e0562a",
+    "package": "cr.confeldan.bodega.sacos",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo sacos.png)"]
+  },
+
   "cantaro": {
     "nombre": "Bodega El Cántaro",
     "nombreLargo": "Agrícola El Cántaro",
-    "_colorNota": "SU LOGO NO TIENE COLOR: es negro sobre blanco. Este casi-negro es una lectura razonable, no su color de marca. Es el único de la lista donde el logo no alcanza para deducirlo — hay que preguntárselo al cliente.",
-    "color": "#1f1f1f",
+    "_colorNota": "Negro, confirmado. Se deja un punto por encima del negro absoluto para que se distingan bordes y sombras; a la vista es negro igual. El logo va sobre la tarjeta clara del panel, como el resto.",
+    "color": "#141414",
     "package": "cr.confeldan.bodega.cantaro",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["confirmar que es cliente", "color de marca (el logo no lo da)", "apiBaseUrl", "logo (falta el archivo cantaro.png, en version blanca)"]
+    "_falta": ["confirmar que es cliente", "apiBaseUrl", "logo (falta el archivo cantaro.png)"]
   }
 }
