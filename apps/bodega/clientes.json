@@ -43,6 +43,31 @@
     "logo": null
   },
 
+  "demo": {
+    "nombre": "Bodega DEMO",
+    "nombreLargo": "DEMO — datos de prueba",
+    "_nota": [
+      "Para probar el APK de release y para mostrar la app.",
+      "",
+      "Toma prestados el color y el logo de Altura para que se vea como una app",
+      "de verdad, pero el nombre dice DEMO en las dos líneas del login y en el",
+      "launcher. Un demo que se ve idéntico al APK real de un cliente es una",
+      "trampa: alguien lo instala en la tableta equivocada y trabaja media",
+      "mañana contra la base de desarrollo.",
+      "",
+      "apiBaseUrl apunta a la wifi de la máquina de desarrollo, así que el APK",
+      "anda sin cable mientras el teléfono esté en la misma red. Si esa IP",
+      "cambia, se corrige desde el menú → Servidor sin recompilar.",
+      "",
+      "Su package es propio, así que CONVIVE con el dev-client instalado: no hay",
+      "que desinstalar nada para probar el APK."
+    ],
+    "color": "#5caa3b",
+    "package": "cr.confeldan.bodega.demo",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "altura.png"
+  },
+
   "altura": {
     "nombre": "Bodega Altura",
     "nombreLargo": "Café Altura de San Ramón Especial S.A.",
