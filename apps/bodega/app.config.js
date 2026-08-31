@@ -21,9 +21,49 @@ const clientes = require("./clientes.json");
  */
 
 const ID_DEFAULT = "dev";
+const ARCHIVO_SELLO = ".cliente-compilado";
+
+/**
+ * El cliente que dejo estampado el ultimo prebuild, o null si no hay android/.
+ *
+ * Existe porque este archivo se evalua DOS veces —una en `expo prebuild`, otra
+ * dentro de gradle cuando `expo export:embed` arma el bundle— y son procesos
+ * separados. Sin el sello, una variable de ambiente puesta solo en el primero
+ * deja un APK con el package de un cliente y la URL de otro, que compila,
+ * instala y arranca sin quejarse. Ver plugins/sello-cliente.js.
+ */
+function leerSello() {
+  try {
+    const ruta = path.join(__dirname, "android", ARCHIVO_SELLO);
+    if (!fs.existsSync(ruta)) return null;
+    const id = fs.readFileSync(ruta, "utf8").trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
 
 function resolverCliente() {
-  const id = process.env.EXPO_PUBLIC_CLIENTE ?? ID_DEFAULT;
+  const sello = leerSello();
+  const pedido = process.env.EXPO_PUBLIC_CLIENTE ?? null;
+
+  // Sin variable, MANDA EL SELLO. Es lo que arregla el caso de gradle: la
+  // segunda evaluacion hereda lo que decidio el prebuild aunque nadie exporte
+  // nada. Sin sello —no hay android/ todavia— vale el default.
+  const id = pedido ?? sello ?? ID_DEFAULT;
+
+  // Con variable Y sello que no coinciden, no hay forma de adivinar cual gana
+  // sin producir un APK mezclado. Se rompe fuerte.
+  if (pedido && sello && pedido !== sello) {
+    throw new Error(
+      `android/ esta prebuildeado para "${sello}" pero se esta compilando como "${pedido}".
+` +
+      `El APK saldria con el package de uno y la URL y el logo del otro.
+` +
+      `Corre de nuevo:  EXPO_PUBLIC_CLIENTE=${pedido} npx expo prebuild --platform android --clean`
+    );
+  }
+
   const cliente = clientes[id];
   if (!cliente || id.startsWith("_")) {
     const validos = Object.keys(clientes).filter((k) => !k.startsWith("_"));
@@ -53,6 +93,9 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+    // El sello se registra ACA y no en app.json porque necesita el id ya
+    // resuelto, que app.json no puede saber.
+    plugins: [...(config.plugins ?? []), ["./plugins/sello-cliente", { id: cliente.id }]],
     name: cliente.nombre,
     ...(icono ? { icon: icono } : {}),
     splash: {
