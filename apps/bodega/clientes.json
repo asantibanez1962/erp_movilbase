@@ -11,11 +11,15 @@
     "  cd android; .\\gradlew.bat assembleRelease",
     "Sin la variable se compila el perfil 'dev', que es el del dev-client instalado.",
     "",
-    "⚠ COLOR PROVISIONAL: las empresas sin color propio llevan el verde de Altura",
-    "(#5caa3b) como marcador, no porque sea el suyo. Cada una lo dice en su clave",
-    "_falta. NO generar su APK mientras siga ahí: el color y el package quedan",
-    "horneados, y corregirlos después obliga a desinstalar y reinstalar en cada",
-    "tableta — y desinstalar se lleva la toma física sin enviar.",
+    "⚠ COLORES SACADOS DEL LOGO A OJO, no dados por el cliente: Coricafé, Cafex,",
+    "Los Valles y Tesoros. Cada una lo dice en su _colorNota y en su _falta. Es más",
+    "cerca que un marcador, pero sigue siendo una estimación: confirmar el hex",
+    "antes de generar el APK. El que todavía no tiene ningún dato (El Cántaro)",
+    "lleva el verde de Altura como marcador, no porque sea el suyo.",
+    "",
+    "NO generar el APK de una empresa con _falta pendiente: el color y el package",
+    "quedan horneados, y corregirlos después obliga a desinstalar y reinstalar en",
+    "cada tableta — y desinstalar se lleva la toma física sin enviar.",
     "",
     "apiBaseUrl: el backend de CADA cliente es local a su beneficio. Si no se sabe al",
     "momento de compilar no bloquea — se corrige desde el menú → Servidor —, pero el",
@@ -58,13 +62,14 @@
   },
 
   "coricafe": {
-    "nombre": "Bodega Coricafe",
+    "nombre": "Bodega Coricafé",
     "nombreLargo": "Coricafe, S.A.",
-    "color": "#5caa3b",
+    "_colorNota": "El verde del texto y la hoja, SACADO A OJO. Es más profundo y menos amarillo que el de Altura, con el que se puede confundir de un vistazo. Confirmar el hex antes de generar el APK.",
+    "color": "#2e8b4d",
     "package": "cr.confeldan.bodega.coricafe",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo coricafe.png)"]
   },
 
   "cafex": {
@@ -80,31 +85,34 @@
 
   "valles": {
     "nombre": "Bodega Los Valles",
-    "nombreLargo": "Los Valles",
-    "color": "#5caa3b",
+    "nombreLargo": "Beneficio Los Valles S.A.",
+    "_colorNota": "El azul del texto del logo, SACADO A OJO. El óvalo es un degradé de varios colores y no sirve como color plano. Confirmar el hex antes de generar el APK.",
+    "color": "#1b2a6b",
     "package": "cr.confeldan.bodega.valles",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo valles.png)"]
   },
 
   "tesoros": {
     "nombre": "Bodega Tesoros del Café",
     "nombreLargo": "Tesoros del Café",
-    "color": "#5caa3b",
+    "_colorNota": "El café del medallón, SACADO A OJO del logo. El dorado del borde (~#d1a13c) queda anotado por si algún día la UI usa un acento. Confirmar el hex antes de generar el APK.",
+    "color": "#4a2c17",
     "package": "cr.confeldan.bodega.tesoros",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo tesoros.png)"]
   },
 
   "cantaro": {
     "nombre": "Bodega El Cántaro",
-    "nombreLargo": "Café El Cántaro",
-    "color": "#5caa3b",
+    "nombreLargo": "Agrícola El Cántaro",
+    "_colorNota": "SU LOGO NO TIENE COLOR: es negro sobre blanco. Este casi-negro es una lectura razonable, no su color de marca. Es el único de la lista donde el logo no alcanza para deducirlo — hay que preguntárselo al cliente.",
+    "color": "#1f1f1f",
     "package": "cr.confeldan.bodega.cantaro",
     "apiBaseUrl": "http://10.0.2.2:5249",
     "logo": null,
-    "_falta": ["confirmar que es cliente", "color de marca (hoy el verde de Altura)", "apiBaseUrl", "logo"]
+    "_falta": ["confirmar que es cliente", "color de marca (el logo no lo da)", "apiBaseUrl", "logo (falta el archivo cantaro.png, en version blanca)"]
   }
 }
