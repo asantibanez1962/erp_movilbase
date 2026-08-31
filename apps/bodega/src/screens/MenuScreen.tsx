@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useAuthStore } from "@erp/shared-api";
 import { useSesion } from "../lib/sesion";
 import { useOpciones } from "../lib/opciones";
+import { pendientesLocales } from "../lib/localData";
 import { useMedidas, Medidas } from "../lib/pantalla";
 import type { Props } from "../lib/rutas";
 import { VERDE } from "../branding";
@@ -69,13 +70,20 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
   );
 
   function salir() {
-    Alert.alert(
-      "Cerrar sesión",
-      "Va a entrar otro usuario. No se pierde nada: esta app no guarda movimientos en el aparato.",
-      [
+    // Lo que quedó sin enviar NO se borra: es trabajo válido de esta misma
+    // base y borrarlo sería perderlo. Pero tampoco puede pasar en silencio —
+    // si entra otro operario, esos conteos se van a mandar bajo SU nombre, y
+    // en una toma física la atribución es la mitad del dato. Se avisa y se
+    // deja cancelar para ir a enviarlos primero.
+    void pendientesLocales().then((p) => {
+      const mensaje = p.total === 0
+        ? "Va a entrar otro usuario. No hay nada sin enviar."
+        : `Quedan ${p.conteos} conteo(s) y ${p.ots} OT sin enviar. No se borran, pero si entra otro operario los va a enviar con SU nombre. Conviene enviarlos antes de salir.`;
+
+      Alert.alert("Cerrar sesión", mensaje, [
         { text: "Cancelar", style: "cancel" },
         {
-          text: "Cerrar sesión",
+          text: p.total === 0 ? "Cerrar sesión" : "Salir sin enviar",
           style: "destructive",
           onPress: () => {
             // Los dos: cerrar() borra los tokens y la bodega, logout() es el
@@ -84,8 +92,8 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
             void cerrarSesion().then(() => logout());
           },
         },
-      ],
-    );
+      ]);
+    });
   }
 
   const items: Opcion[] = [];
