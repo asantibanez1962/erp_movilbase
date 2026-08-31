@@ -1,0 +1,49 @@
+{
+  "name": "@erp/bodega",
+  "version": "0.1.0",
+  "private": true,
+  "main": "index.ts",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "ios": "expo run:ios"
+  },
+  "_nota": [
+    "App del montacarguista: cambios de ubicacion dentro de una bodega.",
+    "",
+    "A DIFERENCIA DE LAS OTRAS TRES APPS, esta NO lleva @erp/shared-sync ni",
+    "watermelondb. El movimiento se confirma contra el servidor en el momento",
+    "—el cafe ya se movio fisicamente cuando el operario toca el boton— asi que",
+    "no hay cola de pendientes, ni base local, ni resolucion de conflictos entre",
+    "los varios operarios de una misma bodega. Eso la hace mucho mas chica.",
+    "",
+    "Si algun dia hiciera falta trabajar sin señal, se suma shared-sync; pero",
+    "agregarlo 'por las dudas' traeria toda la complejidad sin necesitarla."
+  ],
+  "dependencies": {
+    "@erp/shared-api": "workspace:*",
+    "@erp/shared-types": "workspace:*",
+    "@expo/vector-icons": "^15.0.2",
+    "@react-navigation/native": "^7.2.5",
+    "@react-navigation/native-stack": "^7.16.0",
+    "axios": "^1.7.0",
+    "expo": "~54.0.34",
+    "expo-build-properties": "~1.0.10",
+    "expo-constants": "~18.0.13",
+    "expo-dev-client": "~6.0.21",
+    "expo-secure-store": "~15.0.8",
+    "expo-status-bar": "~3.0.9",
+    "expo-system-ui": "~6.0.9",
+    "react": "19.1.0",
+    "react-native": "0.81.5",
+    "react-native-gesture-handler": "~2.28.0",
+    "react-native-safe-area-context": "~5.6.0",
+    "react-native-screens": "~4.16.0",
+    "zustand": "^5.0.2"
+  },
+  "devDependencies": {
+    "@types/react": "~19.1.10",
+    "typescript": "~5.9.2"
+  }
+}

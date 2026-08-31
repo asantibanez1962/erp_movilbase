@@ -1,0 +1,43 @@
+{
+  "expo": {
+    "name": "Bodega",
+    "slug": "bodega",
+    "version": "0.1.0",
+    "orientation": "landscape",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#3f8f2e"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "android": {
+      "package": "cr.confeldan.bodega",
+      "versionCode": 1,
+      "permissions": [
+        "INTERNET",
+        "ACCESS_NETWORK_STATE"
+      ]
+    },
+    "extra": {
+      "apiBaseUrl": "http://10.0.2.2:5249"
+    },
+    "plugins": [
+      "expo-secure-store",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "usesCleartextTraffic": true
+          }
+        }
+      ],
+      "./plugins/monorepo-entry",
+      "./plugins/orientacion-horizontal",
+      "./plugins/firma-release"
+    ],
+    "owner": "alfredosantibanez"
+  }
+}
