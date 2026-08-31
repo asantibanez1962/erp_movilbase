@@ -26,11 +26,10 @@ import { VERDE } from "./BuscarScreen";
  * Esconder un botón NO es un control de acceso: cada endpoint exige su permiso
  * por su cuenta. Esto es comodidad para el que usa la app.
  *
- * LO QUE TIENE PERMISO PERO NO EXISTE TODAVIA SE MUESTRA APAGADO. "Estado de
- * OT" está en el legacy y el operario lo va a buscar. Verlo en gris dice
- * "todavía no", que es la verdad; no verlo diría "esta app no lo hace", que no
- * lo es. Lo que NO tiene permiso, en cambio, no se muestra: ahí la respuesta
- * honesta es que ese usuario no lo hace.
+ * Lo que el usuario NO tiene permitido no se muestra: ahí la respuesta honesta
+ * es que ese usuario no lo hace. Si en algún momento hay una opción con permiso
+ * pero sin pantalla, va apagada y no escondida — verla en gris dice "todavía
+ * no", que es la verdad; no verla diría "esta app no lo hace", que no lo es.
  */
 
 interface Opcion {
@@ -107,9 +106,10 @@ export function MenuScreen({ navigation }: Readonly<Props<"Menu">>) {
     items.push({
       clave: "ot",
       titulo: "Estado de OT",
-      detalle: "Todavía no disponible",
-      color: "#94a3b8",
-      activa: false,
+      detalle: "Marcar avance de las órdenes abiertas",
+      color: "#7c3aed",
+      activa: true,
+      alTocar: () => navigation.navigate("Ot"),
     });
   }
 

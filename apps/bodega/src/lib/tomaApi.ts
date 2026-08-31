@@ -115,7 +115,7 @@ export async function enviarToma(
 export interface Opciones {
   cambioUbicacion: { ver: boolean; mover: boolean };
   tomaFisica: { ver: boolean; crear: boolean; contar: boolean };
-  ot: { ver: boolean };
+  ot: { ver: boolean; registrar: boolean };
 }
 
 /**
@@ -134,5 +134,5 @@ export async function cargarOpciones(): Promise<Opciones> {
 export const OPCIONES_CERRADAS: Opciones = {
   cambioUbicacion: { ver: false, mover: false },
   tomaFisica: { ver: false, crear: false, contar: false },
-  ot: { ver: false },
+  ot: { ver: false, registrar: false },
 };

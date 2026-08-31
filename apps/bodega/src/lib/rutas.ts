@@ -14,6 +14,8 @@ export type Rutas = {
   Menu: undefined;
   Buscar: undefined;
   TomaFisica: undefined;
+  Ot: undefined;
+  OtDetalle: { id: number };
   Mover: { partida: Partida };
 };
 

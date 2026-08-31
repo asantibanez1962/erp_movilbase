@@ -18,6 +18,8 @@ import { cargarBodegas, cargarEmpresas, Bodega, Empresa } from "./src/lib/bodega
 import { BuscarScreen, mensajeDeError, VERDE } from "./src/screens/BuscarScreen";
 import { MenuScreen } from "./src/screens/MenuScreen";
 import { MoverScreen } from "./src/screens/MoverScreen";
+import { OtScreen } from "./src/screens/OtScreen";
+import { OtDetalleScreen } from "./src/screens/OtDetalleScreen";
 import { TomaFisicaScreen } from "./src/screens/TomaFisicaScreen";
 import { ServidorScreen } from "./src/screens/ServidorScreen";
 
@@ -121,6 +123,8 @@ export default function App() {
               <Stack.Screen name="Mover" component={MoverScreen} options={{ title: "Mover partida" }} />
               <Stack.Screen name="TomaFisica" component={TomaFisicaScreen}
                             options={{ title: "Toma física" }} />
+              <Stack.Screen name="Ot" component={OtScreen} options={{ title: "OT" }} />
+              <Stack.Screen name="OtDetalle" component={OtDetalleScreen} options={{ title: "OT" }} />
               <Stack.Screen name="Servidor" component={ServidorScreen}
                             options={{ title: "Servidor" }} />
             </>
