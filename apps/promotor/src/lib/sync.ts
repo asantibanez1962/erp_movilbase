@@ -1,4 +1,5 @@
 import { Q } from "@nozbe/watermelondb";
+import { create } from "zustand";
 import { runSync, type FalloPull } from "@erp/shared-sync";
 import type { PushResponse } from "@erp/shared-types";
 import { database } from "./db";
@@ -124,11 +125,39 @@ export async function syncNow(): Promise<FalloPull[]> {
     console.warn("purga de datos locales vencidos falló", err);
   }
 
+  // Llegar hasta acá significa que hablamos con el servidor. Aunque `fallos` traiga
+  // colecciones, hubo ida y vuelta: la puerta del cambio de clave se apoya en esto
+  // para no bloquear a un promotor sin señal. Ver useSyncEstado.
+  useSyncEstado.getState().marcarOk();
+
   // Las colecciones que no se pudieron traer se DEVUELVEN en vez de tirar: las demás
   // ya se aplicaron y avanzaron su checkpoint, así que el sync sirvió. Quien llame
   // decide cómo mostrarlo — parcial es una advertencia, y que fallen todas, un error.
   return fallos;
 }
+
+/**
+ * ¿Hubo, en esta corrida de la app, un sync que efectivamente llegó al servidor?
+ *
+ * Existe para una sola cosa: decidir cuándo se puede exigir el cambio de clave
+ * vencida. Un promotor sin señal NO puede cambiarla —el endpoint es del
+ * servidor—, así que bloquearlo lo dejaría encerrado afuera de sus propios datos,
+ * en una finca, sin salida más que desinstalar.
+ *
+ * Se prefirió esto a detectar conectividad con NetInfo: no hace falta una
+ * dependencia nueva para responder la pregunta que de verdad importa, que no es
+ * "¿hay red?" sino "¿este teléfono logró hablar con SU servidor?". Con VPN de por
+ * medio, además, tener red no implica alcanzar el backend.
+ *
+ * No se persiste a propósito: al reabrir la app vuelve a false y la exigencia
+ * espera al primer sync, que es justo el momento en que sabemos que se puede.
+ */
+export const useSyncEstado = create<{ huboSyncOk: boolean; marcarOk: () => void }>(
+  (set) => ({
+    huboSyncOk: false,
+    marcarOk: () => set({ huboSyncOk: true }),
+  })
+);
 
 /**
  * Una línea que el promotor pueda leer por teléfono. Incluye lo que había pendiente

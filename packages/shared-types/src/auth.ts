@@ -29,3 +29,8 @@ export interface AuthEnvelope<T> {
   message?: string;
   data?: T;
 }
+
+export interface ChangePasswordRequest {
+  currentPassword: string;
+  newPassword: string;
+}

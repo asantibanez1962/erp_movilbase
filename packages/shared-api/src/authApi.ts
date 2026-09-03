@@ -1,6 +1,7 @@
 import axios from "axios";
 import type {
   AuthEnvelope,
+  ChangePasswordRequest,
   LoginRequest,
   LoginResponse,
   RefreshRequest,
@@ -40,6 +41,40 @@ export class AuthApi {
 
   async refresh(req: RefreshRequest): Promise<LoginResponse> {
     return this.postAuth("/api/auth/refresh", req);
+  }
+
+  /**
+   * Cambio de clave del propio usuario. Va aparte de postAuth por dos razones:
+   * necesita el Bearer (el endpoint es [Authorize]) y en el caso feliz responde
+   * 204 SIN CUERPO, asi que no hay envelope que leer.
+   *
+   * El token existe aunque la clave este vencida: el BE emite sesion igual y
+   * delega en el cliente forzar el cambio. Eso es lo que hace posible esta
+   * pantalla — y tambien lo que hacia que, sin ella, la politica no se aplicara
+   * en el telefono y nadie se enterara.
+   *
+   * Errores: 422 con code de politica (PASSWORD_*), 400 el resto
+   * (CURRENT_PASSWORD_INVALID, PASSWORD_SAME_AS_CURRENT, PASSWORD_IN_HISTORY).
+   * Ambos llegan como AuthError con su code, igual que login.
+   */
+  async changePassword(accessToken: string, req: ChangePasswordRequest): Promise<void> {
+    try {
+      await axios.post(`${this.baseURL}/api/auth/change-password`, req, {
+        timeout: 15_000,
+        headers: {
+          "X-Client-Kind": "mobile",
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+    } catch (e) {
+      const cuerpo = (e as { response?: { data?: AuthEnvelope<unknown> } })?.response?.data;
+      if (cuerpo?.code) throw new AuthError(cuerpo.code, cuerpo.message);
+      if ((e as { response?: unknown })?.response) {
+        throw new AuthError("CHANGE_FAILED", "El servidor rechazó el cambio de clave.");
+      }
+      throw e; // sin response = red de verdad
+    }
   }
 
   /**

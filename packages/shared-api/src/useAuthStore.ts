@@ -58,6 +58,15 @@ interface AuthState {
   login: (usuario: string, password: string) => Promise<void>;
   refresh: () => Promise<string | null>;
   logout: () => Promise<void>;
+
+  /**
+   * Cambia la clave del usuario logueado y, si sale bien, baja la bandera.
+   *
+   * No re-loguea ni toca los tokens: el BE no los invalida al cambiar la clave,
+   * y forzar un login nuevo dejaria al promotor tecleando credenciales en el
+   * campo justo despues de haber tecleado dos claves. La sesion sigue viva.
+   */
+  cambiarClave: (actual: string, nueva: string) => Promise<void>;
 }
 
 /**
@@ -260,5 +269,21 @@ export const useAuthStore = create<AuthState>((set, get) => ({
       passwordExpired: false,
       isAuthenticated: false,
     });
+  },
+
+  async cambiarClave(actual: string, nueva: string) {
+    const { _api, accessToken } = get();
+    if (!_api) throw new Error("Auth store sin inicializar");
+    if (!accessToken) throw new Error("No hay sesión activa");
+
+    await _api.changePassword(accessToken, {
+      currentPassword: actual,
+      newPassword: nueva,
+    });
+
+    // Solo despues del await: si el cambio fallo, la bandera tiene que seguir
+    // arriba o la pantalla se cierra y el usuario queda con la clave vencida
+    // creyendo que la cambio.
+    set({ passwordExpired: false });
   },
 }));

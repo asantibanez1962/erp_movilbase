@@ -29,8 +29,9 @@ import { useAuthStore } from "@erp/shared-api";
 import { cliente } from "./src/branding";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { ContextoScreen } from "./src/screens/ContextoScreen";
+import { CambiarClaveScreen } from "./src/screens/CambiarClaveScreen";
 import { useSesion } from "./src/lib/sesion";
-import { cambiarCosecha, contarPendientes, HayPendientesError } from "./src/lib/sync";
+import { cambiarCosecha, contarPendientes, HayPendientesError, useSyncEstado } from "./src/lib/sync";
 import { cargarContexto } from "./src/lib/contexto";
 import {
   describirPendientes,
@@ -662,6 +663,40 @@ function AuthenticatedNav() {
 
 // ─── Root ────────────────────────────────────────────────────────────
 
+/**
+ * Puerta del cambio de clave vencida.
+ *
+ * El BE marca `passwordExpired` en el login Y en el refresh, pero emite la sesión
+ * igual y delega en el cliente forzar el cambio. Sin esta puerta, en el teléfono
+ * la política no se aplicaba: el promotor entraba, trabajaba, y nadie se enteraba.
+ *
+ * LAS TRES CONDICIONES, Y POR QUÉ CADA UNA
+ * ----------------------------------------
+ *   passwordExpired   lo obvio: el servidor dice que venció.
+ *
+ *   huboSyncOk        este teléfono ya habló con SU servidor en esta corrida. Sin
+ *                     esto, un promotor sin señal quedaría bloqueado sin poder
+ *                     cambiar la clave —el endpoint es remoto—, encerrado afuera
+ *                     de sus propios datos en el campo.
+ *
+ *   porEnviar === 0   no queda trabajo que dependa de él. Perder una jornada de
+ *                     campo es peor que una clave vencida un día más.
+ *
+ * Se mira `porEnviar` y NO `total`: las retenidas esperan un evento de negocio y no
+ * se van sincronizando (ver usePendientes). Con `total` bastaría una fila retenida
+ * para que a ese promotor no se le pidiera la clave NUNCA.
+ */
+function PuertaClaveVencida({ children }: { children: React.ReactNode }) {
+  const passwordExpired = useAuthStore((s) => s.passwordExpired);
+  const huboSyncOk = useSyncEstado((s) => s.huboSyncOk);
+  const { porEnviar } = usePendientes();
+
+  if (passwordExpired && huboSyncOk && porEnviar === 0) {
+    return <CambiarClaveScreen />;
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [bootDone, setBootDone] = useState(false);
@@ -727,7 +762,11 @@ export default function App() {
             // Autenticado pero sin contexto de trabajo: el sync está scopeado por
             // empresa y cosecha, así que entrar sin elegirlas no traería nada.
             if (sesionCompanyId == null || !sesionCosecha) return <ContextoScreen />;
-            return <AuthenticatedNav key={generacion} />;
+            return (
+              <PuertaClaveVencida>
+                <AuthenticatedNav key={generacion} />
+              </PuertaClaveVencida>
+            );
           })()}
         </NavigationContainer>
       </SafeAreaProvider>
