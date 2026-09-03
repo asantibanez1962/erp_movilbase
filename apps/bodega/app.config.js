@@ -43,6 +43,24 @@ function leerSello() {
   }
 }
 
+/**
+ * ¿El comando en curso es un `expo prebuild`?
+ *
+ * Se mira argv y no una variable propia porque la respuesta tiene que ser un
+ * hecho del proceso, no algo que alguien pueda dejar exportado en su shell sin
+ * darse cuenta — que es exactamente la clase de error que este archivo existe
+ * para atajar.
+ *
+ * La comparacion es EXACTA contra "prebuild" y no un `includes` sobre la linea
+ * entera: la segunda evaluacion la dispara `expo export:embed` dentro de gradle,
+ * y una coincidencia floja ahi seria un falso positivo que apaga el guard justo
+ * en el momento en que hace falta. Si esto se equivoca, que se equivoque
+ * bloqueando.
+ */
+function esPrebuild() {
+  return process.argv.some((a) => a === "prebuild");
+}
+
 function resolverCliente() {
   const sello = leerSello();
   const pedido = process.env.EXPO_PUBLIC_CLIENTE ?? null;
@@ -52,15 +70,27 @@ function resolverCliente() {
   // nada. Sin sello —no hay android/ todavia— vale el default.
   const id = pedido ?? sello ?? ID_DEFAULT;
 
-  // Con variable Y sello que no coinciden, no hay forma de adivinar cual gana
+  // Con variable Y sello que no coinciden no hay forma de adivinar cual gana
   // sin producir un APK mezclado. Se rompe fuerte.
+  //
+  // SALVO durante un prebuild, que es precisamente la operacion que REESCRIBE el
+  // sello: ahi el desacuerdo no es un peligro sino el pedido de cambiar de
+  // cliente. Sin esta salida el guard se muerde la cola —el remedio que sugeria
+  // el mensaje (`prebuild --clean`) evalua la config ANTES de borrar android/, o
+  // sea que chocaba contra el propio guard y no habia forma de cambiar de cliente
+  // sin borrar el sello a mano. Comprobado el 03-sep-2026.
   if (pedido && sello && pedido !== sello) {
-    throw new Error(
-      `android/ esta prebuildeado para "${sello}" pero se esta compilando como "${pedido}".
-` +
-      `El APK saldria con el package de uno y la URL y el logo del otro.
-` +
-      `Corre de nuevo:  EXPO_PUBLIC_CLIENTE=${pedido} npx expo prebuild --platform android --clean`
+    if (!esPrebuild()) {
+      throw new Error(
+        `android/ esta prebuildeado para "${sello}" pero se esta compilando como "${pedido}".\n` +
+        `El APK saldria con el package de uno y la URL y el logo del otro.\n` +
+        `Corre de nuevo:  EXPO_PUBLIC_CLIENTE=${pedido} npx expo prebuild --platform android --clean`
+      );
+    }
+    // Se avisa igual: el prebuild se va a llevar puesto lo nativo del cliente
+    // anterior, y conviene que quede dicho en la consola y no solo en el diff.
+    console.warn(
+      `[sello] android/ estaba prebuildeado para "${sello}" y se va a regenerar como "${pedido}".`
     );
   }
 
