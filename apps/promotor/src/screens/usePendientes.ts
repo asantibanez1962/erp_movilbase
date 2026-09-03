@@ -19,7 +19,7 @@ import { politicaDe } from "../lib/politicas";
  * Existe además porque se sacó el sync automático al guardar: sin un indicador
  * visible, el promotor se va del campo con trabajo sin enviar.
  */
-const TABLAS = ["solicitudes", "entregadores", "visitas"] as const;
+const TABLAS = ["solicitudes", "entregadores", "visitas", "productores"] as const;
 
 export interface Pendientes {
   porEnviar: number;

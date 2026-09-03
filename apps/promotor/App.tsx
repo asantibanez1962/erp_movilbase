@@ -135,6 +135,13 @@ function ProductoresStackScreens() {
         component={ProductorDetailScreen}
         options={{ title: "Productor" }}
       />
+      {/* La misma pantalla genérica de adjuntos que usan solicitudes y visitas:
+          recibe colección + id del registro. Acá son las fotos del productor. */}
+      <ProductoresStack.Screen
+        name="Adjuntos"
+        component={AdjuntosScreen}
+        options={{ title: "Fotos del productor" }}
+      />
     </ProductoresStack.Navigator>
   );
 }

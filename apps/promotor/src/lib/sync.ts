@@ -12,7 +12,11 @@ import { useSesion } from "./sesion";
 import { cargarPoliticas, puedeEnviarse } from "./politicas";
 
 /** Colecciones que el teléfono origina y por lo tanto pueden tener pendientes. */
-const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas"] as const;
+/* `productores` entra acá aunque el teléfono no las cree: puede MODIFICARLAS
+   (teléfono y email, v1.80/RC/10), y una corrección sin enviar es trabajo sin
+   enviar igual que una visita. Si no estuviera, cambiar de cosecha borraría la
+   corrección sin avisar. */
+const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas", "productores"] as const;
 
 /**
  * Trigger manual de sincronización. Llamado desde:

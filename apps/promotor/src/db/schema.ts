@@ -41,8 +41,9 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *   2 → resultado_atv / consultado_atv en solicitudes + tabla bitacora
  *   3 → server_id en las bidireccionales (id numérico del servidor)
  *   4 → requiere_gps en tipos_visita + gps_omitido en visitas
+ *   5 → tabla recibos_cosecha (totales por cosecha en la ficha del productor)
  */
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 /**
  * Orden de sync. Importa para el push: el padre tiene que subir antes que el hijo
@@ -59,6 +60,7 @@ export const COLLECTIONS = [
   "solicitudes",
   "entregadores",
   "visitas",
+  "recibos_cosecha",
 ] as const;
 
 export const schema = appSchema({
@@ -99,6 +101,27 @@ export const schema = appSchema({
     // promotor reconoce ('MIRAMAR'). /api/mobile/contexto ya trae los nombres de
     // SUS zonas, pero eso no alcanza para etiquetar la zona de una fila cualquiera
     // ni para el admin, que no tiene zonas específicas listadas.
+    // Totales de recibos por cosecha, para la ficha del productor. La cosecha
+    // elegida y las 3 anteriores; el servidor decide cuáles con la misma regla que
+    // el picker de cosechas (ver vw_rc_recibos_cosecha_movil, v1.80/RC/11).
+    //
+    // NO hay detalle de recibos a propósito: son ~40 mil por cosecha en la base
+    // entera. Acá viaja una suma por par (productor, cosecha) y nada más.
+    //
+    // `id` es "<idsocio>-<cosecha>", que lo arma la vista. No es un id de fila del
+    // servidor: es el par que identifica al total, y por eso se mantiene estable
+    // cuando entran recibos nuevos.
+    tableSchema({
+      name: "recibos_cosecha",
+      columns: [
+        { name: "id_socio", type: "number", isIndexed: true },
+        { name: "cosecha", type: "string", isIndexed: true },
+        { name: "cantidad", type: "number" },
+        { name: "recibos", type: "number" },
+        { name: "compania", type: "number", isOptional: true },
+        { name: "sync_updated_at", type: "number", isIndexed: true },
+      ],
+    }),
     tableSchema({
       name: "zonas",
       columns: [
