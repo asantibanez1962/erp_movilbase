@@ -697,6 +697,16 @@ function PuertaClaveVencida({ children }: { children: React.ReactNode }) {
   if (passwordExpired && huboSyncOk && !cargando && porEnviar === 0) {
     return <CambiarClaveScreen />;
   }
+
+  // Cuando el servidor DICE que la clave vencio pero la puerta no se abre, hay que
+  // poder saber cual de las tres condiciones falta. Sin esto el sintoma es "no pasa
+  // nada", que no distingue "todavia no toca" de "esta roto" — y son la misma
+  // pantalla en blanco.
+  if (passwordExpired) {
+    console.info(
+      `[clave] vencida, puerta cerrada: huboSyncOk=${huboSyncOk} cargando=${cargando} porEnviar=${porEnviar}`
+    );
+  }
   return <>{children}</>;
 }
 

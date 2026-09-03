@@ -27,7 +27,13 @@ export async function bootstrapApi(): Promise<void> {
   // 0. La dirección del servidor ANTES que nada: el auth store y el cliente axios
   //    la resuelven en cada llamada, así que esto es sólo para que la primera request
   //    no tenga que esperar a SecureStore.
-  await cargarUrlServidor();
+  const url = await cargarUrlServidor();
+
+  // Se deja dicho en el log a proposito. "¿A que servidor esta hablando este
+  // telefono?" es la primera pregunta de cualquier diagnostico en campo, y hasta
+  // ahora habia que ir a buscarla a una pantalla — o adivinarla, que ya costo dos
+  // vueltas de pruebas creyendo que la app fallaba cuando le hablaba a otra base.
+  console.info(`[api] servidor en uso: ${url}`);
 
   // 1. Hidrata auth store desde SecureStore (refresh token vivo → arrancamos
   //    logueado sin pedir credenciales).
