@@ -689,9 +689,12 @@ function AuthenticatedNav() {
 function PuertaClaveVencida({ children }: { children: React.ReactNode }) {
   const passwordExpired = useAuthStore((s) => s.passwordExpired);
   const huboSyncOk = useSyncEstado((s) => s.huboSyncOk);
-  const { porEnviar } = usePendientes();
+  const { porEnviar, cargando } = usePendientes();
 
-  if (passwordExpired && huboSyncOk && porEnviar === 0) {
+  // `cargando` no es un detalle: los contadores arrancan en 0 mientras la base
+  // responde, y acá 0 significa "exigí la clave". Sin esperarlos, la pantalla
+  // aparecía un instante encima de la app y se iba sola cuando llegaba el conteo.
+  if (passwordExpired && huboSyncOk && !cargando && porEnviar === 0) {
     return <CambiarClaveScreen />;
   }
   return <>{children}</>;

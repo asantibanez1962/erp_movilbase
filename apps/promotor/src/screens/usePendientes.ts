@@ -25,6 +25,19 @@ export interface Pendientes {
   porEnviar: number;
   retenidas: number;
   total: number;
+  /**
+   * `true` hasta que las consultas contestaron por primera vez.
+   *
+   * Los contadores arrancan en 0 y ese 0 NO es una medición: es el valor inicial
+   * mientras WatermelonDB responde. Para el badge del drawer da lo mismo —se ve
+   * 0 por un instante—, pero quien use estos números para DECIDIR algo tiene que
+   * poder distinguir "no hay nada pendiente" de "todavía no sé".
+   *
+   * Lo pide la puerta del cambio de clave (App.tsx): ahí 0 significa "exigí la
+   * clave ahora", y sin este flag la pantalla parpadeaba sobre la app antes de
+   * que llegara el conteo real.
+   */
+  cargando: boolean;
 }
 
 export function usePendientes(): Pendientes {
@@ -33,6 +46,7 @@ export function usePendientes(): Pendientes {
     porEnviar: 0,
     retenidas: 0,
     total: 0,
+    cargando: true,
   });
 
   useEffect(() => {
@@ -48,6 +62,7 @@ export function usePendientes(): Pendientes {
         porEnviar: Math.max(totalSinSync - totalRetenidas, 0),
         retenidas: totalRetenidas,
         total: totalSinSync,
+        cargando: false,
       });
     };
 
