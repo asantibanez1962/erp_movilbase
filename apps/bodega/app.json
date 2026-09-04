@@ -22,7 +22,17 @@
       ]
     },
     "extra": {
-      "apiBaseUrl": "http://10.0.2.2:5249"
+      "apiBaseUrl": "http://192.168.100.10:5249",
+      "cliente": {
+        "id": "demo",
+        "nombre": "Bodega DEMO",
+        "nombreLargo": "DEMO — datos de prueba",
+        "color": "#5caa3b",
+        "tieneLogo": true
+      },
+      "eas": {
+        "projectId": "54b1ef8b-681a-4a31-b504-aea13063c3d0"
+      }
     },
     "plugins": [
       "expo-secure-store",
