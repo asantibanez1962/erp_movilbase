@@ -27,6 +27,17 @@
     "logo": null
   },
 
+  "altura-test": {
+    "nombre": "Promotor Altura Pruebas",
+    "nombreLargo": "Café Altura — capacitación",
+    "_colorNota": "Ámbar A PROPÓSITO, distinto del verde de Altura. En un aula la app de práctica y la de trabajo real se abren en el mismo teléfono, y el color del encabezado es lo único que se ve sin leer. Un trainee no puede pasar media hora capturando visitas de práctica creyendo que está en producción.",
+    "color": "#d97706",
+    "_ipNota": "Puerto 5250: la base de PRUEBAS. El package es otro que el de producción, así que las dos apps conviven con bases locales separadas y los datos de capacitación no pueden mezclarse con los reales.",
+    "package": "cr.confeldan.promotor.alturapruebas",
+    "apiBaseUrl": "http://192.168.10.5:5250",
+    "logo": "altura.png"
+  },
+
   "altura": {
     "nombre": "Promotor Altura",
     "nombreLargo": "Café Altura de San Ramón Especial S.A.",
