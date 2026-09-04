@@ -11,6 +11,8 @@ import { useAuthStore, TokenStore } from "@erp/shared-api";
 
 import { cargarUrlServidor, urlServidor } from "./src/lib/servidor";
 import { useSesion } from "./src/lib/sesion";
+import { useServidorAlcanzado } from "./src/lib/api";
+import { pendientesLocales } from "./src/lib/localData";
 import { useOpciones } from "./src/lib/opciones";
 import { useMedidas, Medidas } from "./src/lib/pantalla";
 import type { Rutas, Props as PropsRuta } from "./src/lib/rutas";
@@ -18,6 +20,7 @@ import { cargarBodegas, cargarEmpresas, Bodega, Empresa } from "./src/lib/bodega
 import { BuscarScreen, mensajeDeError } from "./src/screens/BuscarScreen";
 import { cliente, VERDE } from "./src/branding";
 import { MenuScreen } from "./src/screens/MenuScreen";
+import { CambiarClaveScreen } from "./src/screens/CambiarClaveScreen";
 import { MoverScreen } from "./src/screens/MoverScreen";
 import { OtScreen } from "./src/screens/OtScreen";
 import { OtDetalleScreen } from "./src/screens/OtDetalleScreen";
@@ -65,6 +68,23 @@ export default function App() {
   const cargandoSesion = useSesion((s) => s.cargando);
   const idBodega = useSesion((s) => s.idBodega);
 
+  const claveVencida = useAuthStore((s) => s.passwordExpired);
+  const servidorOk = useServidorAlcanzado((s) => s.ok);
+  const [pendientes, setPendientes] = React.useState<number | null>(null);
+
+  /* Se cuentan SOLO cuando la puerta podria abrirse. Leer los archivos en cada
+     arranque seria trabajo inutil: el 99% de las veces la clave no vencio. */
+  React.useEffect(() => {
+    if (!claveVencida || !servidorOk) { setPendientes(null); return; }
+    let vivo = true;
+    pendientesLocales()
+      .then((p) => vivo && setPendientes(p.total))
+      // Si no se pueden leer, NO se abre la puerta: mejor no pedir la clave que
+      // pedirla sobre trabajo que no supimos ver.
+      .catch(() => vivo && setPendientes(null));
+    return () => { vivo = false; };
+  }, [claveVencida, servidorOk]);
+
   const [urlLista, setUrlLista] = React.useState(false);
 
   React.useEffect(() => {
@@ -72,7 +92,12 @@ export default function App() {
     // es sincrónica y hasta que esto termine devuelve la dirección compilada:
     // si el login saliera antes, iría al servidor equivocado.
     void (async () => {
-      await cargarUrlServidor();
+      const url = await cargarUrlServidor();
+      // "¿A que servidor le habla este aparato?" es la primera pregunta de
+      // cualquier diagnostico, y hasta ahora habia que ir a buscarla a una
+      // pantalla. En promotor se perdio una tarde probando contra un backend
+      // creyendo que la app fallaba, cuando le hablaba a otra base.
+      console.info(`[api] servidor en uso: ${url}`);
       setUrlLista(true);
       await initAuth({ baseURL: () => urlServidor(), tokenStore });
       await restaurar();
@@ -116,6 +141,21 @@ export default function App() {
             </>
           ) : !idBodega ? (
             <Stack.Screen name="Bodega" component={BodegaScreen} options={{ title: "Elegir bodega" }} />
+          ) : claveVencida && servidorOk && pendientes === 0 ? (
+            /* Puerta del cambio de clave vencida. Las tres condiciones:
+                 claveVencida  lo dice el servidor
+                 servidorOk    este aparato ya alcanzo su servidor en esta corrida;
+                               sin esto, un operario sin red quedaria encerrado
+                               afuera de la app, en planta, porque el endpoint para
+                               cambiarla es remoto
+                 pendientes 0  no hay conteos ni OT sin enviar. Perder una toma
+                               fisica a medio contar es peor que una clave vencida
+                               un dia mas
+               `pendientes === 0` y no `!pendientes`: arranca en null mientras se
+               cuentan los archivos, y ahi null significa "todavia no se", no "no
+               hay". Con `!pendientes` la pantalla aparecia sola por un instante. */
+            <Stack.Screen name="CambiarClave" component={CambiarClaveScreen}
+                          options={{ title: "Cambiar clave", headerShown: false }} />
           ) : (
             <>
               <Stack.Screen name="Menu" component={MenuScreen} options={{ title: "Bodega" }} />

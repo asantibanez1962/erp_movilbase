@@ -30,7 +30,10 @@ export async function bootstrapApi(): Promise<void> {
   //    Ya no hay apuro por el orden —el auth store y el cliente axios la resuelven en
   //    cada llamada, no al construirse— pero se lee acá igual para que la primera
   //    request no tenga que esperar a SecureStore.
-  await cargarUrlServidor();
+  const url = await cargarUrlServidor();
+  // Ver la nota en promotor: sin esto, "a que servidor le habla" solo se sabe
+  // abriendo una pantalla, y en un diagnostico a distancia no se sabe.
+  console.info(`[api] servidor en uso: ${url}`);
 
   // El modo de impresión es preferencia del teléfono, igual que la dirección: se lee acá
   // para que la primera impresión no tenga que esperar a nadie.

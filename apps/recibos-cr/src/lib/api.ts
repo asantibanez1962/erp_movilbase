@@ -22,6 +22,12 @@ let httpClient: ReturnType<typeof createApiClient> | null = null;
 let syncClient: SyncApi | null = null;
 
 export async function bootstrapApi(): Promise<void> {
+  // Acá la direccion sale fija del build (no hay override en runtime como en
+  // promotor o bodega), pero se deja dicha igual: en un diagnostico a distancia
+  // "¿a que servidor le habla este aparato?" es la primera pregunta, y con dos
+  // APK del mismo cliente instalados la respuesta no es obvia.
+  console.info(`[api] servidor en uso: ${config.apiBaseUrl}`);
+
   // 1. Hidrata auth store desde SecureStore (refresh token vivo → arrancamos
   //    logueado sin pedir credenciales).
   await useAuthStore.getState().init({

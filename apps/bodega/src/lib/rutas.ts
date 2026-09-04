@@ -12,6 +12,7 @@ export type Rutas = {
   Servidor: undefined;
   Bodega: undefined;
   Menu: undefined;
+  CambiarClave: undefined;
   Buscar: undefined;
   TomaFisica: undefined;
   Ot: undefined;
