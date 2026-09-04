@@ -23,23 +23,39 @@
     },
     "altura": {
       "extends": "preview",
-      "env": { "EXPO_PUBLIC_CLIENTE": "altura" }
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "altura"
+      }
+    },
+    "altura-test": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "altura-test"
+      }
     },
     "laeva": {
       "extends": "preview",
-      "env": { "EXPO_PUBLIC_CLIENTE": "laeva" }
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "laeva"
+      }
     },
     "diamante": {
       "extends": "preview",
-      "env": { "EXPO_PUBLIC_CLIENTE": "diamante" }
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "diamante"
+      }
     },
     "santacruz": {
       "extends": "preview",
-      "env": { "EXPO_PUBLIC_CLIENTE": "santacruz" }
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "santacruz"
+      }
     },
     "marespi": {
       "extends": "preview",
-      "env": { "EXPO_PUBLIC_CLIENTE": "marespi" }
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "marespi"
+      }
     },
     "production": {
       "android": {
