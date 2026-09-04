@@ -11,6 +11,7 @@ import {
   View,
 } from "react-native";
 import { useAuthStore, AuthError } from "@erp/shared-api";
+import { asegurarDuenoBase } from "../lib/duenoBase";
 import { cliente } from "../branding";
 import { ServidorScreen } from "./ServidorScreen";
 
@@ -39,6 +40,12 @@ export function LoginScreen() {
     setLoading(true);
     try {
       await login(usuario.trim(), password);
+
+      // Si la base local era de OTRO promotor, se borra acá — antes de que se vea
+      // una sola fila. Entrar con otro usuario es un cambio de alcance, y esos no
+      // se arreglan sincronizando (ver lib/alcance.ts).
+      const id = useAuthStore.getState().user?.id;
+      if (id != null) await asegurarDuenoBase(id);
       // NO se sincroniza acá: el pull está scopeado por empresa y cosecha, y en
       // este punto el usuario todavía no las eligió. Antes se llamaba a syncNow()
       // y el BE respondía 400 MISSING_COMPANY. El primer sync lo dispara

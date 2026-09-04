@@ -6,6 +6,7 @@ import {
   useAuthStore,
 } from "@erp/shared-api";
 import { config } from "./config";
+import { asegurarDuenoBase } from "./duenoBase";
 import { getOrCreateDeviceId } from "./deviceId";
 import { cargarUrlServidor } from "./servidor";
 import { contextoActual } from "./sesion";
@@ -44,6 +45,20 @@ export async function bootstrapApi(): Promise<void> {
     baseURL: () => config.apiBaseUrl,
     tokenStore,
   });
+
+  // 1b. La base local tiene dueño. Se verifica también acá y no sólo en el login:
+  //     si la app se cerró entre un login y su borrado, el usuario nuevo arrancaría
+  //     con la base del anterior. Ver asegurarDuenoBase.
+  const usuarioId = useAuthStore.getState().user?.id;
+  if (usuarioId != null) {
+    try {
+      if (await asegurarDuenoBase(usuarioId)) {
+        console.info("[alcance] la base local era de otro usuario; se rebajó");
+      }
+    } catch (err) {
+      console.warn("no se pudo verificar el dueño de la base local", err);
+    }
+  }
 
   // 2. Crear axios + sync API una sola vez.
   httpClient = createApiClient({

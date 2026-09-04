@@ -38,7 +38,7 @@ import {
   rebajarTodo,
   resumenPendientes,
 } from "./src/lib/rebajar";
-import { cerrarSesion, verificarAlcance } from "./src/lib/alcance";
+import { cerrarSesion, salirSinBorrar, verificarAlcance } from "./src/lib/alcance";
 import { describirFallos } from "@erp/shared-sync";
 import { COLLECTIONS } from "./src/db/schema";
 import { PickerModal } from "./src/screens/componentes/Picker";
@@ -465,24 +465,32 @@ function CustomDrawer(props: DrawerContentComponentProps) {
    */
   const salir = async () => {
     const pendientes = await resumenPendientes();
-    const ejecutar = async (descartar: boolean) => {
+
+    const ejecutar = async () => {
       try {
-        await cerrarSesion({ descartar });
+        await salirSinBorrar();
         logout();
       } catch (e) {
         setUltimoError((e as Error)?.message ?? "No se pudo cerrar la sesión");
       }
     };
 
+    // Ya NO se borra al salir: los datos son del usuario y se quedan esperándolo.
+    // El borrado ocurre si entra OTRO (ver asegurarDuenoBase en lib/alcance.ts),
+    // que es lo que de verdad lo justifica.
+    //
+    // Se sigue pidiendo confirmación y se sigue avisando de lo pendiente, pero el
+    // aviso cambió de sentido: antes decía "esto se pierde"; ahora dice "esto se
+    // queda acá y nadie más lo va a poder enviar", que es lo cierto — esas filas
+    // se suben con el token de quien las creó.
     if (pendientes.total === 0) {
       Alert.alert(
         "Cerrar sesión",
-        "Se borran los datos de este teléfono: pertenecen a tu usuario y a tu zona. " +
-          "No hay nada sin enviar, así que no se pierde trabajo, pero al volver a " +
-          "entrar hay que bajarlos completos del servidor.",
+        "Tus datos quedan en el teléfono y te esperan cuando vuelvas a entrar. " +
+          "Sólo se borran si entra otro promotor.",
         [
           { text: "Cancelar", style: "cancel" },
-          { text: "Cerrar sesión", style: "destructive", onPress: () => void ejecutar(false) },
+          { text: "Cerrar sesión", onPress: () => void ejecutar() },
         ]
       );
       return;
@@ -493,15 +501,12 @@ function CustomDrawer(props: DrawerContentComponentProps) {
       `Todavía no subieron: ${describirPendientes(pendientes)}.
 
 ` +
-        "Al cerrar sesión se borran los datos de este teléfono y ESO SE PIERDE. " +
-        "Conviene sincronizar primero.",
+        "No se pierde: queda guardado y se envía cuando vuelvas a entrar. " +
+        "Pero si en este teléfono entra otro promotor, se borra — sólo vos podés " +
+        "enviarlo. Lo más seguro es sincronizar antes.",
       [
         { text: "Cancelar", style: "cancel" },
-        {
-          text: "Salir y descartar",
-          style: "destructive",
-          onPress: () => void ejecutar(true),
-        },
+        { text: "Salir igual", onPress: () => void ejecutar() },
       ]
     );
   };

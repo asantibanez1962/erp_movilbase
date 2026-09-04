@@ -147,3 +147,21 @@ export async function cerrarSesion(opts: { descartar: boolean }): Promise<void> 
   // Remontar: el reset deja las pantallas con suscripciones muertas. Ver sesion.ts.
   useSesion.getState().remontar();
 }
+
+/**
+ * Salir SIN borrar. Es lo que hace el botón del drawer.
+ *
+ * Los datos quedan en el teléfono, incluido lo que no se envió, y vuelven a estar
+ * disponibles cuando el mismo usuario entre de nuevo. Si entra otro, los borra
+ * `asegurarDuenoBase` en ese momento.
+ *
+ * No se limpia la sesión de trabajo (empresa/cosecha/zonas) a propósito: al volver
+ * a entrar el mismo promotor, sigue donde estaba.
+ */
+export async function salirSinBorrar(): Promise<void> {
+  await registrarEvento({
+    tipo: "sync",
+    ok: true,
+    resumen: "Cierre de sesión conservando los datos locales",
+  });
+}
