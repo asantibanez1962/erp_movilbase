@@ -44,21 +44,25 @@ function leerSello() {
 }
 
 /**
- * ¿El comando en curso es un `expo prebuild`?
+ * Comandos que NO producen un APK y por lo tanto no pueden salir mezclados.
  *
- * Se mira argv y no una variable propia porque la respuesta tiene que ser un
- * hecho del proceso, no algo que alguien pueda dejar exportado en su shell sin
- * darse cuenta — que es exactamente la clase de error que este archivo existe
- * para atajar.
+ *   prebuild     regenera android/ y reescribe el sello: el desacuerdo ES el pedido
+ *   config       `expo config --json`, que usan otras herramientas para leer la app
+ *   credentials  `eas credentials`, que exporta el cliente del perfil y consulta
  *
- * La comparacion es EXACTA contra "prebuild" y no un `includes` sobre la linea
- * entera: la segunda evaluacion la dispara `expo export:embed` dentro de gradle,
- * y una coincidencia floja ahi seria un falso positivo que apaga el guard justo
- * en el momento en que hace falta. Si esto se equivoca, que se equivoque
- * bloqueando.
+ * El default sigue siendo REVENTAR. Si manana aparece un comando nuevo que evalua
+ * esta config, va a fallar con un mensaje claro en vez de dejar pasar un APK con el
+ * package de un cliente y la URL de otro. Es mas facil agregar un nombre a esta
+ * lista que descubrir en el campo por que un promotor no puede entrar.
+ *
+ * `eas credentials` con un perfil de cliente ya fallo asi (04-sep-2026): exporta
+ * EXPO_PUBLIC_CLIENTE del perfil y despues corre `expo config`, contra un android/
+ * que quedo sellado por el ultimo build local.
  */
-function esPrebuild() {
-  return process.argv.some((a) => a === "prebuild");
+const COMANDOS_SIN_APK = ["prebuild", "config", "credentials"];
+
+function esComandoSinApk() {
+  return process.argv.some((a) => COMANDOS_SIN_APK.includes(a));
 }
 
 function resolverCliente() {
@@ -80,7 +84,7 @@ function resolverCliente() {
   // sea que chocaba contra el propio guard y no habia forma de cambiar de cliente
   // sin borrar el sello a mano. Comprobado el 03-sep-2026.
   if (pedido && sello && pedido !== sello) {
-    if (!esPrebuild()) {
+    if (!esComandoSinApk()) {
       throw new Error(
         `android/ esta prebuildeado para "${sello}" pero se esta compilando como "${pedido}".\n` +
         `El APK saldria con el package de uno y la URL y el logo del otro.\n` +
@@ -90,7 +94,7 @@ function resolverCliente() {
     // Se avisa igual: el prebuild se va a llevar puesto lo nativo del cliente
     // anterior, y conviene que quede dicho en la consola y no solo en el diff.
     console.warn(
-      `[sello] android/ estaba prebuildeado para "${sello}" y se va a regenerar como "${pedido}".`
+      `[sello] android/ esta prebuildeado para "${sello}"; este comando pide "${pedido}". No produce APK, se continua.`
     );
   }
 
