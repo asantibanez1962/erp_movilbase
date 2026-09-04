@@ -1,3 +1,4 @@
+import { create } from "zustand";
 import { Q } from "@nozbe/watermelondb";
 import { runSync, type FalloPull } from "@erp/shared-sync";
 import { database } from "./db";
@@ -113,8 +114,19 @@ export async function syncNow(): Promise<FalloPull[]> {
   // WatermelonDB que no se puede observar. Este aviso es lo que las hace releer.
   useSesion.getState().marcarSync();
 
+  // Llegar aca significa que hablamos con el servidor. Aunque `fallos` traiga
+  // colecciones, hubo ida y vuelta: la puerta del cambio de clave se apoya en esto
+  // para no exigirle la clave a un recibidor sin red — el endpoint es remoto y lo
+  // dejaria encerrado afuera de la app en pleno recibo.
+  useSyncEstado.getState().marcarOk();
+
   return fallos;
 }
+
+/** ¿Hubo, en esta corrida de la app, un sync que llego al servidor? */
+export const useSyncEstado = create<{ huboSyncOk: boolean; marcarOk: () => void }>(
+  (set) => ({ huboSyncOk: false, marcarOk: () => set({ huboSyncOk: true }) })
+);
 
 /**
  * Cuánto trabajo del teléfono todavía no llegó al servidor.

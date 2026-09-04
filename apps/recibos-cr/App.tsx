@@ -19,6 +19,8 @@ import {
 } from "@react-navigation/drawer";
 import { useAuthStore } from "@erp/shared-api";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { CambiarClaveScreen } from "./src/screens/CambiarClaveScreen";
+import { useSyncEstado, recibosPendientes } from "./src/lib/sync";
 import { ProductoresScreen } from "./src/screens/ProductoresScreen";
 import { RecibosListScreen } from "./src/screens/RecibosListScreen";
 import { NewReciboScreen } from "./src/screens/NewReciboScreen";
@@ -237,6 +239,18 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [bootDone, setBootDone] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const claveVencida = useAuthStore((s) => s.passwordExpired);
+  const huboSyncOk = useSyncEstado((s) => s.huboSyncOk);
+  const [pendientes, setPendientes] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (!claveVencida || !huboSyncOk) { setPendientes(null); return; }
+    let vivo = true;
+    recibosPendientes()
+      .then((n) => vivo && setPendientes(n))
+      .catch(() => vivo && setPendientes(null));
+    return () => { vivo = false; };
+  }, [claveVencida, huboSyncOk]);
   const isInitializing = useAuthStore((s) => s.isInitializing);
 
   useEffect(() => {
@@ -273,6 +287,11 @@ export default function App() {
                   <Text style={styles.errorText}>⚠ {bootError}</Text>
                 </View>
               );
+            }
+            /* Clave vencida: se exige DESPUES de sincronizar y sin recibos sin
+               enviar. `=== 0` y no `!pendientes`: null es "todavia no se". */
+            if (isAuthenticated && claveVencida && huboSyncOk && pendientes === 0) {
+              return <CambiarClaveScreen />;
             }
             if (isAuthenticated) return <AuthenticatedNav />;
             return <LoginScreen />;
