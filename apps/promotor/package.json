@@ -52,11 +52,18 @@
     "doctor": {
       "reactNativeDirectoryCheck": {
         "exclude": [
-          "@nozbe/watermelondb",
-          "@nozbe/simdjson"
+          "react-native-bluetooth-classic",
+          "@nozbe/watermelondb"
         ],
         "listUnknownPackages": false
       }
+    },
+    "install": {
+      "exclude": [
+        "expo",
+        "expo-constants",
+        "expo-file-system"
+      ]
     }
   }
 }
