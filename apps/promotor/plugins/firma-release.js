@@ -62,6 +62,16 @@ function leerCredenciales(raizProyecto) {
 
 const firmaRelease = (config) =>
   withAppBuildGradle(config, (cfg) => {
+    if (process.env.EAS_BUILD === "true") {
+      console.log("");
+      console.log("  [firma] Build de EAS: firma con las credenciales de EAS.");
+      console.log("  VERIFICAR la huella antes de repartir el APK:");
+      console.log("    apksigner verify --print-certs <apk>");
+      console.log("  Debe decir SHA-256: 75bd2b75218dd14603653fb6b39a414106dfa41c9e82f0796db2a0386abed9c6");
+      console.log("");
+      return cfg;
+    }
+
     const cred = leerCredenciales(cfg.modRequest.projectRoot);
 
     // En EAS la firma NO sale de aca. El .jks no se versiona, asi que en la nube
@@ -73,16 +83,6 @@ const firmaRelease = (config) =>
     // ENGANOSO, porque EAS todavia va a firmarlo bien— y a la vez ese mismo texto
     // es el unico sintoma cuando de verdad falta el keystore. Un aviso que grita
     // en el caso bueno deja de leerse en el malo.
-    if (process.env.EAS_BUILD === "true") {
-      console.log("");
-      console.log("  [firma] Build de EAS: firma con las credenciales de EAS.");
-      console.log("  VERIFICAR la huella antes de repartir el APK:");
-      console.log("    apksigner verify --print-certs <apk>");
-      console.log("  Debe decir SHA-256: 75bd2b75218dd14603653fb6b39a414106dfa41c9e82f0796db2a0386abed9c6");
-      console.log("");
-      return cfg;
-    }
-
     if (!cred) {
       console.warn(
         `\n  AVISO: no se encontro ${ARCHIVO_CREDENCIALES}.` +
