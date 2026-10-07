@@ -25,6 +25,10 @@
       "extends": "preview",
       "env": { "EXPO_PUBLIC_CLIENTE": "altura" }
     },
+    "cordillera": {
+      "extends": "preview",
+      "env": { "EXPO_PUBLIC_CLIENTE": "cordillera" }
+    },
     "laeva": {
       "extends": "preview",
       "env": { "EXPO_PUBLIC_CLIENTE": "laeva" }

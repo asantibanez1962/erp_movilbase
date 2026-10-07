@@ -47,6 +47,17 @@
     "logo": "altura.png"
   },
 
+  "cordillera": {
+    "nombre": "Promotor Cordillera",
+    "nombreLargo": "Cordillera de Fuego, S.A.",
+    "_colorNota": "El mismo verde de Altura, por pedido del cliente (07-oct-2026). Queda IDENTICO a Promotor Altura en el launcher y en el header: el logo es lo unico que las separa. Los packages son distintos, asi que conviven sin pisarse, pero quien tenga las dos instaladas no las va a distinguir por color.",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.promotor.cordillera",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "cordillera.png",
+    "_falta": ["apiBaseUrl real del beneficio", "logo (falta el archivo cordillera.png)"]
+  },
+
   "laeva": {
     "nombre": "Promotor La Eva",
     "nombreLargo": "Beneficio La Eva",

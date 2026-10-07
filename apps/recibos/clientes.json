@@ -40,6 +40,19 @@
     "logo": "altura.png",
     "logoImpreso": "altura.png"
   },
+  "cordillera": {
+    "nombre": "Recibos Cordillera",
+    "nombreLargo": "Cordillera de Fuego, S.A.",
+    "_colorNota": "El mismo verde de Altura, por pedido del cliente (07-oct-2026). Queda IDENTICO a Recibos Altura en el launcher y en el header: el logo es lo unico que las separa. Los packages son distintos, asi que conviven sin pisarse.",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.recibos.cordillera",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "cordillera.png",
+    "_logoImpresoNota": "Queda en null hasta tener el logo: el de impresion se genera del logo con scripts/logos-impresos.py, y es monocromo de 1 bit, no el mismo PNG.",
+    "logoImpreso": null,
+    "_falta": ["apiBaseUrl real del beneficio", "logo (falta el archivo cordillera.png)", "logoImpreso (correr scripts/logos-impresos.py cuando llegue el logo)"]
+  },
+
   "laeva": {
     "nombre": "Recibos La Eva",
     "nombreLargo": "Beneficio La Eva",
