@@ -48,9 +48,9 @@
     "package": "cr.confeldan.recibos.cordillera",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "cordillera.png",
-    "_logoImpresoNota": "Queda en null hasta tener el logo: el de impresion se genera del logo con scripts/logos-impresos.py, y es monocromo de 1 bit, no el mismo PNG.",
-    "logoImpreso": null,
-    "_falta": ["apiBaseUrl real del beneficio", "logo (falta el archivo cordillera.png)", "logoImpreso (correr scripts/logos-impresos.py cuando llegue el logo)"]
+    "_logoImpresoNota": "Contorno de 2 px en vez de la silueta rellena: el verde de la montana, pasado a gris, cae muy por debajo del umbral y se imprimia como un bloque negro de 39% de tinta. En contorno queda en 15.8% y el monograma CF se sigue leyendo.",
+    "logoImpreso": "cordillera.png",
+    "_falta": ["apiBaseUrl real del beneficio"]
   },
 
   "laeva": {

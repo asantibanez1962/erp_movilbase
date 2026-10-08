@@ -55,7 +55,7 @@
     "package": "cr.confeldan.promotor.cordillera",
     "apiBaseUrl": "http://192.168.100.10:5249",
     "logo": "cordillera.png",
-    "_falta": ["apiBaseUrl real del beneficio", "logo (falta el archivo cordillera.png)"]
+    "_falta": ["apiBaseUrl real del beneficio"]
   },
 
   "laeva": {
