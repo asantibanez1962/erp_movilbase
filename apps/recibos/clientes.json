@@ -40,6 +40,19 @@
     "logo": "altura.png",
     "logoImpreso": "altura.png"
   },
+  "cantaro": {
+    "nombre": "Recibos El Cantaro",
+    "nombreLargo": "Agricola El Cantaro S.A.",
+    "_colorNota": "Verde del logo (#4f7504), el del cuerpo del cantaro. OJO: la entrada de bodega dice negro #141414 con nota de 'confirmado'; el logo real no tiene negro, son dos verdes (#1a2a0d el aro y el texto, #4f7504 el cantaro). Hay que unificar antes de generar los dos APK, o la misma empresa sale de dos colores distintos segun la app.",
+    "color": "#4f7504",
+    "package": "cr.confeldan.recibos.cantaro",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "cantaro.png",
+    "_logoImpresoNota": "Umbral 65, EN MEDIO de los dos verdes de marca en vez del 210 habitual. No se busca separar tinta de papel sino un verde del otro: asi el aro, el texto y la figura de adentro del cantaro quedan negros, y el cuerpo del cantaro queda blanco. Con el umbral normal el cantaro salia como un bloque negro de 37% y se perdia la figura.",
+    "logoImpreso": "cantaro.png",
+    "_falta": ["apiBaseUrl real del beneficio", "confirmar el color contra la entrada de bodega"]
+  },
+
   "laeva": {
     "nombre": "Recibos La Eva",
     "nombreLargo": "Beneficio La Eva",
