@@ -15,6 +15,7 @@ import type {
   Cosecha,
   Distrito,
   Compania,
+  Finca,
   Precio,
   Productor,
   Provincia,
@@ -89,7 +90,7 @@ export async function imprimirRecibo(recibo: Recibo): Promise<void> {
           .map((x) => x.trim())
           .filter((x) => x !== "")
           .join(" · "),
-        finca: "",
+        finca: datos.finca,
         adelanto: datos.precio,
         recibidor: datos.recibidor,
         tipoCafe: datos.tipoCafe,
@@ -146,6 +147,21 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
       ? null
       : await uno<Certificado>("certificados", "idcertificado", recibo.idCertificado);
 
+  // La finca se busca por el id del registro, igual que el productor: la
+  // coleccion local no trae una columna de llave propia.
+  //
+  // `.catch(() => null)` y no un throw: un recibo puede referenciar una finca
+  // que el telefono todavia no bajo —se agrego en el web despues de la ultima
+  // sincronizacion— y eso no puede impedir que el papel salga. Sin finca se
+  // imprime igual, sin ese renglon.
+  const finca =
+    recibo.idFinca == null
+      ? null
+      : await database
+          .get<Finca>("fincas")
+          .find(String(recibo.idFinca))
+          .catch(() => null);
+
   const cajuelas = Math.trunc(recibo.cantidad);
 
   return {
@@ -186,6 +202,7 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
     productor: recibo.nombre ?? recibo.codigo ?? "",
     cedula: recibo.cedula ?? "",
     ...(await geografiaDe(productor)),
+    finca: (finca?.ubicacion ?? "").trim(),
     precio: await precioImpreso(recibo, productor),
     recibidor: recibidor?.nombre ?? recibo.recibidor,
     tipoCafe: tipoCafe?.nombre ?? recibo.tipoCafe ?? "",
