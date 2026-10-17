@@ -62,12 +62,13 @@ export interface ComprobanteRecibo {
   canton: string;
   distrito: string;
   /**
-   * Ubicacion de la finca, o vacio si el recibo no lleva ninguna.
+   * NOMBRE de la finca ("Santa Anita", "Sixto Fallas"), o vacio si el recibo no
+   * lleva ninguna. Va DEBAJO de UBICACION y ANTES de ADELANTO.
    *
-   * Va DEBAJO de UBICACION y ANTES de ADELANTO: la geografia de arriba es la del
-   * PRODUCTOR y esta es la de la finca de donde salio el cafe, que no siempre
-   * coinciden. Juntas se leen como una sola direccion, de lo general a lo
-   * particular.
+   * Es el nombre y NO el campo `ubicacion` de la finca: ese guarda
+   * COORDENADAS ("10.148604,-84.41887"), que en el papel no le dicen nada al
+   * productor. Ademas el nombre esta lleno en todas las fincas y las
+   * coordenadas faltan en algunas.
    */
   finca: string;
   /** El precio genérico. `null` cuando no hay ninguno que aplique. */

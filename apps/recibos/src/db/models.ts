@@ -235,8 +235,9 @@ export class Compania extends Model {
 export class Finca extends Model {
   static readonly table = "fincas";
   @readonly @field("id_socio") idSocio!: number;
+  /** Se imprime debajo de UBICACION cuando el recibo lleva finca. */
   @readonly @field("nombre") nombre!: string | null;
-  /** Se imprime debajo del productor cuando el recibo lleva finca. */
+  /** COORDENADAS ("10.148604,-84.41887"), no una direccion. No se imprime. */
   @readonly @field("ubicacion") ubicacion!: string | null;
   /** Atributo de la finca. De acá sale el `cldd` del recibo; no se digita. */
   @readonly @field("cldd") cldd!: number;

@@ -349,8 +349,12 @@ export const schema = appSchema({
       name: "fincas",
       columns: [
         { name: "id_socio", type: "number", isIndexed: true },
+        // Se imprime debajo de UBICACION cuando el recibo lleva finca.
         { name: "nombre", type: "string", isOptional: true },
-        // Se imprime debajo del productor cuando el recibo lleva finca.
+        // OJO: NO es una direccion, son COORDENADAS ("10.148604,-84.41887").
+        // El comentario de "se imprime" vivia aca por error y costo un rodeo:
+        // en el papel va el NOMBRE, que ademas esta lleno en el 100% de las
+        // fincas mientras que esto falta en algunas.
         { name: "ubicacion", type: "string", isOptional: true },
         // Atributo de la FINCA, no del recibo: no se digita. De acá sale el `cldd` del
         // recibo al elegir el productor, igual que en el web.

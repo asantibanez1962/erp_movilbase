@@ -202,7 +202,7 @@ async function reunirDatos(recibo: Recibo): Promise<ComprobanteRecibo> {
     productor: recibo.nombre ?? recibo.codigo ?? "",
     cedula: recibo.cedula ?? "",
     ...(await geografiaDe(productor)),
-    finca: (finca?.ubicacion ?? "").trim(),
+    finca: (finca?.nombre ?? "").trim(),
     precio: await precioImpreso(recibo, productor),
     recibidor: recibidor?.nombre ?? recibo.recibidor,
     tipoCafe: tipoCafe?.nombre ?? recibo.tipoCafe ?? "",
