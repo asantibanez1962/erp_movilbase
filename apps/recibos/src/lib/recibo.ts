@@ -102,7 +102,17 @@ export async function proximoNumero(): Promise<string> {
   // así que las dos numeraciones coinciden desde el primer recibo.
   const proximo = Math.max(proximoLocal, delServidor, 1);
 
-  return `${recibidor.padStart(3, "0")}${String(proximo).padStart(6, "0")}`;
+  // MISMO FORMATO QUE EL WEB: recibidor tal cual + '-' + 6 digitos. Lo arma
+  // sp_rc_recibo_consecutivo asi, y el movil tiene que coincidir o la misma
+  // cosecha queda con dos numeraciones segun por donde se digito.
+  //
+  // Antes era `recibidor` rellenado a 3 y 6 digitos SIN guion. No daba error:
+  // daba recibos que ordenados alfabeticamente caian en otro lado que los del
+  // web, y eso se descubre cuadrando talonarios en la oficina.
+  //
+  // El slice(0,3) es una guarda: la columna `recibidor` es de 3, pero si
+  // alguna base trae uno mas largo el numero quedaria de otro ancho.
+  return `${recibidor.trim().slice(0, 3)}-${String(proximo).padStart(6, "0")}`;
 }
 
 /**
@@ -149,7 +159,23 @@ async function talonarioDe(numero: string): Promise<number | null> {
 /** Los 6 últimos dígitos, que es donde vive la secuencia venga con guión o sin él. */
 function secuenciaDe(numero: string | null | undefined): number | null {
   if (!numero) return null;
-  const n = Number.parseInt(numero.trim().slice(-6), 10);
+  const t = numero.trim();
+
+  // Convive mas de un formato en la misma tabla y hay que leerlos todos, porque
+  // de aca sale el maximo local que decide el proximo numero:
+  //   01-003585   el actual (web y movil)        -> 3585
+  //   01-03584    lo importado del legacy         -> 3584
+  //   001003584   el que generaba el movil antes  -> 3584
+  //   31963       cosechas viejas, sin recibidor  -> 31963
+  //
+  // Con guion se toma lo que va DESPUES; sin guion, los ultimos 6. Tomar
+  // siempre los ultimos 6 era el bug anterior: en `01-03584` eso da "-03584",
+  // que parsea como NEGATIVO y nunca supera al maximo, asi que los recibos
+  // importados no contaban y el contador local quedaba en cero sin avisar.
+  const guion = t.lastIndexOf("-");
+  const cola = guion >= 0 ? t.slice(guion + 1) : t.slice(-6);
+
+  const n = Number.parseInt(cola, 10);
   return Number.isFinite(n) ? n : null;
 }
 
