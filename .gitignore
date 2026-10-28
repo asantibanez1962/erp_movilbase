@@ -65,3 +65,6 @@ coverage/
 # quien tenga el keystore sin ellas no puede firmar nada; con ellas, si.
 credentials.json
 **/credentials.json
+
+# Ajustes locales de Claude Code: permisos acumulados de ESTA maquina, no del proyecto.
+.claude/
