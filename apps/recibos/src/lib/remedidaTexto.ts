@@ -1,5 +1,5 @@
 import { enLetras, cuartillosEnLetras } from "./enletras";
-import { LF, RAYA, cmd, logoRaster, type LogoRaster } from "./escpos";
+import { LF, RAYA, cmd, logoEscpos, type LogoRaster } from "./escpos";
 
 /**
  * El RECIBO DE TRANSPORTE en ESC/POS, para imprimir sin el driver.
@@ -79,7 +79,7 @@ export function armarRemedida(r: RemedidaImpresa): string {
 
   p.push(cmd.reiniciar);
 
-  if (r.logo) p.push(`${cmd.centrado}${logoRaster(r.logo)}${LF}`);
+  if (r.logo) p.push(`${cmd.centrado}${logoEscpos(r.logo)}${LF}`);
 
   // Encabezado: la empresa en grande, el resto mediano. Idéntico al del legacy.
   p.push(`${cmd.medio}${cmd.izquierda}${cmd.negritaOff}${LF}`);

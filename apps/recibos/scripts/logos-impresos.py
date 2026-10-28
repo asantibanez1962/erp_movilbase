@@ -206,7 +206,10 @@ def a_png(ancho, alto, bits):
 
 
 def a_escpos(ancho, alto, bits):
-    """Mapa de bits crudo para `GS v 0`. Acá el 1 SÍ imprime."""
+    """Mapa de bits crudo, FILA por FILA. Acá el 1 SÍ imprime.
+
+    Lo transpone a columnas `logoEscpos` en escpos.ts, que es quien manda el comando.
+    """
     fila_bytes = (ancho + 7) // 8
     datos = bytearray()
     for fila in bits:
@@ -277,7 +280,7 @@ def main():
         "export interface LogoImpreso {\n"
         "  /** Data URI, para usar en un <img>. */\n"
         "  png: string;\n"
-        "  /** Ancho en BYTES —no en puntos—, como lo pide el comando GS v 0. */\n"
+        "  /** Ancho en BYTES —no en puntos—: cada byte son ocho puntos horizontales. */\n"
         "  anchoBytes: number;\n"
         "  /** Alto en puntos. */\n"
         "  alto: number;\n"

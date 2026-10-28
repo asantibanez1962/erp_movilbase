@@ -11,7 +11,7 @@
 export interface LogoImpreso {
   /** Data URI, para usar en un <img>. */
   png: string;
-  /** Ancho en BYTES —no en puntos—, como lo pide el comando GS v 0. */
+  /** Ancho en BYTES —no en puntos—: cada byte son ocho puntos horizontales. */
   anchoBytes: number;
   /** Alto en puntos. */
   alto: number;

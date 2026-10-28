@@ -25,7 +25,7 @@ export const LOGO = DEL_CLIENTE?.png ?? "";
 
 export const HAY_LOGO = DEL_CLIENTE != null;
 
-/** Lo que necesita el comando `GS v 0` de la bitácora. */
+/** El mapa de bits que imprime `logoEscpos`, para los documentos sin driver. */
 export const LOGO_ESCPOS = DEL_CLIENTE
   ? {
       anchoBytes: DEL_CLIENTE.anchoBytes,
