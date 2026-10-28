@@ -1,0 +1,117 @@
+diff --git a/android/src/main/java/expo/modules/print/PrintModule.kt b/android/src/main/java/expo/modules/print/PrintModule.kt
+index 719d2969772d8a99faf0025fabc145f1f969c6f7..27da719c4072ad1cd988647bae2a1b3711e69c5f 100644
+--- a/android/src/main/java/expo/modules/print/PrintModule.kt
++++ b/android/src/main/java/expo/modules/print/PrintModule.kt
+@@ -135,7 +135,19 @@ class PrintModule : Module() {
+   private fun createPrintCallbacks(options: PrintOptions, continuation: Continuation<Unit>): PrintPDFRenderTask.Callbacks {
+     return object : PrintPDFRenderTask.Callbacks() {
+       override fun onRenderFinished(document: PrintDocumentAdapter, outputFile: File?, numberOfPages: Int) {
+-        printDocumentToPrinter(document, options)
++        // PARCHE LOCAL — `printDocumentToPrinter` tira si en ese instante no hay actividad
++        // (app en segundo plano, pantalla bloqueada) o si no hay servicio de impresión. Sin
++        // este try, la excepción sale por un callback del WebView, la continuación no se
++        // reanuda nunca y la promesa de JS queda colgada — ver expo/expo#52422.
++        try {
++          printDocumentToPrinter(document, options)
++        } catch (e: Throwable) {
++          continuation.resumeWithException(
++            if (e is CodedException) e
++            else UnexpectedPrintException("There was an error while trying to print ", e)
++          )
++          return
++        }
+         continuation.resume(Unit)
+       }
+ 
+diff --git a/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt b/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
+index d1e413e1035546906db487176493579bbad15f26..8f0b61ac72cec15aa16c1bb06bae000bf29008cf 100644
+--- a/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
++++ b/android/src/main/java/expo/modules/print/PrintPDFRenderTask.kt
+@@ -29,6 +29,30 @@ internal class PrintPDFRenderTask(private val context: Context, private val opti
+   private lateinit var document: PrintDocumentAdapter
+   private var numberOfPages = 0
+ 
++  companion object {
++    /**
++     * PARCHE LOCAL — las tareas que están renderizando ahora mismo.
++     *
++     * Sin esto, nada en todo el proceso tiene una referencia viva a la tarea: el WebView
++     * se crea fuera de la jerarquía de vistas, la tarea sólo existía como variable local
++     * de `PrintModule.print`, y el único lazo que queda —WebView ↔ WebViewClient— es un
++     * ciclo que el recolector sabe romper. Si pasa un GC antes de `onPageFinished`, la
++     * continuación NUNCA se reanuda: la promesa de JS queda colgada y la bandera
++     * `isPrinting` de Print.ts se queda en `true` hasta que se reinicie la app. A partir
++     * de ahí toda impresión falla con "Another print request is already in progress".
++     *
++     * Reportado en expo/expo#52422. Al 2026-10-28 no hay versión publicada con el arreglo
++     * — 15.0.8 es la última estable — por eso va como parche de pnpm.
++     */
++    private val enVuelo: MutableSet<PrintPDFRenderTask> =
++      java.util.Collections.synchronizedSet(mutableSetOf())
++  }
++
++  /** PARCHE LOCAL — suelta la tarea. Idempotente: se puede llamar de más. */
++  private fun soltar() {
++    enVuelo.remove(this)
++  }
++
+   @UiThread
+   fun render(outputFile: File?, fileDescriptor: ParcelFileDescriptor?, callbacks: Callbacks) {
+     this.callbacks = callbacks
+@@ -45,6 +69,9 @@ internal class PrintPDFRenderTask(private val context: Context, private val opti
+     options.textZoom?.let { textZoom ->
+       webView.settings.textZoom = textZoom
+     }
++    // PARCHE LOCAL — la tarea queda viva hasta que termine de renderizar. Tiene que ir
++    // ANTES de arrancar la carga: después ya hay una ventana en la que el GC puede entrar.
++    enVuelo.add(this)
+     webView.loadDataWithBaseURL(null, html, "text/html; charset=utf-8", "UTF-8", null)
+   }
+ 
+@@ -87,17 +114,27 @@ internal class PrintPDFRenderTask(private val context: Context, private val opti
+     }
+ 
+     override fun onPageFinished(view: WebView, url: String) {
+-      document = view.createPrintDocumentAdapter("Document")
+-      // layout the document with appropriate print attributes
+-      document.onLayout(null, printAttributes, null, object : PrintDocumentAdapterLayoutCallback() {}, null)
+-      @SuppressLint("Range")
+-      val pageHeight = PIXELS_PER_MIL * printAttributes.mediaSize!!.heightMils
+-      numberOfPages = 1 + (view.contentHeight / pageHeight).toInt()
++      // PARCHE LOCAL — esto corre en un callback del WebView, o sea en el hilo de UI y
++      // fuera del try/catch de `PrintModule.print`. Una excepción acá no la cacha nadie y
++      // deja la promesa colgada, que es el mismo síntoma que el GC.
++      try {
++        document = view.createPrintDocumentAdapter("Document")
++        // layout the document with appropriate print attributes
++        document.onLayout(null, printAttributes, null, object : PrintDocumentAdapterLayoutCallback() {}, null)
++        @SuppressLint("Range")
++        val pageHeight = PIXELS_PER_MIL * printAttributes.mediaSize!!.heightMils
++        numberOfPages = 1 + (view.contentHeight / pageHeight).toInt()
++      } catch (e: Throwable) {
++        soltar()
++        callbacks.onRenderError(UnexpectedPrintException("Failed to lay out the document for printing ", e))
++        return
++      }
+ 
+       // Write to a file if file path was passed, otherwise invoke onRenderFinish callback
+       if (fileDescriptor != null) {
+         document.onWrite(arrayOf(PageRange.ALL_PAGES), fileDescriptor, null, printDocumentWriteCallback)
+       } else {
++        soltar()
+         callbacks.onRenderFinished(document, null, numberOfPages)
+       }
+     }
+@@ -105,10 +142,12 @@ internal class PrintPDFRenderTask(private val context: Context, private val opti
+   private val printDocumentWriteCallback: PrintDocumentAdapterWriteCallback = object : PrintDocumentAdapterWriteCallback() {
+     override fun onWriteFinished(pages: Array<PageRange>) {
+       // document and output file are now ready to finish
++      soltar() // PARCHE LOCAL
+       callbacks.onRenderFinished(document, outputFile, numberOfPages)
+     }
+ 
+     override fun onWriteFailed(error: CharSequence?) {
++      soltar() // PARCHE LOCAL
+       callbacks.onRenderError(PdfWriteException())
+     }
+   }

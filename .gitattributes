@@ -1,0 +1,7 @@
+# Los parches de pnpm se aplican comparando el archivo byte a byte. Si git les
+# cambia los finales de línea al sacarlos —y en Windows lo hace, autocrlf=true—
+# dejan de aplicar. `-text` le dice que no los toque nunca.
+#
+# No es teórico: el build del APK corre en EAS, sobre Linux. Un parche que acá
+# se ve bien y allá no aplica produce un APK sin el arreglo y sin un solo error.
+patches/*.patch -text
