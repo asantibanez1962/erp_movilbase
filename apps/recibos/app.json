@@ -51,7 +51,8 @@
           }
         }
       ],
-      "./plugins/firma-release"
+      "./plugins/firma-release",
+      "./plugins/parche-expo-print"
     ],
     "owner": "alfredosantibanez"
   }

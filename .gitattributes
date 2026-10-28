@@ -4,4 +4,5 @@
 #
 # No es teórico: el build del APK corre en EAS, sobre Linux. Un parche que acá
 # se ve bien y allá no aplica produce un APK sin el arreglo y sin un solo error.
+# (se quito el parche de pnpm; la regla queda por si vuelve a hacer falta)
 patches/*.patch -text
