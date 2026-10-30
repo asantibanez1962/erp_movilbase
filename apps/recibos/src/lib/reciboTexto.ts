@@ -1,5 +1,5 @@
 import { enLetras, cuartillosEnLetras } from "./enletras";
-import { LF, RAYA, cmd, logoRaster, type LogoRaster } from "./escpos";
+import { LF, RAYA, cmd, logoEscpos, type LogoRaster } from "./escpos";
 
 /**
  * El COMPROBANTE DE RECIBO DE CAFE en ESC/POS, para imprimir sin el driver.
@@ -88,7 +88,7 @@ export function armarReciboTexto(r: ReciboTexto): string {
   // según qué se imprimió antes.
   p.push(cmd.reiniciar);
 
-  if (r.logo) p.push(`${cmd.centrado}${logoRaster(r.logo)}${LF}`);
+  if (r.logo) p.push(`${cmd.centrado}${logoEscpos(r.logo)}${LF}`);
 
   p.push(`${cmd.medio}${cmd.izquierda}${cmd.negritaOff}${LF}`);
   p.push(`${cmd.centrado}${RAYA}${LF}`);

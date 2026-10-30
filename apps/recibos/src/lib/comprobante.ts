@@ -61,6 +61,16 @@ export interface ComprobanteRecibo {
   provincia: string;
   canton: string;
   distrito: string;
+  /**
+   * NOMBRE de la finca ("Santa Anita", "Sixto Fallas"), o vacio si el recibo no
+   * lleva ninguna. Va DEBAJO de UBICACION y ANTES de ADELANTO.
+   *
+   * Es el nombre y NO el campo `ubicacion` de la finca: ese guarda
+   * COORDENADAS ("10.148604,-84.41887"), que en el papel no le dicen nada al
+   * productor. Ademas el nombre esta lleno en todas las fincas y las
+   * coordenadas faltan en algunas.
+   */
+  finca: string;
   /** El precio genérico. `null` cuando no hay ninguno que aplique. */
   precio: number | null;
   recibidor: string;
@@ -211,6 +221,7 @@ export function armarComprobante(c: ComprobanteRecibo): string {
   <div>${esc(c.productor)}</div>
   <div>CEDULA:${esc(c.cedula)}</div>
   ${linea(`UBICACION: ${ubicacion}`)}
+  ${linea(c.finca)}
 
   <div class="par bloque"><span>ADELANTO:</span><span>${dec(c.precio, 2)}</span></div>
   <div class="par"><span>RECIBIDOR:</span><span>${esc(c.recibidor)}</span></div>

@@ -26,6 +26,11 @@ web-build/
 # carpeta android/ ya está ignorada arriba pero por si alguien la commitea).
 **/*.keystore
 **/*.jks
+# android-keystore.properties lleva la clave del keystore en texto plano.
+# Estaba ignorado SOLO en apps/promotor/.gitignore, asi que el de bodega no
+# estaba cubierto y un `git add -A` lo subio. Va con **/ para que valga en
+# cualquier app, presente o futura.
+**/android-keystore.properties
 **/keystore.properties
 
 # Keystores (DO NOT COMMIT — backup separately!)
@@ -60,3 +65,6 @@ coverage/
 # quien tenga el keystore sin ellas no puede firmar nada; con ellas, si.
 credentials.json
 **/credentials.json
+
+# Ajustes locales de Claude Code: permisos acumulados de ESTA maquina, no del proyecto.
+.claude/

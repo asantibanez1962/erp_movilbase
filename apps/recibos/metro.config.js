@@ -17,4 +17,12 @@ config.resolver.nodeModulesPaths = [
   path.resolve(workspaceRoot, "node_modules"),
 ];
 
+// Metro, en un monorepo, pone su "server root" en el ancestro comun del
+// proyecto y los watchFolders — o sea en la raiz del monorepo. El plugin de
+// gradle de React Native pasa --entry-file relativo al `root` del bloque react
+// (apps/recibos), asi que los dos no coinciden y el bundle de release falla con
+// "Unable to resolve module ./index.ts". Fijar la raiz de servidor al proyecto
+// los pone de acuerdo.
+config.server = { ...(config.server ?? {}), unstable_serverRoot: projectRoot };
+
 module.exports = config;

@@ -28,7 +28,7 @@
  * del recibidor sin arreglar nada.
  */
 
-import { LF, RAYA, cmd, logoRaster, type LogoRaster } from "./escpos";
+import { LF, RAYA, cmd, logoEscpos, type LogoRaster } from "./escpos";
 
 /** Todo lo que el papel de la bitácora necesita, ya resuelto. */
 export interface BitacoraImpresa {
@@ -124,7 +124,7 @@ export function armarBitacora(j: BitacoraImpresa): string {
   // sin identificar de un vistazo.
   p.push(cmd.reiniciar);
 
-  if (j.logo) p.push(`${cmd.centrado}${logoRaster(j.logo)}${LF}`);
+  if (j.logo) p.push(`${cmd.centrado}${logoEscpos(j.logo)}${LF}`);
 
   // Encabezado: nombre grande y centrado, el resto mediano.
   p.push(`${cmd.medio}${cmd.izquierda}${cmd.negritaOff}${RAYA}${LF}`);

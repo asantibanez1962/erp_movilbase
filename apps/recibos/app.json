@@ -50,7 +50,9 @@
             "usesCleartextTraffic": true
           }
         }
-      ]
+      ],
+      "./plugins/firma-release",
+      "./plugins/parche-expo-print"
     ],
     "owner": "alfredosantibanez"
   }

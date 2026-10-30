@@ -46,6 +46,10 @@
     "autolinking": {
       "searchPaths": [
         "../../node_modules"
+      ],
+      "_comentario": "expo-print se compila DESDE FUENTE a proposito. Expo manda un .aar ya compilado dentro del paquete npm (local-maven-repo/) y en Android eso esta activo por defecto desde el SDK 53. Con el .aar, el parche de plugins/parche-expo-print.js edita un Kotlin que NUNCA se compila: el APK sale sin el arreglo y sin un solo error. Si algun dia se quita el parche, quitar tambien esto.",
+      "buildFromSource": [
+        "expo-print"
       ]
     },
     "doctor": {

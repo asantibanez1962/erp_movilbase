@@ -40,6 +40,19 @@
     "logo": "altura.png",
     "logoImpreso": "altura.png"
   },
+  "cantaro": {
+    "nombre": "Recibos El Cantaro",
+    "nombreLargo": "Agricola El Cantaro S.A.",
+    "_colorNota": "Verde del cuerpo del cantaro en el logo. El logo tiene dos verdes: #1a2a0d el aro y el texto, #4f7504 la figura. Se eligio el segundo porque es el que da contraste como color de interfaz. Nota vieja decia que habia que unificarlo contra la app de bodega: NO aplica, bodega corre en web y no tiene entrada por cliente.",
+    "color": "#4f7504",
+    "package": "cr.confeldan.recibos.cantaro",
+    "_apiBaseUrlNota": "Tunel de Cloudflare del cliente, verificado el 21-oct-2026: resuelve a IPs de Cloudflare y responde con 'www-authenticate: Bearer', o sea apunta al backend. Sin puerto: el tunel termina el TLS en 443. Si cambia, se corrige desde el cajon -> Servidor sin recompilar.",
+    "apiBaseUrl": "https://agc.sngcloud.app",
+    "logo": "cantaro.png",
+    "_logoImpresoNota": "Umbral 65, EN MEDIO de los dos verdes de marca en vez del 210 habitual. No se busca separar tinta de papel sino un verde del otro: asi el aro, el texto y la figura de adentro del cantaro quedan negros, y el cuerpo del cantaro queda blanco. Con el umbral normal el cantaro salia como un bloque negro de 37% y se perdia la figura.",
+    "logoImpreso": "cantaro.png"
+  },
+
   "laeva": {
     "nombre": "Recibos La Eva",
     "nombreLargo": "Beneficio La Eva",
