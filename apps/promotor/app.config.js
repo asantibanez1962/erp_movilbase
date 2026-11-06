@@ -22,9 +22,86 @@ const clientes = require("./clientes.json");
  */
 
 const ID_DEFAULT = "dev";
+const ARCHIVO_SELLO = ".cliente-compilado";
+
+/**
+ * El cliente que dejo estampado el ultimo prebuild, o null si no hay android/.
+ *
+ * Existe porque este archivo se evalua DOS veces —una en `expo prebuild`, otra
+ * dentro de gradle cuando `expo export:embed` arma el bundle— y son procesos
+ * separados. Sin el sello, una variable de ambiente puesta solo en el primero
+ * deja un APK con el package de un cliente y la URL de otro, que compila,
+ * instala y arranca sin quejarse.
+ *
+ * NO ES HIPOTETICO: el APK de Promotor Altura del 30-ago-2026 salio asi —
+ * package cr.confeldan.promotor.altura y adentro el perfil `dev` con
+ * 10.0.2.2:5249, que solo existe en un emulador. Ver plugins/sello-cliente.js.
+ */
+function leerSello() {
+  try {
+    const ruta = path.join(__dirname, "android", ARCHIVO_SELLO);
+    if (!fs.existsSync(ruta)) return null;
+    const id = fs.readFileSync(ruta, "utf8").trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Comandos que NO producen un APK y por lo tanto no pueden salir mezclados.
+ *
+ *   prebuild     regenera android/ y reescribe el sello: el desacuerdo ES el pedido
+ *   config       `expo config --json`, que usan otras herramientas para leer la app
+ *   credentials  `eas credentials`, que exporta el cliente del perfil y consulta
+ *
+ * El default sigue siendo REVENTAR. Si manana aparece un comando nuevo que evalua
+ * esta config, va a fallar con un mensaje claro en vez de dejar pasar un APK con el
+ * package de un cliente y la URL de otro. Es mas facil agregar un nombre a esta
+ * lista que descubrir en el campo por que un promotor no puede entrar.
+ *
+ * `eas credentials` con un perfil de cliente ya fallo asi (04-sep-2026): exporta
+ * EXPO_PUBLIC_CLIENTE del perfil y despues corre `expo config`, contra un android/
+ * que quedo sellado por el ultimo build local.
+ */
+const COMANDOS_SIN_APK = ["prebuild", "config", "credentials"];
+
+function esComandoSinApk() {
+  return process.argv.some((a) => COMANDOS_SIN_APK.includes(a));
+}
 
 function resolverCliente() {
-  const id = process.env.EXPO_PUBLIC_CLIENTE ?? ID_DEFAULT;
+  const sello = leerSello();
+  const pedido = process.env.EXPO_PUBLIC_CLIENTE ?? null;
+
+  // Sin variable, MANDA EL SELLO: la segunda evaluacion hereda lo que decidio
+  // el prebuild aunque nadie exporte nada. Sin sello vale el default.
+  const id = pedido ?? sello ?? ID_DEFAULT;
+
+  // Con variable Y sello que no coinciden no hay forma de adivinar cual gana
+  // sin producir un APK mezclado. Se rompe fuerte.
+  //
+  // SALVO durante un prebuild, que es precisamente la operacion que REESCRIBE el
+  // sello: ahi el desacuerdo no es un peligro sino el pedido de cambiar de
+  // cliente. Sin esta salida el guard se muerde la cola —el remedio que sugeria
+  // el mensaje (`prebuild --clean`) evalua la config ANTES de borrar android/, o
+  // sea que chocaba contra el propio guard y no habia forma de cambiar de cliente
+  // sin borrar el sello a mano. Comprobado el 03-sep-2026.
+  if (pedido && sello && pedido !== sello) {
+    if (!esComandoSinApk()) {
+      throw new Error(
+        `android/ esta prebuildeado para "${sello}" pero se esta compilando como "${pedido}".\n` +
+        `El APK saldria con el package de uno y la URL y el logo del otro.\n` +
+        `Corre de nuevo:  EXPO_PUBLIC_CLIENTE=${pedido} npx expo prebuild --platform android --clean`
+      );
+    }
+    // Se avisa igual: el prebuild se va a llevar puesto lo nativo del cliente
+    // anterior, y conviene que quede dicho en la consola y no solo en el diff.
+    console.warn(
+      `[sello] android/ esta prebuildeado para "${sello}"; este comando pide "${pedido}". No produce APK, se continua.`
+    );
+  }
+
   const cliente = clientes[id];
   if (!cliente || id.startsWith("_")) {
     const validos = Object.keys(clientes).filter((k) => !k.startsWith("_"));
@@ -54,6 +131,9 @@ module.exports = ({ config }) => {
 
   return {
     ...config,
+    // El sello se registra ACA y no en app.json porque necesita el id ya
+    // resuelto, que app.json no puede saber.
+    plugins: [...(config.plugins ?? []), ["./plugins/sello-cliente", { id: cliente.id }]],
     name: cliente.nombre,
     ...(icono ? { icon: icono } : {}),
     splash: {

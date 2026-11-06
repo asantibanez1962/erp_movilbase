@@ -9,6 +9,9 @@ import { borrarSiEsOtroUsuario } from "./src/lib/alcance";
 import { bootstrapApi } from "./src/lib/api";
 import { useSesion } from "./src/lib/sesion";
 import { LoginScreen } from "./src/screens/LoginScreen";
+import { CambiarClaveScreen } from "./src/screens/CambiarClaveScreen";
+import { useSyncEstado } from "./src/lib/sync";
+import { resumenPendientes } from "./src/lib/sync";
 import { ContextoScreen } from "./src/screens/ContextoScreen";
 import { Navegacion } from "./src/screens/Navegacion";
 
@@ -25,6 +28,22 @@ export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [bootDone, setBootDone] = useState(false);
   const isAuthenticated = useAuthStore((s) => s.isAuthenticated);
+  const claveVencida = useAuthStore((s) => s.passwordExpired);
+  const huboSyncOk = useSyncEstado((s) => s.huboSyncOk);
+  const [porEnviar, setPorEnviar] = useState<number | null>(null);
+
+  /* Se cuenta solo cuando la puerta podria abrirse: el 99% de las veces la clave
+     no vencio y recorrer las tablas seria trabajo al pedo. */
+  useEffect(() => {
+    if (!claveVencida || !huboSyncOk) { setPorEnviar(null); return; }
+    let vivo = true;
+    resumenPendientes()
+      .then((p) => vivo && setPorEnviar(p.porEnviar))
+      // Si no se pudo contar, NO se abre: mejor no pedir la clave que pedirla
+      // sobre trabajo que no supimos ver.
+      .catch(() => vivo && setPorEnviar(null));
+    return () => { vivo = false; };
+  }, [claveVencida, huboSyncOk]);
   const isInitializing = useAuthStore((s) => s.isInitializing);
   const hidratandoSesion = useSesion((s) => s.hidratando);
   const reseteando = useSesion((s) => s.reseteando);
@@ -82,6 +101,15 @@ export default function App() {
 
           if (!isAuthenticated) return <LoginScreen />;
           if (recibidor == null || !cosecha) return <ContextoScreen />;
+
+          /* Clave vencida: se exige DESPUES de sincronizar y solo si no queda
+             nada por enviar. Se mira `porEnviar` y no el total: las retenidas
+             esperan a que se imprima la bitacora y no se van sincronizando, asi
+             que con el total bastaria una retenida para no pedirle la clave a ese
+             recibidor nunca. Y `=== 0` porque null es "todavia no se". */
+          if (claveVencida && huboSyncOk && porEnviar === 0) {
+            return <CambiarClaveScreen />;
+          }
 
           // `key`: después de borrar la base hay que recrear todas las queries contra la
           // base nueva. Remontar el árbol es la forma limpia de lograrlo sin obligar a

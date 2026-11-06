@@ -52,6 +52,18 @@
     "_logoImpresoNota": "Umbral 65, EN MEDIO de los dos verdes de marca en vez del 210 habitual. No se busca separar tinta de papel sino un verde del otro: asi el aro, el texto y la figura de adentro del cantaro quedan negros, y el cuerpo del cantaro queda blanco. Con el umbral normal el cantaro salia como un bloque negro de 37% y se perdia la figura.",
     "logoImpreso": "cantaro.png"
   },
+  "cordillera": {
+    "nombre": "Recibos Cordillera",
+    "nombreLargo": "Cordillera de Fuego, S.A.",
+    "_colorNota": "El mismo verde de Altura, por pedido del cliente (07-oct-2026). Queda IDENTICO a Recibos Altura en el launcher y en el header: el logo es lo unico que las separa. Los packages son distintos, asi que conviven sin pisarse.",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.recibos.cordillera",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "cordillera.png",
+    "_logoImpresoNota": "Contorno de 2 px en vez de la silueta rellena: el verde de la montana, pasado a gris, cae muy por debajo del umbral y se imprimia como un bloque negro de 39% de tinta. En contorno queda en 15.8% y el monograma CF se sigue leyendo.",
+    "logoImpreso": "cordillera.png",
+    "_falta": ["apiBaseUrl real del beneficio"]
+  },
 
   "laeva": {
     "nombre": "Recibos La Eva",

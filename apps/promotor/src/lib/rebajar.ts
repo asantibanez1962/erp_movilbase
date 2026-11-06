@@ -39,7 +39,9 @@ export interface ResumenPendientes {
   total: number;
 }
 
-const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas"] as const;
+/* Ver la nota en sync.ts: productores es modificable, así que cuenta como
+   pendiente mientras la corrección no haya subido. */
+const ESCRIBIBLES = ["solicitudes", "entregadores", "visitas", "productores"] as const;
 
 /**
  * Qué hay sin subir, desglosado. El desglose es el punto: "3 pendientes" no le permite

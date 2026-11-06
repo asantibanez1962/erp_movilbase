@@ -250,6 +250,14 @@ export async function flushAdjuntos(): Promise<void> {
       await subir(http, entidad, serverId, uri, nombre);
     } catch (err) {
       const mensaje = err instanceof Error ? err.message : String(err);
+      // Se LOGUEA además de guardarse en la fila. El motivo queda en la pantalla de
+      // adjuntos, pero para llegar ahí hay que sospechar primero — y en el log la
+      // subida exitosa tampoco dice nada, así que un fallo era indistinguible de un
+      // éxito para quien mira de afuera. Mismo criterio que el salto por entidad
+      // desconocida, unas líneas más arriba.
+      console.warn(
+        `[adjuntos] falló subir ${adj.coleccion}/${adj.registroLocalId}: ${mensaje}`
+      );
       await database.write(async () => {
         await adj.update((rec) => {
           rec.status = "error";
@@ -271,6 +279,7 @@ export async function flushAdjuntos(): Promise<void> {
         rec.subidaAt = Date.now();
       });
     });
+    console.info(`[adjuntos] subida ${adj.coleccion}/${adj.registroLocalId} OK`);
   }
 }
 

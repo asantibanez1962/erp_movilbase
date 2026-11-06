@@ -29,15 +29,16 @@ import { useAuthStore } from "@erp/shared-api";
 import { cliente } from "./src/branding";
 import { LoginScreen } from "./src/screens/LoginScreen";
 import { ContextoScreen } from "./src/screens/ContextoScreen";
+import { CambiarClaveScreen } from "./src/screens/CambiarClaveScreen";
 import { useSesion } from "./src/lib/sesion";
-import { cambiarCosecha, contarPendientes, HayPendientesError } from "./src/lib/sync";
+import { cambiarCosecha, contarPendientes, HayPendientesError, useSyncEstado } from "./src/lib/sync";
 import { cargarContexto } from "./src/lib/contexto";
 import {
   describirPendientes,
   rebajarTodo,
   resumenPendientes,
 } from "./src/lib/rebajar";
-import { cerrarSesion, verificarAlcance } from "./src/lib/alcance";
+import { cerrarSesion, salirSinBorrar, verificarAlcance } from "./src/lib/alcance";
 import { describirFallos } from "@erp/shared-sync";
 import { COLLECTIONS } from "./src/db/schema";
 import { PickerModal } from "./src/screens/componentes/Picker";
@@ -133,6 +134,13 @@ function ProductoresStackScreens() {
         name="ProductorDetail"
         component={ProductorDetailScreen}
         options={{ title: "Productor" }}
+      />
+      {/* La misma pantalla genérica de adjuntos que usan solicitudes y visitas:
+          recibe colección + id del registro. Acá son las fotos del productor. */}
+      <ProductoresStack.Screen
+        name="Adjuntos"
+        component={AdjuntosScreen}
+        options={{ title: "Fotos del productor" }}
       />
     </ProductoresStack.Navigator>
   );
@@ -457,24 +465,32 @@ function CustomDrawer(props: DrawerContentComponentProps) {
    */
   const salir = async () => {
     const pendientes = await resumenPendientes();
-    const ejecutar = async (descartar: boolean) => {
+
+    const ejecutar = async () => {
       try {
-        await cerrarSesion({ descartar });
+        await salirSinBorrar();
         logout();
       } catch (e) {
         setUltimoError((e as Error)?.message ?? "No se pudo cerrar la sesión");
       }
     };
 
+    // Ya NO se borra al salir: los datos son del usuario y se quedan esperándolo.
+    // El borrado ocurre si entra OTRO (ver asegurarDuenoBase en lib/alcance.ts),
+    // que es lo que de verdad lo justifica.
+    //
+    // Se sigue pidiendo confirmación y se sigue avisando de lo pendiente, pero el
+    // aviso cambió de sentido: antes decía "esto se pierde"; ahora dice "esto se
+    // queda acá y nadie más lo va a poder enviar", que es lo cierto — esas filas
+    // se suben con el token de quien las creó.
     if (pendientes.total === 0) {
       Alert.alert(
         "Cerrar sesión",
-        "Se borran los datos de este teléfono: pertenecen a tu usuario y a tu zona. " +
-          "No hay nada sin enviar, así que no se pierde trabajo, pero al volver a " +
-          "entrar hay que bajarlos completos del servidor.",
+        "Tus datos quedan en el teléfono y te esperan cuando vuelvas a entrar. " +
+          "Sólo se borran si entra otro promotor.",
         [
           { text: "Cancelar", style: "cancel" },
-          { text: "Cerrar sesión", style: "destructive", onPress: () => void ejecutar(false) },
+          { text: "Cerrar sesión", onPress: () => void ejecutar() },
         ]
       );
       return;
@@ -485,15 +501,12 @@ function CustomDrawer(props: DrawerContentComponentProps) {
       `Todavía no subieron: ${describirPendientes(pendientes)}.
 
 ` +
-        "Al cerrar sesión se borran los datos de este teléfono y ESO SE PIERDE. " +
-        "Conviene sincronizar primero.",
+        "No se pierde: queda guardado y se envía cuando vuelvas a entrar. " +
+        "Pero si en este teléfono entra otro promotor, se borra — sólo vos podés " +
+        "enviarlo. Lo más seguro es sincronizar antes.",
       [
         { text: "Cancelar", style: "cancel" },
-        {
-          text: "Salir y descartar",
-          style: "destructive",
-          onPress: () => void ejecutar(true),
-        },
+        { text: "Salir igual", onPress: () => void ejecutar() },
       ]
     );
   };
@@ -662,6 +675,53 @@ function AuthenticatedNav() {
 
 // ─── Root ────────────────────────────────────────────────────────────
 
+/**
+ * Puerta del cambio de clave vencida.
+ *
+ * El BE marca `passwordExpired` en el login Y en el refresh, pero emite la sesión
+ * igual y delega en el cliente forzar el cambio. Sin esta puerta, en el teléfono
+ * la política no se aplicaba: el promotor entraba, trabajaba, y nadie se enteraba.
+ *
+ * LAS TRES CONDICIONES, Y POR QUÉ CADA UNA
+ * ----------------------------------------
+ *   passwordExpired   lo obvio: el servidor dice que venció.
+ *
+ *   huboSyncOk        este teléfono ya habló con SU servidor en esta corrida. Sin
+ *                     esto, un promotor sin señal quedaría bloqueado sin poder
+ *                     cambiar la clave —el endpoint es remoto—, encerrado afuera
+ *                     de sus propios datos en el campo.
+ *
+ *   porEnviar === 0   no queda trabajo que dependa de él. Perder una jornada de
+ *                     campo es peor que una clave vencida un día más.
+ *
+ * Se mira `porEnviar` y NO `total`: las retenidas esperan un evento de negocio y no
+ * se van sincronizando (ver usePendientes). Con `total` bastaría una fila retenida
+ * para que a ese promotor no se le pidiera la clave NUNCA.
+ */
+function PuertaClaveVencida({ children }: { children: React.ReactNode }) {
+  const passwordExpired = useAuthStore((s) => s.passwordExpired);
+  const huboSyncOk = useSyncEstado((s) => s.huboSyncOk);
+  const { porEnviar, cargando } = usePendientes();
+
+  // `cargando` no es un detalle: los contadores arrancan en 0 mientras la base
+  // responde, y acá 0 significa "exigí la clave". Sin esperarlos, la pantalla
+  // aparecía un instante encima de la app y se iba sola cuando llegaba el conteo.
+  if (passwordExpired && huboSyncOk && !cargando && porEnviar === 0) {
+    return <CambiarClaveScreen />;
+  }
+
+  // Cuando el servidor DICE que la clave vencio pero la puerta no se abre, hay que
+  // poder saber cual de las tres condiciones falta. Sin esto el sintoma es "no pasa
+  // nada", que no distingue "todavia no toca" de "esta roto" — y son la misma
+  // pantalla en blanco.
+  if (passwordExpired) {
+    console.info(
+      `[clave] vencida, puerta cerrada: huboSyncOk=${huboSyncOk} cargando=${cargando} porEnviar=${porEnviar}`
+    );
+  }
+  return <>{children}</>;
+}
+
 export default function App() {
   const [bootError, setBootError] = useState<string | null>(null);
   const [bootDone, setBootDone] = useState(false);
@@ -727,7 +787,11 @@ export default function App() {
             // Autenticado pero sin contexto de trabajo: el sync está scopeado por
             // empresa y cosecha, así que entrar sin elegirlas no traería nada.
             if (sesionCompanyId == null || !sesionCosecha) return <ContextoScreen />;
-            return <AuthenticatedNav key={generacion} />;
+            return (
+              <PuertaClaveVencida>
+                <AuthenticatedNav key={generacion} />
+              </PuertaClaveVencida>
+            );
           })()}
         </NavigationContainer>
       </SafeAreaProvider>

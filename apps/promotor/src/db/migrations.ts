@@ -96,5 +96,27 @@ export const migrations = schemaMigrations({
         }),
       ],
     },
+    {
+      // v4 → v5: totales de recibos por cosecha en la ficha del productor.
+      //
+      // Tabla NUEVA y pull-only: no hay nada del promotor adentro, así que el peor
+      // caso de esta migración es que quede vacía hasta el próximo sync. Aun así va
+      // como migración y no como "que WMDB rearme la base": rearmarla se llevaría
+      // las solicitudes y visitas sin enviar, que sí son irrecuperables.
+      toVersion: 5,
+      steps: [
+        createTable({
+          name: "recibos_cosecha",
+          columns: [
+            { name: "id_socio", type: "number", isIndexed: true },
+            { name: "cosecha", type: "string", isIndexed: true },
+            { name: "cantidad", type: "number" },
+            { name: "recibos", type: "number" },
+            { name: "compania", type: "number", isOptional: true },
+            { name: "sync_updated_at", type: "number", isIndexed: true },
+          ],
+        }),
+      ],
+    },
   ],
 });

@@ -1,0 +1,167 @@
+const fs = require("node:fs");
+const path = require("node:path");
+const clientes = require("./clientes.json");
+
+/**
+ * Config dinámica de Expo: toma app.json como base y le aplica el branding del
+ * cliente que se esté compilando.
+ *
+ *   EXPO_PUBLIC_CLIENTE=altura npx expo prebuild --platform android --clean
+ *   EXPO_PUBLIC_CLIENTE=altura npx expo run:android --variant release
+ *
+ * Sin la variable se usa el perfil `dev`, que reproduce exactamente los valores
+ * que hay en app.json. Eso NO es un detalle cosmético: el dev-client que ya está
+ * instalado en la tableta de prueba tiene el package `cr.confeldan.bodega`, y si
+ * el default lo cambiara habría que reinstalarlo en cada `expo start`.
+ *
+ * Por qué acá y no seis app.json: el package de Android es lo que decide si dos
+ * APK conviven o se pisan. Un beneficio que instale el de otro cliente encima
+ * perdería su sesión y su toma física sin enviar, sin aviso. Derivarlo del mismo
+ * catálogo que el color y la URL hace imposible que uno cambie y el otro no.
+ */
+
+const ID_DEFAULT = "dev";
+const ARCHIVO_SELLO = ".cliente-compilado";
+
+/**
+ * El cliente que dejo estampado el ultimo prebuild, o null si no hay android/.
+ *
+ * Existe porque este archivo se evalua DOS veces —una en `expo prebuild`, otra
+ * dentro de gradle cuando `expo export:embed` arma el bundle— y son procesos
+ * separados. Sin el sello, una variable de ambiente puesta solo en el primero
+ * deja un APK con el package de un cliente y la URL de otro, que compila,
+ * instala y arranca sin quejarse. Ver plugins/sello-cliente.js.
+ */
+function leerSello() {
+  try {
+    const ruta = path.join(__dirname, "android", ARCHIVO_SELLO);
+    if (!fs.existsSync(ruta)) return null;
+    const id = fs.readFileSync(ruta, "utf8").trim();
+    return id || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Comandos que NO producen un APK y por lo tanto no pueden salir mezclados.
+ *
+ *   prebuild     regenera android/ y reescribe el sello: el desacuerdo ES el pedido
+ *   config       `expo config --json`, que usan otras herramientas para leer la app
+ *   credentials  `eas credentials`, que exporta el cliente del perfil y consulta
+ *
+ * El default sigue siendo REVENTAR. Si manana aparece un comando nuevo que evalua
+ * esta config, va a fallar con un mensaje claro en vez de dejar pasar un APK con el
+ * package de un cliente y la URL de otro. Es mas facil agregar un nombre a esta
+ * lista que descubrir en el campo por que un promotor no puede entrar.
+ *
+ * `eas credentials` con un perfil de cliente ya fallo asi (04-sep-2026): exporta
+ * EXPO_PUBLIC_CLIENTE del perfil y despues corre `expo config`, contra un android/
+ * que quedo sellado por el ultimo build local.
+ */
+const COMANDOS_SIN_APK = ["prebuild", "config", "credentials"];
+
+function esComandoSinApk() {
+  return process.argv.some((a) => COMANDOS_SIN_APK.includes(a));
+}
+
+function resolverCliente() {
+  const sello = leerSello();
+  const pedido = process.env.EXPO_PUBLIC_CLIENTE ?? null;
+
+  // Sin variable, MANDA EL SELLO. Es lo que arregla el caso de gradle: la
+  // segunda evaluacion hereda lo que decidio el prebuild aunque nadie exporte
+  // nada. Sin sello —no hay android/ todavia— vale el default.
+  const id = pedido ?? sello ?? ID_DEFAULT;
+
+  // Con variable Y sello que no coinciden no hay forma de adivinar cual gana
+  // sin producir un APK mezclado. Se rompe fuerte.
+  //
+  // SALVO durante un prebuild, que es precisamente la operacion que REESCRIBE el
+  // sello: ahi el desacuerdo no es un peligro sino el pedido de cambiar de
+  // cliente. Sin esta salida el guard se muerde la cola —el remedio que sugeria
+  // el mensaje (`prebuild --clean`) evalua la config ANTES de borrar android/, o
+  // sea que chocaba contra el propio guard y no habia forma de cambiar de cliente
+  // sin borrar el sello a mano. Comprobado el 03-sep-2026.
+  if (pedido && sello && pedido !== sello) {
+    if (!esComandoSinApk()) {
+      throw new Error(
+        `android/ esta prebuildeado para "${sello}" pero se esta compilando como "${pedido}".\n` +
+        `El APK saldria con el package de uno y la URL y el logo del otro.\n` +
+        `Corre de nuevo:  EXPO_PUBLIC_CLIENTE=${pedido} npx expo prebuild --platform android --clean`
+      );
+    }
+    // Se avisa igual: el prebuild se va a llevar puesto lo nativo del cliente
+    // anterior, y conviene que quede dicho en la consola y no solo en el diff.
+    console.warn(
+      `[sello] android/ esta prebuildeado para "${sello}"; este comando pide "${pedido}". No produce APK, se continua.`
+    );
+  }
+
+  const cliente = clientes[id];
+  if (!cliente || id.startsWith("_")) {
+    const validos = Object.keys(clientes).filter((k) => !k.startsWith("_"));
+    // Falla fuerte y temprano. Un typo en la variable no puede terminar en un APK
+    // con el branding de otro cliente: eso se descubre cuando ya está instalado.
+    throw new Error(
+      `EXPO_PUBLIC_CLIENTE="${id}" no existe en clientes.json. Válidos: ${validos.join(", ")}`
+    );
+  }
+  return { id, ...cliente };
+}
+
+/** Ruta a un asset del cliente, o undefined si el archivo todavía no está puesto. */
+function assetSiExiste(nombreArchivo) {
+  if (!nombreArchivo) return undefined;
+  const rel = path.join("assets", "clientes", nombreArchivo);
+  return fs.existsSync(path.join(__dirname, rel)) ? `./${rel.replace(/\\/g, "/")}` : undefined;
+}
+
+module.exports = ({ config }) => {
+  const cliente = resolverCliente();
+
+  // El ícono cuadrado lo genera scripts/iconos.js a partir del logo. Si todavía
+  // no se corrió, se cae al ícono por defecto de Expo en vez de romper el build.
+  const icono = assetSiExiste(`icono-${cliente.id}.png`);
+  const logo = assetSiExiste(cliente.logo);
+
+  return {
+    ...config,
+    // El sello se registra ACA y no en app.json porque necesita el id ya
+    // resuelto, que app.json no puede saber.
+    plugins: [...(config.plugins ?? []), ["./plugins/sello-cliente", { id: cliente.id }]],
+    name: cliente.nombre,
+    ...(icono ? { icon: icono } : {}),
+    splash: {
+      ...config.splash,
+      ...(icono ? { image: icono } : {}),
+      backgroundColor: cliente.color,
+    },
+    android: {
+      ...config.android,
+      package: cliente.package,
+      adaptiveIcon: {
+        ...(icono ? { foregroundImage: icono } : {}),
+        backgroundColor: cliente.color,
+      },
+    },
+    extra: {
+      ...config.extra,
+      // La URL del catálogo gana sobre la de app.json. En runtime, el override
+      // que se guarde desde el menú → Servidor gana sobre ésta (ver lib/servidor.ts).
+      apiBaseUrl: cliente.apiBaseUrl,
+      cliente: {
+        id: cliente.id,
+        nombre: cliente.nombre,
+        nombreLargo: cliente.nombreLargo,
+        color: cliente.color,
+        // Opcional: sin esto se deriva del color de marca. Sólo `dev` lo fija.
+        // Se OMITE la clave en vez de mandarla en null: Expo serializa los null del
+        // manifest como {}, que es truthy, y del otro lado terminaría usándose como
+        // si fuera un color.
+        ...(cliente.acento ? { acento: cliente.acento } : {}),
+        tieneLogo: Boolean(logo),
+      },
+    },
+  };
+};

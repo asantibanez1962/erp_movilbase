@@ -1,0 +1,84 @@
+{
+  "cli": {
+    "version": ">= 19.0.0",
+    "appVersionSource": "local"
+  },
+  "build": {
+    "development": {
+      "developmentClient": true,
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk",
+        "gradleCommand": ":app:assembleDebug"
+      }
+    },
+    "preview": {
+      "distribution": "internal",
+      "android": {
+        "buildType": "apk"
+      }
+    },
+    "demo": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "demo"
+      }
+    },
+    "altura": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "altura"
+      }
+    },
+    "laeva": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "laeva"
+      }
+    },
+    "coricafe": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "coricafe"
+      }
+    },
+    "cafex": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "cafex"
+      }
+    },
+    "valles": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "valles"
+      }
+    },
+    "tesoros": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "tesoros"
+      }
+    },
+    "sacos": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "sacos"
+      }
+    },
+    "cantaro": {
+      "extends": "preview",
+      "env": {
+        "EXPO_PUBLIC_CLIENTE": "cantaro"
+      }
+    },
+    "production": {
+      "android": {
+        "buildType": "app-bundle"
+      }
+    }
+  },
+  "submit": {
+    "production": {}
+  }
+}

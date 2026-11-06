@@ -27,6 +27,17 @@
     "logo": null
   },
 
+  "altura-test": {
+    "nombre": "Promotor Altura Pruebas",
+    "nombreLargo": "Café Altura — capacitación",
+    "_colorNota": "Ámbar A PROPÓSITO, distinto del verde de Altura. En un aula la app de práctica y la de trabajo real se abren en el mismo teléfono, y el color del encabezado es lo único que se ve sin leer. Un trainee no puede pasar media hora capturando visitas de práctica creyendo que está en producción.",
+    "color": "#d97706",
+    "_ipNota": "Puerto 5250: la base de PRUEBAS. El package es otro que el de producción, así que las dos apps conviven con bases locales separadas y los datos de capacitación no pueden mezclarse con los reales.",
+    "package": "cr.confeldan.promotor.alturapruebas",
+    "apiBaseUrl": "http://192.168.10.5:5250",
+    "logo": "altura.png"
+  },
+
   "altura": {
     "nombre": "Promotor Altura",
     "nombreLargo": "Café Altura de San Ramón Especial S.A.",
@@ -34,6 +45,17 @@
     "package": "cr.confeldan.promotor.altura",
     "apiBaseUrl": "http://192.168.10.5:5249",
     "logo": "altura.png"
+  },
+
+  "cordillera": {
+    "nombre": "Promotor Cordillera",
+    "nombreLargo": "Cordillera de Fuego, S.A.",
+    "_colorNota": "El mismo verde de Altura, por pedido del cliente (07-oct-2026). Queda IDENTICO a Promotor Altura en el launcher y en el header: el logo es lo unico que las separa. Los packages son distintos, asi que conviven sin pisarse, pero quien tenga las dos instaladas no las va a distinguir por color.",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.promotor.cordillera",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "cordillera.png",
+    "_falta": ["apiBaseUrl real del beneficio"]
   },
 
   "laeva": {

@@ -1,0 +1,157 @@
+{
+  "_nota": [
+    "Catálogo de clientes de la app de bodega (CA). Una entrada por empresa.",
+    "Lo leen DOS consumidores, y por eso es JSON y no un .ts:",
+    "  - app.config.js (Node, en build time) → nombre, package, ícono, splash",
+    "  - src/branding/index.ts (Metro, en runtime) → logo y colores de la UI",
+    "Tenerlo en un solo lugar evita que el color del APK y el de la pantalla se separen.",
+    "",
+    "Para compilar un cliente:",
+    "  $env:EXPO_PUBLIC_CLIENTE='coricafe'; npx expo prebuild --platform android --clean",
+    "  cd android; .\\gradlew.bat assembleRelease",
+    "Sin la variable se compila el perfil 'dev', que es el del dev-client instalado.",
+    "",
+    "⚠ COLORES SACADOS DEL LOGO A OJO, no dados por el cliente: Coricafé, Cafex,",
+    "Los Valles y Tesoros. Cada una lo dice en su _colorNota y en su _falta. Es más",
+    "cerca que un marcador, pero sigue siendo una estimación: confirmar el hex",
+    "antes de generar el APK.",
+    "",
+    "Los logos van sobre una tarjeta CLARA dentro del panel de marca, así que no",
+    "hace falta una versión en negativo de ninguno: todos los que tenemos están",
+    "hechos para fondo claro.",
+    "",
+    "NO generar el APK de una empresa con _falta pendiente: el color y el package",
+    "quedan horneados, y corregirlos después obliga a desinstalar y reinstalar en",
+    "cada tableta — y desinstalar se lleva la toma física sin enviar.",
+    "",
+    "apiBaseUrl: el backend de CADA cliente es local a su beneficio. Si no se sabe al",
+    "momento de compilar no bloquea — se corrige desde el menú → Servidor —, pero el",
+    "color y el package sí quedan fijos en el APK.",
+    "",
+    "El logo, además del PNG en assets/clientes/, necesita su línea en el mapa LOGOS",
+    "de src/branding/index.ts: Metro exige rutas literales, y requerir un archivo que",
+    "no está rompe el bundle entero."
+  ],
+
+  "dev": {
+    "nombre": "Bodega",
+    "nombreLargo": "Bodega (desarrollo)",
+    "_colorNota": "El verde de siempre, para que el dev-client ya instalado no cambie de aspecto.",
+    "color": "#3f8f2e",
+    "package": "cr.confeldan.bodega",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null
+  },
+
+  "demo": {
+    "nombre": "Bodega DEMO",
+    "nombreLargo": "DEMO — datos de prueba",
+    "_nota": [
+      "Para probar el APK de release y para mostrar la app.",
+      "",
+      "Toma prestados el color y el logo de Altura para que se vea como una app",
+      "de verdad, pero el nombre dice DEMO en las dos líneas del login y en el",
+      "launcher. Un demo que se ve idéntico al APK real de un cliente es una",
+      "trampa: alguien lo instala en la tableta equivocada y trabaja media",
+      "mañana contra la base de desarrollo.",
+      "",
+      "apiBaseUrl apunta a la wifi de la máquina de desarrollo, así que el APK",
+      "anda sin cable mientras el teléfono esté en la misma red. Si esa IP",
+      "cambia, se corrige desde el menú → Servidor sin recompilar.",
+      "",
+      "Su package es propio, así que CONVIVE con el dev-client instalado: no hay",
+      "que desinstalar nada para probar el APK."
+    ],
+    "color": "#5caa3b",
+    "package": "cr.confeldan.bodega.demo",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "altura.png"
+  },
+
+  "altura": {
+    "nombre": "Bodega Altura",
+    "nombreLargo": "Café Altura de San Ramón Especial S.A.",
+    "color": "#5caa3b",
+    "package": "cr.confeldan.bodega.altura",
+    "apiBaseUrl": "http://192.168.10.5:5249",
+    "logo": "altura.png",
+    "_nota": "Completa. Mismos color, IP y logo que su APK de promotor. Es el cliente contra el que se probó la app."
+  },
+
+  "laeva": {
+    "nombre": "Bodega La Eva",
+    "nombreLargo": "Beneficio La Eva",
+    "_colorNota": "Su azul real, tomado de su APK de promotor. NO es provisional.",
+    "color": "#095ee9",
+    "package": "cr.confeldan.bodega.laeva",
+    "apiBaseUrl": "http://192.168.100.10:5249",
+    "logo": "laeva.png",
+    "_nota": "Completa. Reutiliza color, IP y logo del catálogo de promotor."
+  },
+
+  "coricafe": {
+    "nombre": "Bodega Coricafé",
+    "nombreLargo": "Coricafe, S.A.",
+    "_colorNota": "El verde del texto y la hoja, SACADO A OJO. Es más profundo y menos amarillo que el de Altura, con el que se puede confundir de un vistazo. Confirmar el hex antes de generar el APK.",
+    "color": "#2e8b4d",
+    "package": "cr.confeldan.bodega.coricafe",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo coricafe.png)"]
+  },
+
+  "cafex": {
+    "nombre": "Bodega Cafex",
+    "nombreLargo": "Cafex S.A.",
+    "_colorNota": "Café oscuro SACADO A OJO del logo, no dado por el cliente. Confirmar el hex antes de generar el APK.",
+    "color": "#3e2618",
+    "package": "cr.confeldan.bodega.cafex",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo cafex.png)"]
+  },
+
+  "valles": {
+    "nombre": "Bodega Los Valles",
+    "nombreLargo": "Beneficio Los Valles S.A.",
+    "_colorNota": "El azul del texto del logo, SACADO A OJO. El óvalo es un degradé de varios colores y no sirve como color plano. Confirmar el hex antes de generar el APK.",
+    "color": "#1b2a6b",
+    "package": "cr.confeldan.bodega.valles",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo valles.png)"]
+  },
+
+  "tesoros": {
+    "nombre": "Bodega Tesoros del Café",
+    "nombreLargo": "Tesoros del Café",
+    "_colorNota": "El café del medallón, SACADO A OJO del logo. El dorado del borde (~#d1a13c) queda anotado por si algún día la UI usa un acento. Confirmar el hex antes de generar el APK.",
+    "color": "#4a2c17",
+    "package": "cr.confeldan.bodega.tesoros",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo tesoros.png)"]
+  },
+
+  "sacos": {
+    "nombre": "Bodega Sacos e Impresiones",
+    "nombreLargo": "Sacos e Impresiones de Costa Rica",
+    "_colorNota": "El naranja del logo, SACADO A OJO. Se elige sobre el café oscuro del texto a propósito: Cafex y Tesoros ya son cafés oscuros, y tres apps de marca casi idéntica no se distinguirían en la tableta, que es justo lo que el branding tiene que resolver. Confirmar el hex.",
+    "color": "#e0562a",
+    "package": "cr.confeldan.bodega.sacos",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar el hex del color", "apiBaseUrl", "logo (falta el archivo sacos.png)"]
+  },
+
+  "cantaro": {
+    "nombre": "Bodega El Cántaro",
+    "nombreLargo": "Agrícola El Cántaro",
+    "_colorNota": "Negro, confirmado. Se deja un punto por encima del negro absoluto para que se distingan bordes y sombras; a la vista es negro igual. El logo va sobre la tarjeta clara del panel, como el resto.",
+    "color": "#141414",
+    "package": "cr.confeldan.bodega.cantaro",
+    "apiBaseUrl": "http://10.0.2.2:5249",
+    "logo": null,
+    "_falta": ["confirmar que es cliente", "apiBaseUrl", "logo (falta el archivo cantaro.png)"]
+  }
+}

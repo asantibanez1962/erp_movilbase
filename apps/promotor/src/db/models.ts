@@ -116,8 +116,14 @@ export class Productor extends Model {
   @readonly @field("rc_zona") rcZona!: string | null;
   @readonly @field("nombrecomercial") nombrecomercial!: string | null;
   @readonly @field("identificacion") identificacion!: string | null;
-  @readonly @field("telefonos") telefonos!: string | null;
-  @readonly @field("email") email!: string | null;
+  /**
+   * Los DOS únicos campos del productor que el teléfono puede modificar. Sin
+   * `@readonly` a propósito: el servidor los declara actualizables en
+   * `UpdatableFieldsJson` (v1.80/RC/10) y ahí termina el alcance — cualquier otro
+   * campo que se escriba acá viaja pero el push lo descarta sin decir nada.
+   */
+  @field("telefonos") telefonos!: string | null;
+  @field("email") email!: string | null;
   @readonly @field("compania") compania!: number;
   @readonly @field("sync_updated_at") syncUpdatedAt!: number;
 
@@ -160,6 +166,26 @@ export class Recibidor extends Model {
   get displayName(): string {
     return this.nombre?.trim() || this.codigo;
   }
+}
+
+/**
+ * Total de recibos de un productor en una cosecha.
+ *
+ * Pull-only y agregado: `cantidad` es la SUMA de los recibos de ese par y
+ * `recibos` cuántos son. El detalle no viaja (ver schema.ts).
+ *
+ * `id` es "<idsocio>-<cosecha>", armado por la vista del servidor.
+ */
+export class ReciboCosecha extends Model {
+  static readonly table = "recibos_cosecha";
+
+  @readonly @field("id_socio") idSocio!: number;
+  @readonly @field("cosecha") cosecha!: string;
+  /** Suma de `recibos.cantidad`. No es un conteo — eso es `recibos`. */
+  @readonly @field("cantidad") cantidad!: number;
+  @readonly @field("recibos") recibos!: number;
+  @readonly @field("compania") compania!: number | null;
+  @readonly @field("sync_updated_at") syncUpdatedAt!: number;
 }
 
 export class Zona extends Model {
@@ -454,6 +480,7 @@ export const MODEL_CLASSES = [
   Solicitud,
   Entregador,
   Visita,
+  ReciboCosecha,
   ServerId,
   PendingUpload,
   EventoBitacora,

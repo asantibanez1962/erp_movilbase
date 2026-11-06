@@ -6,6 +6,7 @@ import {
   useAuthStore,
 } from "@erp/shared-api";
 import { config } from "./config";
+import { asegurarDuenoBase } from "./duenoBase";
 import { getOrCreateDeviceId } from "./deviceId";
 import { cargarUrlServidor } from "./servidor";
 import { contextoActual } from "./sesion";
@@ -27,7 +28,13 @@ export async function bootstrapApi(): Promise<void> {
   // 0. La dirección del servidor ANTES que nada: el auth store y el cliente axios
   //    la resuelven en cada llamada, así que esto es sólo para que la primera request
   //    no tenga que esperar a SecureStore.
-  await cargarUrlServidor();
+  const url = await cargarUrlServidor();
+
+  // Se deja dicho en el log a proposito. "¿A que servidor esta hablando este
+  // telefono?" es la primera pregunta de cualquier diagnostico en campo, y hasta
+  // ahora habia que ir a buscarla a una pantalla — o adivinarla, que ya costo dos
+  // vueltas de pruebas creyendo que la app fallaba cuando le hablaba a otra base.
+  console.info(`[api] servidor en uso: ${url}`);
 
   // 1. Hidrata auth store desde SecureStore (refresh token vivo → arrancamos
   //    logueado sin pedir credenciales).
@@ -38,6 +45,20 @@ export async function bootstrapApi(): Promise<void> {
     baseURL: () => config.apiBaseUrl,
     tokenStore,
   });
+
+  // 1b. La base local tiene dueño. Se verifica también acá y no sólo en el login:
+  //     si la app se cerró entre un login y su borrado, el usuario nuevo arrancaría
+  //     con la base del anterior. Ver asegurarDuenoBase.
+  const usuarioId = useAuthStore.getState().user?.id;
+  if (usuarioId != null) {
+    try {
+      if (await asegurarDuenoBase(usuarioId)) {
+        console.info("[alcance] la base local era de otro usuario; se rebajó");
+      }
+    } catch (err) {
+      console.warn("no se pudo verificar el dueño de la base local", err);
+    }
+  }
 
   // 2. Crear axios + sync API una sola vez.
   httpClient = createApiClient({
