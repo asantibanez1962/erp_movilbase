@@ -19,6 +19,17 @@ export const migrations = schemaMigrations({
   // consultas fallarían en runtime, no al compilar.
   migrations: [
     {
+      // El productor del precio por `idsocio`, como lo hace ya el servidor en
+      // f_rc_busca_precio: `codigo` dejó de identificarlo (puede faltar o repetirse).
+      toVersion: 13,
+      steps: [
+        addColumns({
+          table: "precios",
+          columns: [{ name: "id_socio", type: "number", isOptional: true }],
+        }),
+      ],
+    },
+    {
       // El código del productor genérico, que estaba compilado en el APK con el mismo
       // valor para todos los clientes. Ver v1.71/RC/66.
       toVersion: 12,

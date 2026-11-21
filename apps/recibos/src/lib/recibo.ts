@@ -318,6 +318,9 @@ export function calcular(
 export async function precioDe(opts: {
   tipoCafe: string;
   calidad: string;
+  /** Lo que identifica al productor en el precio. `null` ⇒ no hay (el genérico). */
+  idSocioProductor: number | null;
+  /** Sólo para las filas de precio viejas sin `id_socio`; ver `buscarPrecio()`. */
   codigoProductor: string;
   tipoProductor: string;
 }) {
@@ -335,6 +338,7 @@ export async function precioDe(opts: {
       // ⚠️ `codigozona` y no `zona`: en rc_recibidores la columna `zona` es otra escala.
       zona: recibidores[0]?.codigozona?.trim() ?? "",
       recibidor: recibidor ?? "",
+      idsocio: opts.idSocioProductor,
       codigo: opts.codigoProductor,
       tipo: opts.tipoProductor,
     },
@@ -346,6 +350,7 @@ export async function precioDe(opts: {
       zona: p.zona,
       recibidor: p.recibidor,
       tipo: p.tipo,
+      idsocio: p.idSocio,
       codigo: p.codigo,
       monto: p.monto,
       moneda: p.moneda,

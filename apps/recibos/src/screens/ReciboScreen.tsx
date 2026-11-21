@@ -404,6 +404,8 @@ export function ReciboScreen({
       const p = await precioDe({
         tipoCafe,
         calidad,
+        // El id de WMDB del productor ES su idsocio (el pull lo manda como `id`).
+        idSocioProductor: productor ? Number(productor.id) : null,
         codigoProductor: productor?.codigo ?? "",
         tipoProductor: productor?.tipo?.trim() ?? "",
       });

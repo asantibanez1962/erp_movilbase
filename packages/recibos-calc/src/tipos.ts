@@ -67,6 +67,12 @@ export interface Precio {
   zona: string | null;
   recibidor: string | null;
   tipo: string | null;
+  /**
+   * Productor al que aplica el precio. Ausente (null/undefined) en las generales, pero
+   * también en las filas viejas que el teléfono todavía no re-bajó: ver `buscarPrecio()`.
+   */
+  idsocio?: number | null;
+  /** Ya no identifica al productor en el servidor; sólo sirve a la regla de transición. */
   codigo: string | null;
   monto: number;
   moneda: number;
@@ -83,7 +89,9 @@ export interface EntradaPrecio {
   /** `codigozona` del recibidor. */
   zona: string;
   recibidor: string;
-  /** Código del productor. */
+  /** `idsocio` del productor; `null` si no hay (p. ej. el genérico sin resolver). */
+  idsocio: number | null;
+  /** Código del productor. Sólo para las filas viejas; ver `buscarPrecio()`. */
   codigo: string;
   /** `tipo` del productor. */
   tipo: string;

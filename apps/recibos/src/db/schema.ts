@@ -53,8 +53,10 @@ import { appSchema, tableSchema } from "@nozbe/watermelondb";
  *   9 → `pinton`, `granopasa` y `flotenegro` en recibos y remedidas, y la lista de
  *        cuáles usa cada beneficio. ⚠️ SÓLO REGISTRAN: son control de calidad y no
  *        producen rebajo, así que el cálculo no cambia. Ver v1.71/RC/49.
+ *  13 → `id_socio` en precios: el servidor identifica al productor del precio por
+ *        `idsocio` y ya no por `codigo`. Ver `buscarPrecio()` en @erp/recibos-calc.
  */
-export const SCHEMA_VERSION = 12;
+export const SCHEMA_VERSION = 13;
 
 /**
  * Orden de sync. Importa para el push: **la bitácora sube antes que sus recibos**, para
@@ -154,8 +156,8 @@ export const schema = appSchema({
         { name: "nivel", type: "number" },
       ],
     }),
-    // Las columnas opcionales (zona, recibidor, tipo, codigo) son parte del criterio
-    // de desempate del precio, no adorno: buscarPrecio() ordena por ellas.
+    // Las columnas opcionales (zona, recibidor, tipo, id_socio, codigo) son parte del
+    // criterio de desempate del precio, no adorno: buscarPrecio() ordena por ellas.
     tableSchema({
       name: "precios",
       columns: [
@@ -166,6 +168,9 @@ export const schema = appSchema({
         { name: "zona", type: "string", isOptional: true },
         { name: "recibidor", type: "string", isOptional: true },
         { name: "tipo", type: "string", isOptional: true },
+        // Llega como `idsocio AS id_socio`. Opcional porque las filas generales no
+        // se re-pullean tras la v13 y quedan sin él. Ver la regla de transición.
+        { name: "id_socio", type: "number", isOptional: true },
         { name: "codigo", type: "string", isOptional: true },
         { name: "monto", type: "number" },
         { name: "moneda", type: "number" },

@@ -45,6 +45,8 @@ export class Precio extends Model {
   @readonly @field("zona") zona!: string | null;
   @readonly @field("recibidor") recibidor!: string | null;
   @readonly @field("tipo") tipo!: string | null;
+  /** Productor al que aplica el precio; ausente en las generales. Ver `buscarPrecio()`. */
+  @readonly @field("id_socio") idSocio!: number | null;
   @readonly @field("codigo") codigo!: string | null;
   @readonly @field("monto") monto!: number;
   @readonly @field("moneda") moneda!: number;

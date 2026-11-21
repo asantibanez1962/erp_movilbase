@@ -12,9 +12,10 @@
  * port no reproduce lo que el negocio ya emitió, no se puede imprimir offline y hay
  * que replantear el módulo entero. Por eso corre antes de construir pantallas.
  *
- *   node scripts/verificar.cjs [--cosecha 2025-2026] [--n 5000]
+ *   node scripts/verificar.cjs [--cosecha 2025-2026] [--n 5000] [--solo-precio]
  *
- * Requiere `sqlcmd` y la cadena de conexión del BE.
+ * Requiere `sqlcmd` y la cadena de conexión del BE, salvo con `--solo-precio`, que corre
+ * únicamente los casos de `buscarPrecio` (datos armados a mano, sin base).
  */
 const { execFileSync } = require("node:child_process");
 const fs = require("node:fs");
@@ -37,7 +38,8 @@ function conexion() {
   return { server: p("Server"), db: p("Database"), user: p("User Id"), pass: p("Password") };
 }
 
-const CX = conexion();
+/** Se abre después de los casos de precio, que no necesitan base. */
+let CX = null;
 
 /** Columnas que quedan como texto pase lo que pase. Ver la nota en el parser. */
 const TEXTO = new Set(["recibo", "cosecha", "recibidor"]);
@@ -82,6 +84,7 @@ const arg = (nombre, def) => {
   const i = args.indexOf(`--${nombre}`);
   return i >= 0 && args[i + 1] ? args[i + 1] : def;
 };
+const SOLO_PRECIO = args.includes("--solo-precio");
 const COSECHA = arg("cosecha", null);
 const N = Number(arg("n", "5000"));
 /** SQL extra para aislar un subconjunto, ej: --where "r.floteseco <> 0". */
@@ -96,7 +99,86 @@ if (!fs.existsSync(path.join(distDir, "index.js"))) {
   console.error("Falta compilar. Corré:  pnpm --filter @erp/recibos-calc run verificar");
   process.exit(2);
 }
-const { calcularRecibo } = require(path.join(distDir, "index.js"));
+const { calcularRecibo, buscarPrecio } = require(path.join(distDir, "index.js"));
+
+// ── Precio ──────────────────────────────────────────────────────────────
+//
+// `buscarPrecio` es un port de dbo.f_rc_busca_precio, que identifica al productor por
+// `idsocio`. Estos casos son datos armados a mano porque lo que se prueba es la regla
+// (filtro y desempate), no los valores de una base. El servidor es la definición de lo
+// correcto: si un caso discrepa con él, el bug es del port.
+
+let fallosPrecio = 0;
+let idseq = 0;
+/** Una fila de rc_precios. Lo que no se pasa queda en NULL = aplica a todos. */
+const fila = (o = {}) => ({
+  idreprecio: ++idseq, cosecha: "C1", tipocafe: "A", calidad: "1",
+  zona: null, recibidor: null, tipo: null, idsocio: null, codigo: null,
+  monto: 100, moneda: 1, recalcula: 0, flete: 0, ...o,
+});
+/** Lo que el recibidor captura. */
+const entrada = (o = {}) => ({
+  cosecha: "C1", tipocafe: "A", calidad: "1", zona: "Z1", recibidor: "001",
+  idsocio: 10, codigo: "P10", tipo: "T1", ...o,
+});
+/** Verifica qué fila gana, por su `monto` (null = ninguna). */
+function caso(nombre, e, filas, montoEsperado) {
+  const r = buscarPrecio(e, filas);
+  const got = r ? r.monto : null;
+  const ok = got === montoEsperado;
+  if (!ok) fallosPrecio++;
+  console.log(`  ${ok ? "ok  " : "FALLA"} ${nombre}` + (ok ? "" : `  (esperado ${montoEsperado}, salió ${got})`));
+}
+
+console.log("Precio — buscarPrecio:");
+caso("1. precio de socio, matchea por idsocio",
+  entrada({ idsocio: 10 }),
+  [fila({ monto: 100 }), fila({ idsocio: 10, monto: 150 })], 150);
+caso("1b. el precio de otro socio no aplica",
+  entrada({ idsocio: 10 }),
+  [fila({ monto: 100 }), fila({ idsocio: 11, monto: 150 })], 100);
+caso("2. general (sin socio ni código) aplica a cualquiera",
+  entrada({ idsocio: 99, codigo: "ZZ" }),
+  [fila({ monto: 100 })], 100);
+caso("3. fila vieja sin idsocio y con código cae al match por código",
+  entrada({ idsocio: 10, codigo: "P10" }),
+  [fila({ monto: 100 }), fila({ codigo: "P10", monto: 140 })], 140);
+caso("3b. fila vieja con otro código NO aplica (no se confunde con general)",
+  entrada({ idsocio: 10, codigo: "P10" }),
+  [fila({ codigo: "P77", monto: 140 })], null);
+caso("3c. fila vieja con código empata como 'con socio' y gana a la general",
+  entrada({ idsocio: 10, codigo: "P10" }),
+  [fila({ tipo: "T1", monto: 120 }), fila({ codigo: "P10", monto: 140 })], 140);
+caso("4. productor SIN código recibe su precio específico por idsocio",
+  entrada({ idsocio: 10, codigo: "" }),
+  [fila({ monto: 100 }), fila({ idsocio: 10, monto: 150 })], 150);
+caso("5. código duplicado: con idsocio ya no agarra el precio del otro productor",
+  entrada({ idsocio: 10, codigo: "DUP" }),
+  [fila({ monto: 100 }), fila({ idsocio: 10, codigo: "DUP", monto: 150 }),
+   fila({ idsocio: 11, codigo: "DUP", monto: 999 })], 150);
+caso("5b. idsocio de entrada ausente: una fila con idsocio no aplica a nadie",
+  entrada({ idsocio: null, codigo: "" }),
+  [fila({ monto: 100 }), fila({ idsocio: 10, monto: 150 })], 100);
+caso("6a. desempate: socio antes que tipo",
+  entrada(),
+  [fila({ tipo: "T1", monto: 120 }), fila({ idsocio: 10, monto: 150 })], 150);
+caso("6b. desempate: tipo antes que recibidor",
+  entrada(),
+  [fila({ recibidor: "001", monto: 120 }), fila({ tipo: "T1", monto: 150 })], 150);
+caso("6c. desempate: recibidor antes que zona",
+  entrada(),
+  [fila({ zona: "Z1", monto: 120 }), fila({ recibidor: "001", monto: 150 })], 150);
+caso("6d. desempate: a igual especificidad gana el idreprecio mayor",
+  entrada(),
+  [fila({ idsocio: 10, monto: 150 }), fila({ idsocio: 10, monto: 160 })], 160);
+caso("6e. el valor del socio ya no desempata (sólo cuenta tener o no)",
+  entrada({ idsocio: 10 }),
+  [fila({ idsocio: 10, tipo: "T1", monto: 150 }), fila({ codigo: "Z9", tipo: null, monto: 999 })], 150);
+console.log(fallosPrecio === 0 ? "  precio: todo ok\n" : `  precio: ${fallosPrecio} FALLA(S)\n`);
+
+if (SOLO_PRECIO) process.exit(fallosPrecio === 0 ? 0 : 1);
+
+CX = conexion();
 
 // ── Catálogos ───────────────────────────────────────────────────────────
 
@@ -208,4 +290,4 @@ if (porCampo.size > 0) {
   }
 }
 console.log(`${"=".repeat(62)}`);
-process.exitCode = iguales === total ? 0 : 1;
+process.exitCode = iguales === total && fallosPrecio === 0 ? 0 : 1;
