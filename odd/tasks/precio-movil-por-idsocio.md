@@ -1,0 +1,195 @@
+# Precio del recibo por idsocio en el móvil
+
+## Objetivo
+
+Que `buscarPrecio()` del móvil identifique al productor por `idsocio`, igual que
+`dbo.f_rc_busca_precio` en el servidor, y que `codigo` quede sólo como dato a mostrar.
+
+## Problema
+
+`packages/recibos-calc/src/precio.ts` es un port literal de `dbo.f_rc_busca_precio`. El
+servidor ya migró a `idsocio` (verificado el 21-nov-2026 en `sci_altura_0826`):
+
+```sql
+CREATE FUNCTION dbo.f_rc_busca_precio
+( @cosecha CHAR(10), @tipocafe CHAR(1), @calidad CHAR(1), @zona CHAR(2),
+  @recibidor VARCHAR(3), @idsocio INT, @tipo CHAR(3) )
+...
+  AND (p.idsocio IS NULL OR p.idsocio=@idsocio)
+ORDER BY CASE WHEN p.idsocio IS NOT NULL THEN 1 ELSE 0 END DESC,
+         ISNULL(p.tipo,' ') DESC, ISNULL(p.recibidor,' ') DESC,
+         ISNULL(p.zona,' ') DESC, ISNULL(p.calidad,' ') DESC,
+         ISNULL(p.tipocafe,' ') DESC, p.idreprecio DESC
+```
+
+`@codigo` salió de la firma y `codigo` salió del `ORDER BY`. El móvil sigue filtrando por
+`p.codigo` y ordenando por `codigo` primero. **Es una divergencia activa**: el precio que
+se imprime en la finca puede no ser el que el servidor recalcula al sincronizar
+(`ReciboCalcHook`, `RcReciboComputeController`).
+
+## Por qué ahora
+
+Dos consecuencias, una presente y una inminente:
+
+1. **Hoy**: un productor sin `rc_codigo` nunca matchea su propio precio, y con código
+   duplicado matchea el de otro — el `ORDER BY ISNULL(codigo,' ') DESC` del móvil le da
+   el precio del código alfabéticamente mayor.
+2. **Inminente**: medido el 21-nov en `rc_precios` — 516 filas, 310 con `idsocio`, y **0
+   con `idsocio` y `codigo` vacío**. El día que el web grabe la primera fila así, el móvil
+   la lee como **precio general** (su regla es "`codigo` en NULL aplica a todos") y le
+   pone el precio de ese productor **a todos los demás**. No falla: calcula, imprime,
+   sincroniza, y está mal.
+
+## Lo que ya está hecho del lado del servidor
+
+Aplicado por Alfredo en su sesión de BE (v1.95), verificado acá el 21-nov:
+
+- `mt.MobileCollections` de `recibos`/`precios` → `ColumnsJson` termina en
+  `"idsocio AS id_socio"`. El alias manda: la columna de la app se llama `id_socio`.
+- `rc_precios.SyncUpdatedAt` estampada en 310 filas (las que tienen `idsocio`) a las
+  20:05 UTC del 21-nov, para que el pull incremental las vuelva a entregar.
+- Las **206 filas generales conservan su estampa vieja** (5-nov). No se re-pullean, y su
+  `id_socio` va a quedar ausente en el teléfono. Eso es correcto, pero obliga a la regla
+  de transición de T2.
+- No hace falta reiniciar el BE: `SyncCollectionRegistry` es *Scoped* y cachea por request.
+
+## Alcance autorizado
+
+El cálculo del precio en la app de recibos, de punta a punta: columna local, port,
+call sites y sus verificaciones.
+
+**Fuera de alcance** (ofrecidos, sin respuesta de Alfredo — no tocar):
+
+- El genérico resuelto por `codigo` con `encontrados[0]` (`recibo.ts:515-530`).
+- El accesor `idSocio` explícito en el modelo `Productor` de las dos apps.
+- El bloqueo del entregador sin `rc_codigo` en promotor
+  (`SolicitudDetailScreen.tsx:135-140`).
+- Todo lo que sea del backend: hooks, metadata, scripts SQL. Van en la sesión del web.
+
+## Restricciones
+
+- **La migración va en el MISMO commit que el bump de `SCHEMA_VERSION`.** Lo dice
+  `migrations.ts:10-13`: sin su paso, WatermelonDB **borra la base del teléfono**, con los
+  recibos del día adentro si la bitácora no cerró.
+- Las migraciones van en orden **descendente** y cada versión en su propio paso. Agregarle
+  un step a una versión que los teléfonos ya corrieron no hace nada.
+- Comentarios en español, al estilo del repo (neutral, explicando el *por qué*).
+- `precio.ts` es un port: cualquier divergencia con la función del servidor es un bug,
+  incluso si parece una mejora. El servidor es la definición de lo correcto.
+
+## Modo TDD
+
+**Apagado**, y no por elección: el monorepo no tiene framework de pruebas. Lo que hay es
+un verificador a mano, `packages/recibos-calc/scripts/verificar.cjs`, y **no cubre
+`buscarPrecio` en absoluto** (grep de `buscarPrecio`, `idsocio` y `codigo`: cero
+resultados). Resuelto de la configuración del repo, no de una preferencia.
+
+- Runner: `pnpm --filter @erp/recibos-calc run verificar`
+- Lint/typecheck: `pnpm -r run lint --if-present` (cada paquete corre `tsc --noEmit`)
+
+## Verificaciones aplicables
+
+| check | comando |
+|---|---|
+| typecheck del paquete | `pnpm --filter @erp/recibos-calc run lint` |
+| verificador del cálculo | `pnpm --filter @erp/recibos-calc run verificar` |
+| typecheck de la app | `pnpm --filter @erp/recibos run lint` |
+
+## Tareas
+
+- [x] **T1 — columna `id_socio` en la tabla local `precios`.**
+      `apps/recibos/src/db/schema.ts` (tabla `precios`, `SCHEMA_VERSION` 12→13),
+      `apps/recibos/src/db/migrations.ts` (paso `toVersion: 13` arriba),
+      `apps/recibos/src/db/models.ts` (campo en el modelo `Precio`).
+      Ruta: **delegada** (3 archivos no triviales → trigger de writer).
+- [x] **T2 — port de `buscarPrecio` a idsocio.**
+      `packages/recibos-calc/src/tipos.ts` (`Precio.idSocio`, `EntradaPrecio.idSocio`),
+      `packages/recibos-calc/src/precio.ts` (filtro + nuevo `ORDER BY`).
+      **Regla de transición**: una fila con `idSocio` ausente pero `codigo` NO vacío es una
+      fila vieja que todavía no se re-pulleó → se compara por `codigo`, como hoy. Una fila
+      con los dos vacíos es precio general. Sin esa distinción, las 206 generales y las
+      viejas se confunden.
+      Ruta: **delegada** (misma tanda que T1).
+- [x] **T3 — call sites pasan el idsocio.**
+      `apps/recibos/src/lib/recibo.ts:321-349` y
+      `apps/recibos/src/screens/ReciboScreen.tsx:407`, que hoy pasan
+      `productor?.codigo ?? ""`. Ruta: **delegada** (misma tanda).
+- [x] **T4 — casos de precio en `verificar.cjs`.**
+      Mínimo: precio de socio por idsocio; precio general; fila vieja sin `id_socio` con
+      código (cae al código); productor **sin código** que sí recibe su precio por idsocio;
+      código duplicado que ya no agarra el precio ajeno. Ruta: **delegada** (misma tanda).
+
+## Criterios de aceptación
+
+1. `buscarPrecio` da el mismo resultado que `f_rc_busca_precio` para las cinco formas de
+   fila de T4.
+2. Un productor sin `rc_codigo` recibe su precio específico.
+3. Una fila con `idsocio` y `codigo` vacío **no** se aplica a todos los productores.
+4. Un teléfono en la versión 12 migra a la 13 sin perder datos.
+5. Los tres checks de la tabla pasan.
+
+## Estrategia de entrega
+
+`ask-on-risk` (default), un solo PR. Forecast desde las tareas: ~180 líneas autoradas
+(adiciones + borrados), bien debajo del presupuesto de ~400.
+
+## Progreso
+
+- 21-nov-2026: auditoría de identidad del productor en las dos apps, los `shared-*` y los
+  endpoints del BE (4 mapeos en paralelo). Resultado: el pull **sí** manda `idsocio` como
+  `id` del productor, así que `Number(p.id)` es correcto en todas partes; promotor ya es
+  idsocio-primario; el agujero real está en los hooks del BE y en el precio del móvil.
+- 21-nov-2026: rama `feat/precio-por-idsocio` abierta desde `master` (613f5dc).
+  `feat/preparar-logo-impreso` quedó con 2 commits sin mergear y no se toca.
+- 21-nov-2026: T1 a T4 en un solo work-unit commit, **`8e2e398`** — 8 archivos, 155
+  adiciones y 16 borrados. El bump de `SCHEMA_VERSION` y su migración van ahí adentro,
+  como manda `migrations.ts:10-13`.
+- Nombre del campo en `recibos-calc`: **`idsocio`**, no `idSocio`. Los campos vecinos
+  (`idreprecio`, `tipocafe`) son nombres de columna del servidor en minúscula y sin
+  separador, y `EntradaPrecio` refleja los parámetros de la función SQL. La columna local
+  sigue siendo `id_socio` y el accesor del modelo `idSocio`, igual que en `Finca` y
+  `Cuota`.
+
+## Evidencia de verificación
+
+Corridos el 21-nov-2026, con el cambio aplicado:
+
+| check | resultado observado |
+|---|---|
+| `pnpm --filter @erp/recibos-calc run lint` | tsc sin errores, exit 0 |
+| `pnpm --filter @erp/recibos run lint` | tsc sin errores, exit 0 |
+| `pnpm --filter @erp/recibos-calc run verificar` | **14/14 casos de precio `ok`** (`precio: todo ok`); exit 1 por la comparación contra la base |
+
+**Ese exit 1 es preexistente, medido, no asumido.** El verificador compara 5.000 recibos
+reales de `sci_altura_2026` y da `Coinciden: 4982/5000 (99.640 %)`. Para saber si el port
+lo había causado, guardé el cambio con `git stash`, corrí el verificador en limpio y dio
+**el mismo 99.640 %**, con las mismas 18 diferencias (`rcantidad calculado=N
+almacenado=0`, en recibos sin castigos) y las mismas 8 de
+`rcantidadcuartillos`. El port no introdujo ninguna.
+
+Esas 18 son un defecto aparte, del cálculo del recibo contra datos viejos: no es de esta
+feature y no se tocó. Queda anotado, sin abrir tarea.
+
+El writer agregó además el flag `--solo-precio`, que corre los casos de precio sin tocar
+la base y sale con exit 0. Ése es el check útil de acá en adelante.
+
+## Próximo paso
+
+Probar en pantalla con un APK: que un productor **sin código** reciba su precio
+específico. Es el caso que estaba roto y el único que la base de desarrollo no puede
+demostrar sola.
+
+## Pendiente de Alfredo
+
+**Una divergencia que queda viva, y es hacia adelante, no de datos viejos.** Cuando el
+recibo se emite con "No está registrado", `productor` es `null`, así que la entrada sale
+con `idsocio: null` y `codigo: ""` y **sólo aplican precios generales**. Si ese socio
+genérico tuviera filas de precio propias, el servidor se las aplicaría y el móvil no: el
+recibo se imprimiría con un precio y se guardaría con otro. El id del genérico ya está
+resuelto en `recibo.ts` (`idGenericoResuelto`), así que cerrarlo es pasarlo a la entrada —
+pero el genérico está declarado fuera de alcance y la decisión es de Alfredo.
+
+Nada más bloquea esta feature. Lo que queda abierto son los tres puntos de "fuera de alcance",
+más la decisión de si `ge_companias.ben_socio_generico` pasa a llevar `idsocio` (hoy es
+`varchar`, un código, y está en **NULL en las dos compañías** de `sci_altura_0826`, así
+que el genérico no se puede probar en esta base).
