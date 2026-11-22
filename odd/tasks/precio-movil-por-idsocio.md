@@ -254,20 +254,96 @@ sincronizó.
 
 El recibo quedó guardado en el ERP con **`# Precio 538`, `Precio 9.99`**, valor 494.51.
 
-Dos cosas que eso cierra:
+### Lo que ese 9.99 NO prueba
 
-1. **La v1.95 está en esa copia.** El productor 16636 no tiene `rc_codigo`, así que por
-   `codigo` no hay forma de caer en la 538: si el `ColumnsJson` de `precios` no trajera
-   `idsocio AS id_socio`, el móvil habría aplicado el precio general. Cayó en la propia.
-2. **`ReciboCalcHook` no pisa el precio.** Era el último punto abierto del circuito: el
-   recibo llegó, el servidor recalculó y el resultado almacenado sigue siendo la 538, no
-   el genérico.
+Escribí primero que eso confirmaba la metadata v1.95 en la copia y que `ReciboCalcHook` no
+pisaba el precio. **Las dos cosas eran falsas**, y la evidencia está en el código:
 
-Queda una verificación de un vistazo, sin consultas: **abrir ese recibo en la lista del
-teléfono**. El 9.99 de la pantalla del ERP lo pudo calcular el servidor por su cuenta —
-`f_rc_busca_precio` ya resolvía por `idsocio` desde antes. Si el teléfono también muestra
-9.99, los dos lados coinciden y no hay nada más que mirar. Si mostrara 7.50, esa
-diferencia **es** la divergencia que esta feature vino a cerrar.
+`ReciboCalcHook.cs:94-106` — salvo que el recibo venga con `manual=1`, el hook **sobrescribe**
+`idreprecio` y `precio` con el resultado de su propia llamada a `f_rc_busca_precio`:
+
+```csharp
+if (!esManual) { ... data["idreprecio"] = price.idreprecio; data["precio"] = price.precio; }
+```
+
+O sea que **el 9.99 de la pantalla del ERP es la respuesta del servidor, no la del teléfono**.
+Y `f_rc_busca_precio` es una función de la base: resuelve por `idsocio` sin consultar
+`mt.MobileCollections`, así que tampoco dice nada sobre si el `ColumnsJson` de `precios` de esa
+copia trae `idsocio AS id_socio`.
+
+Lo que sí quedó probado en Marespi: el recibo viaja, se acepta y **lo almacenado es correcto**.
+El circuito del servidor está bien. Lo que elige el teléfono sigue sin verificarse ahí.
+
+### Por qué no se puede leer el precio del teléfono de Marespi
+
+Tres caminos, los tres cerrados:
+
+1. **La pantalla.** `ReciboScreen.tsx:62` lo dice explícito: *"EL PRECIO Y EL VALOR SE CALCULAN
+   PERO NO SE MUESTRAN"*. El recibo del móvil no es un documento de pago.
+2. **El papel.** Imprime una línea `ADELANTO`, pero ese número **no es el precio guardado**:
+   `imprimir.ts:268-292` porta `f_re_precio_recibo_impreso`, que filtra `codigo is null` a
+   propósito para que en el papel vaya siempre el genérico, y además lo multiplica ×20 (por
+   fanega). Por diseño no coincide con el precio del recibo.
+3. **La base del teléfono.** El APK de Marespi es un **release** firmado con el keystore de
+   Confeldan, así que no es `DEBUGGABLE` y `adb shell run-as cr.confeldan.recibos.marespi`
+   falla. Eso sólo funciona con el dev-client, que es debug.
+
+La prueba del teléfono del **21-nov sobre `sci_altura_0826` sigue siendo la válida**: ahí sí se
+leyó `recibos.db` directo y los `idreprecio` eran los correctos. El APK de Marespi corre el mismo
+JS (commit `2b1fe03`).
+
+Para cerrar Marespi hace falta **una consulta en esa copia**, no en el teléfono:
+
+```sql
+SELECT ColumnsJson FROM mt.MobileCollections WHERE CollectionName = 'precios';
+```
+
+Si trae `idsocio AS id_socio`, la v1.95 está. Si no, hay que aplicarla.
+
+## Hallazgo lateral: el guardián del precio impreso quedó viejo
+
+Buscando lo anterior apareció otra cosa, y **no la introdujo este cambio**: la trajo la
+migración del servidor a `@idsocio`.
+
+`dbo.f_re_precio_recibo_impreso` —y su port en `imprimir.ts:303-314`— excluye los precios de
+productor con un solo filtro: **`and codigo is null`**. Esa era una regla válida cuando un
+productor se identificaba por `codigo`. Hoy se identifica por `idsocio`, así que **una fila con
+`idsocio` y sin `codigo` pasa el filtro** y entra al grupo de los genéricos.
+
+Verificado en `sci_altura_0826`. `re_precios` es un **SYNONYM** de `dbo.rc_precios` (misma
+tabla), y los candidatos para cosecha 2026-2027 / tipocafe 9 / calidad M con `codigo IS NULL`
+son:
+
+| idreprecio | monto | idsocio | tipo | recibidor | zona |
+|---|---|---|---|---|---|
+| 534 | 2500.00 | NULL | NULL | NULL | 5 |
+| **538** | **9.99** | **16636** | NULL | NULL | NULL |
+| 537 | 7.50 | NULL | NULL | NULL | NULL |
+
+La 538 es el precio privado de josefin y está compitiendo por salir impresa en el papel **de
+cualquier productor**. Es exactamente *"un número plausible y equivocado en el documento que la
+persona firma"* contra lo que advierte el comentario de `imprimir.ts`, ahora con plata ajena.
+El `ORDER BY` de la función no tiene desempate entre la 538 y la 537: las dos tienen tipo,
+recibidor y zona en NULL.
+
+**Hoy no muerde en esta base**, y por eso no se había visto. El reparto actual de
+`dbo.rc_precios`:
+
+| | con código | sin código |
+|---|---|---|
+| **con idsocio** | 310 | **1** ← mi fila de prueba |
+| **sin idsocio** | — | 206 |
+
+Las 310 filas reales llevan los dos campos, así que `codigo is null` todavía las excluye. La
+única que cae en el hueco es la que inserté yo.
+
+**Pero la premisa de esta feature es justamente lo que lo vuelve alcanzable:** son 27 los
+productores sin `rc_codigo`, y en cuanto la oficina le cargue un precio propio a uno de ellos,
+esa fila nace con `idsocio` y sin `codigo`. Ahí el hueco deja de ser teórico. Falta confirmar el
+camino de escritura del web para saber si realmente deja `codigo` vacío en ese caso.
+
+El arreglo es una línea en cada lado —agregar `and idsocio is null` al guardián— pero toca la
+función del servidor, así que **no se hizo: es decisión y autorización de Alfredo**.
 
 ## Pendiente de Alfredo
 
