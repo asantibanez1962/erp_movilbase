@@ -173,11 +173,63 @@ feature y no se tocó. Queda anotado, sin abrir tarea.
 El writer agregó además el flag `--solo-precio`, que corre los casos de precio sin tocar
 la base y sale con exit 0. Ése es el check útil de acá en adelante.
 
+## Prueba en teléfono — 21-nov-2026
+
+Hecha en un **Samsung SM-A055M, Android 14**, contra el BE de desarrollo
+(`ERP.Backend\bin\Debug\net8.0`, que sirve `sci_altura_0826`). **No hizo falta compilar
+un APK**: el `cr.confeldan.recibos` instalado es el dev-client (`DEBUGGABLE`, con
+`expo.modules.devlauncher`), y todo el cambio es JavaScript, migración de esquema
+incluida.
+
+### Fila de prueba
+
+No existía ninguna fila con `idsocio` y `codigo` vacío —0 de 516—, así que se insertó
+una en `sci_altura_0826`. El productor **16636 (josefin salas salazar) tiene
+`rc_codigo` en NULL**: es uno de los 27 del problema original.
+
+```sql
+INSERT INTO dbo.rc_precios
+    (cosecha, tipocafe, calidad, zona, recibidor, tipo, codigo,
+     monto, moneda, recalcula, flete, compania, idsocio)
+VALUES ('2026-2027','9','M',NULL,NULL,NULL,NULL, 9.99,1,1,0.00,1, 16636);
+```
+
+Verificado antes de correrla: `tr_rc_precios_reprice` es **sólo de UPDATE**
+(`ExecIsInsertTrigger = 0`), así que insertar no dispara el recálculo de recibos.
+`Id` lo llena `tr_rc_precios` y `SyncUpdatedAt` tiene default `sysutcdatetime()`, así
+que el pull incremental la entrega sola. Quedó como `idreprecio = 538`.
+
+### Resultado
+
+| criterio | evidencia observada |
+|---|---|
+| 4 — migración sin pérdida | `[🍉] [SQLite] Migrating from version 12 to 13... Migration successful`, y `PRAGMA user_version` = 13 en la base del teléfono |
+| proyección | la fila 538 bajó con `id_socio = 16636`; el alias `idsocio AS id_socio` funciona de punta a punta |
+| 2 — productor sin código | recibo `001-000014`, josefin (16636, código vacío) → `idreprecio 538`, **₡9.99** |
+| 3 — la fila no se derrama | recibo `001-000015`, AARON (15187, código `C12749`) → `idreprecio 537`, **₡7.50** |
+| 1 — igual que el servidor | `f_rc_busca_precio('2026-2027','9','M',NULL,'001',16636,NULL)` → 538/9.99; con cualquier otro idsocio → 537/7.50. Los tres recibos coinciden |
+
+**El recibo 001-000015 es el que separa el código viejo del nuevo.** La fila 538 tiene
+`codigo` vacío, así que el código viejo la leía como precio general y, al desempatar por
+`idreprecio DESC`, se la habría aplicado a AARON: ₡9.99 en vez de ₡7.50. El recibo
+`001-000014` por sí solo **no** prueba nada — el código viejo también habría caído en la
+538, por la razón equivocada.
+
+### Lo que costó llegar
+
+El dev-client instalado es del **13-oct-2026**, anterior al arreglo de
+`unstable_serverRoot` en `metro.config.js:26` (21-oct). Lleva horneado el entry
+`apps/recibos/index`, relativo a la raíz del monorepo, y pedía
+`/apps/recibos/index.ts.bundle` — que con la raíz del servidor en el proyecto da **404**,
+con un `UnableToResolveError` en pantalla y un ANR encima. Comprobado con curl: esa ruta
+daba 404 y `/index.ts.bundle` daba 200. Se comentó la línea 26 para la prueba y **se
+revirtió al terminar** (árbol limpio, sin diff). La solución de fondo es recompilar el
+dev-client, que lo regenera consistente con la configuración actual.
+
 ## Próximo paso
 
-Probar en pantalla con un APK: que un productor **sin código** reciba su precio
-específico. Es el caso que estaba roto y el único que la base de desarrollo no puede
-demostrar sola.
+Sincronizar los tres recibos y confirmar que `ReciboCalcHook` no les cambia el precio al
+recalcular del lado del servidor. Es lo único que queda del circuito completo.
 
 ## Pendiente de Alfredo
 
