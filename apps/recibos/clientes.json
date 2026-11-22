@@ -97,7 +97,8 @@
     "nombreLargo": "Marespi S.A.",
     "color": "#5a7443",
     "package": "cr.confeldan.recibos.marespi",
-    "apiBaseUrl": "http://192.168.100.10:5249",
+    "_apiBaseUrlNota": "Tunel de Cloudflare, verificado el 21-nov-2026: GET /api/auth/me responde 401 con 'WWW-Authenticate: Bearer', o sea apunta al backend. Sin puerto: el tunel termina el TLS en 443. OJO, es un tunel EFIMERO de trycloudflare.com: el hostname se pierde cuando se cae el proceso y vuelve con otro nombre, asi que este APK deja de resolver al primer reinicio. Mientras no haya hostname fijo, se corrige desde el cajon -> Servidor sin recompilar.",
+    "apiBaseUrl": "https://pharmacy-stud-moscow-rescue.trycloudflare.com",
     "logo": "marespi.png",
     "logoImpreso": null
   }
