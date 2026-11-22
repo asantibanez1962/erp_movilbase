@@ -342,8 +342,47 @@ productores sin `rc_codigo`, y en cuanto la oficina le cargue un precio propio a
 esa fila nace con `idsocio` y sin `codigo`. Ahí el hueco deja de ser teórico. Falta confirmar el
 camino de escritura del web para saber si realmente deja `codigo` vacío en ese caso.
 
-El arreglo es una línea en cada lado —agregar `and idsocio is null` al guardián— pero toca la
-función del servidor, así que **no se hizo: es decisión y autorización de Alfredo**.
+### Cerrado en los dos lados — 22-nov-2026
+
+**Servidor (Alfredo), `v1.95/RC/30` aplicado en `sci_altura_0826`.** Siguió el patrón de
+`RC/24`: creó `f_rc_precio_recibo_impreso` —cuerpo del original, pero filtrando
+`idsocio is null` y leyendo `rc_precios`— y repunteó `vw_rc_recibo_impreso` hacia ella. La
+`f_re_*` legacy queda intacta para PowerBuilder. El repunteo es dinámico: lee la definición
+viva de la vista y swapea `f_re_` → `f_rc_`, así corre igual en cualquier cliente.
+
+**Móvil, `imprimir.ts`.** El port lleva **dos condiciones donde el servidor tiene una**, y
+eso es deliberado:
+
+```ts
+if (p.idSocio != null) return false;      // fila nueva: el productor viaja en `idsocio`
+if (norm(p.codigo) !== "") return false;  // fila vieja: todavía viaja en `codigo`
+```
+
+El servidor pudo *reemplazar* la condición porque lee la tabla viva, donde toda fila de
+productor ya tiene `idsocio`. El teléfono lee una copia y el pull es **incremental por
+`SyncUpdatedAt`**: una fila que todavía no se re-bajó sigue con `codigo` y sin `id_socio`, y
+con sólo `idsocio is null` se imprimiría como general — el mismo hueco por la otra puerta. Es
+la misma regla de transición que ya tiene `buscarPrecio()`. Se pueden unificar cuando no quede
+ningún teléfono con filas anteriores a la v1.95.
+
+**Verificación:** `tsc --noEmit` limpio y `pnpm run verificar` → *precio: todo ok* (14/14),
+`Coinciden 4982/5000 (99.640 %)` — los 18 descuadres de `rcantidad` son los preexistentes.
+
+⚠️ **`precioImpreso` sigue sin ninguna prueba.** Vive en `apps/recibos/src/lib/imprimir.ts`,
+no en `packages/recibos-calc`, así que `verificar.cjs` nunca lo vio: por eso el hueco pasó la
+v1.95 entera sin que nada lo marcara. Moverlo al paquete con sus casos queda propuesto y **sin
+autorizar** — hace una consulta a la base adentro, así que no es un movimiento mecánico.
+
+⚠️ **Antes de aplicar `RC/30` en otro cliente**, confirmar la premisa del predicado: es un
+hecho de los datos, no del esquema, y se verificó sólo en `sci_altura_0826`.
+
+```sql
+SELECT COUNT(*) FROM dbo.rc_precios
+WHERE idsocio IS NULL AND NULLIF(LTRIM(RTRIM(codigo)),'') IS NOT NULL;
+```
+
+Si da 0, `idsocio is null` selecciona exactamente las generales. Si da más, en esa base el
+guardián necesita las dos condiciones, igual que el móvil.
 
 ## Pendiente de Alfredo
 

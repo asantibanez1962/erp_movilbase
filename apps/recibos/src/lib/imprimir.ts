@@ -266,16 +266,32 @@ async function geografiaDe(
 }
 
 /**
- * El ADELANTO del papel. Porta `f_re_precio_recibo_impreso` línea por línea.
+ * El ADELANTO del papel. Porta `f_rc_precio_recibo_impreso` línea por línea.
  *
- * ⚠️ ES UN PRECIO GENÉRICO Y ESO ESTÁ PUESTO A PROPÓSITO: el filtro `codigo is null` es
- * explícito en la función del servidor. Aunque el productor tenga precio especial, **en el
- * papel va el que aplica por tipo de café, recibidor y zona**, nada más.
+ * ⚠️ ES UN PRECIO GENÉRICO Y ESO ESTÁ PUESTO A PROPÓSITO: el filtro que excluye los precios
+ * de productor es explícito en la función del servidor. Aunque el productor tenga precio
+ * especial, **en el papel va el que aplica por tipo de café, recibidor y zona**, nada más.
  *
- * Es distinto del precio que se GUARDA con el recibo, donde el código del productor sí
- * entra al criterio. Reutilizar aquella búsqueda —lo natural, ya está escrita— imprimiría
- * el precio especial: un número plausible y equivocado en el documento que la persona
- * firma.
+ * Es distinto del precio que se GUARDA con el recibo, donde el productor sí entra al
+ * criterio. Reutilizar aquella búsqueda —lo natural, ya está escrita— imprimiría el precio
+ * especial: un número plausible y equivocado en el documento que la persona firma.
+ *
+ * ⚠️ ACÁ EL FILTRO SON DOS CONDICIONES Y EN EL SERVIDOR UNA SOLA. No es un port infiel, es
+ * la misma regla de transición que tiene `buscarPrecio()`:
+ *
+ * - La legacy `f_re_precio_recibo_impreso` filtraba `codigo is null`. Eso dejó de alcanzar
+ *   cuando la migración pasó a identificar al productor por `idsocio`: una fila con
+ *   `idsocio` y sin `codigo` pasaba el filtro y el precio privado de uno podía imprimirse
+ *   en el papel de otro.
+ * - v1.95/RC/30 creó `f_rc_precio_recibo_impreso`, que filtra `idsocio is null` y repunteó
+ *   `vw_rc_recibo_impreso` hacia ella. La `f_re_*` queda intacta para PowerBuilder.
+ *
+ * El servidor pudo REEMPLAZAR la condición porque lee la tabla viva, donde toda fila de
+ * productor ya tiene `idsocio`. El teléfono lee una copia, y el pull es incremental por
+ * `SyncUpdatedAt`: una fila que todavía no se re-bajó sigue acá con `codigo` y sin
+ * `id_socio`. Con sólo `idsocio is null` esa fila se imprimiría como general — el mismo
+ * hueco entrando por la otra puerta. Las dos condiciones se pueden quitar cuando no quede
+ * ningún teléfono con filas anteriores a la v1.95.
  *
  * Los dos parámetros que definen "a quién le aplica" salen del PRODUCTOR (su tipo y su
  * zona), no del recibo; el recibo aporta cosecha, calidad, recibidor y tipo de café. Y el
@@ -308,8 +324,10 @@ async function precioImpreso(
     if (norm(p.zona) !== "" && norm(p.zona) !== zonaProductor) return false;
     if (norm(p.recibidor) !== "" && norm(p.recibidor) !== norm(recibo.recibidor)) return false;
     if (norm(p.tipo) !== "" && norm(p.tipo) !== tipoProductor) return false;
-    // El corazón de la regla: nunca un precio de productor.
-    if (norm(p.codigo) !== "") return false;
+    // El corazón de la regla: nunca un precio de productor. Van los DOS filtros, y no es
+    // una divergencia del port — ver el encabezado.
+    if (p.idSocio != null) return false; // fila nueva: el productor viaja en `idsocio`
+    if (norm(p.codigo) !== "") return false; // fila vieja: todavía viaja en `codigo`
     return true;
   });
 
