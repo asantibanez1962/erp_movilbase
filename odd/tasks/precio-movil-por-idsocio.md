@@ -368,6 +368,46 @@ ningún teléfono con filas anteriores a la v1.95.
 **Verificación:** `tsc --noEmit` limpio y `pnpm run verificar` → *precio: todo ok* (14/14),
 `Coinciden 4982/5000 (99.640 %)` — los 18 descuadres de `rcantidad` son los preexistentes.
 
+### Probado en el teléfono — 22-nov-2026
+
+Dev-client (`cr.confeldan.recibos`) contra Metro y el backend de desarrollo
+(`192.168.100.10:5249` → `sci_altura_0826`). **Sin recompilar nada**: el cambio es JS y entró
+por fast refresh.
+
+**El bundle servido se verificó por cadena, y acá sí vale.** Metro en dev sirve JS plano, sin
+minificar y sin Hermes, así que lo leído es literalmente lo que ejecuta el aparato —lo
+contrario del APK, donde el mismo truco no aplica (ver "Entrega"). Línea 231173 del bundle,
+con comentarios y todo:
+
+```js
+if (p.idSocio != null) return false; // fila nueva: el productor viaja en `idsocio`
+if (norm(p.codigo) !== "") return false; // fila vieja: todavía viaja en `codigo`
+```
+
+**Recibo `001-000016`** — josefin salas salazar (`idsocio` 16636, sin `rc_codigo`, zona 0),
+tipo café 9, calidad M, 10 fanegas:
+
+| | valor | de dónde |
+|---|---|---|
+| guardado | `idreprecio 538`, `precio 9.99` | su precio propio, por `idsocio` |
+| valor | 99.90 | 10 × 9.99 |
+| **ADELANTO impreso** | **150.00** | la general 537 (7.50) × 20 |
+
+Lo decisivo es el estado de `precios` **en el teléfono**: la 538 bajó con `id_socio = 16636` y
+`codigo` vacío. Ese es justo el caso que se fugaba — el guardián viejo miraba sólo `codigo`, la
+dejaba pasar como general y el papel habría dicho **199.80**, el precio privado de josefin en
+el documento de cualquiera. La 534 queda fuera por zona (5 contra 0), así que sólo sobrevive la
+537. El número salió exacto.
+
+El historial del teléfono sirve de tabla de regresión:
+
+| recibo | productor | idreprecio | precio | qué prueba |
+|---|---|---|---|---|
+| 001-000013 | josefin | 537 | 7.50 | antes de existir la 538 |
+| 001-000014 | josefin | 538 | 9.99 | ambiguo: el código viejo también caía ahí |
+| 001-000015 | AARON (con código) | 537 | 7.50 | el que tiene código recibe la general |
+| **001-000016** | josefin | **538** | **9.99** | guardado por `idsocio` **+** papel en 150.00 |
+
 ⚠️ **`precioImpreso` sigue sin ninguna prueba.** Vive en `apps/recibos/src/lib/imprimir.ts`,
 no en `packages/recibos-calc`, así que `verificar.cjs` nunca lo vio: por eso el hueco pasó la
 v1.95 entera sin que nada lo marcara. Moverlo al paquete con sus casos queda propuesto y **sin
