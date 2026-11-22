@@ -226,10 +226,33 @@ daba 404 y `/index.ts.bundle` daba 200. Se comentó la línea 26 para la prueba 
 revirtió al terminar** (árbol limpio, sin diff). La solución de fondo es recompilar el
 dev-client, que lo regenera consistente con la configuración actual.
 
+## Entrega — APK de Marespi, 21-nov-2026
+
+Build de EAS `eca46d03-eec4-410e-b996-2067fbf85393`, perfil `marespi`, FINISHED, desde el
+commit `2b1fe03`. **Probado por Alfredo en el teléfono: funciona.**
+
+El catálogo de Marespi pasó a apuntar al túnel del beneficio
+(`https://pharmacy-stud-moscow-rescue.trycloudflare.com`), verificado antes de hornearlo:
+`GET /api/auth/me` responde 401 con `WWW-Authenticate: Bearer`.
+
+Verificado sobre el propio APK, no sobre el repo: `assets/app.config` con el nombre, el
+package `cr.confeldan.recibos.marespi` y la URL correctos; firma
+`CN=Confeldan, OU=Desarrollo`; recurso `drawable/assets_clientes_marespi`.
+
+**El truco de buscar una cadena distintiva en el bundle no aplica a este cambio**: la
+columna `id_socio` ya existía en el esquema para otras tablas, y el port no agregó ningún
+literal de texto nuevo. La verificación que vale acá es la procedencia — el `gitCommit`
+que reporta `eas build:view --json`, contrastado con `git show <sha>:<archivo>`.
+
 ## Próximo paso
 
-Sincronizar los tres recibos y confirmar que `ReciboCalcHook` no les cambia el precio al
-recalcular del lado del servidor. Es lo único que queda del circuito completo.
+Sincronizar los tres recibos de prueba y confirmar que `ReciboCalcHook` no les cambia el
+precio al recalcular del lado del servidor. Es lo único que queda del circuito completo.
+
+Y del lado de Marespi: aplicar `"idsocio AS id_socio"` en el `ColumnsJson` de
+`recibos`/`precios` y la `f_rc_busca_precio` con `@idsocio`. Sin eso la app no se rompe
+—la regla de transición hace caer los precios por `codigo`— pero el productor sin código
+sigue sin recibir su precio propio.
 
 ## Pendiente de Alfredo
 
