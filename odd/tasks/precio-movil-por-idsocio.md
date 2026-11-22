@@ -244,15 +244,30 @@ columna `id_socio` ya existía en el esquema para otras tablas, y el port no agr
 literal de texto nuevo. La verificación que vale acá es la procedencia — el `gitCommit`
 que reporta `eas build:view --json`, contrastado con `git show <sha>:<archivo>`.
 
-## Próximo paso
+## Confirmación en Marespi — 22-nov-2026
 
-Sincronizar los tres recibos de prueba y confirmar que `ReciboCalcHook` no les cambia el
-precio al recalcular del lado del servidor. Es lo único que queda del circuito completo.
+El ambiente de prueba de Marespi corre un **respaldo de `sci_altura_0826`**, así que trae
+los mismos `idsocio`: josefin salas salazar sigue siendo el **16636**. El respaldo es
+anterior a la fila de precio de la prueba, así que Alfredo la volvió a insertar ahí —
+también quedó con `idreprecio = 538`, a **9.99** — emitió un recibo desde la app y lo
+sincronizó.
 
-Y del lado de Marespi: aplicar `"idsocio AS id_socio"` en el `ColumnsJson` de
-`recibos`/`precios` y la `f_rc_busca_precio` con `@idsocio`. Sin eso la app no se rompe
-—la regla de transición hace caer los precios por `codigo`— pero el productor sin código
-sigue sin recibir su precio propio.
+El recibo quedó guardado en el ERP con **`# Precio 538`, `Precio 9.99`**, valor 494.51.
+
+Dos cosas que eso cierra:
+
+1. **La v1.95 está en esa copia.** El productor 16636 no tiene `rc_codigo`, así que por
+   `codigo` no hay forma de caer en la 538: si el `ColumnsJson` de `precios` no trajera
+   `idsocio AS id_socio`, el móvil habría aplicado el precio general. Cayó en la propia.
+2. **`ReciboCalcHook` no pisa el precio.** Era el último punto abierto del circuito: el
+   recibo llegó, el servidor recalculó y el resultado almacenado sigue siendo la 538, no
+   el genérico.
+
+Queda una verificación de un vistazo, sin consultas: **abrir ese recibo en la lista del
+teléfono**. El 9.99 de la pantalla del ERP lo pudo calcular el servidor por su cuenta —
+`f_rc_busca_precio` ya resolvía por `idsocio` desde antes. Si el teléfono también muestra
+9.99, los dos lados coinciden y no hay nada más que mirar. Si mostrara 7.50, esa
+diferencia **es** la divergencia que esta feature vino a cerrar.
 
 ## Pendiente de Alfredo
 
