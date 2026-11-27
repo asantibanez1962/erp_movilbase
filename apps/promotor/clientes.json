@@ -63,7 +63,7 @@
     "nombreLargo": "Beneficio La Eva",
     "color": "#095ee9",
     "package": "cr.confeldan.promotor.laeva",
-    "_urlNota": "Túnel rápido de Cloudflare (trycloudflare.com), no un hostname propio: el nombre lo asigna Cloudflare al levantar el túnel y CAMBIA cada vez que el proceso se reinicia. Mismo origen: el FE se sirve en / y el backend en /api. SIN barra final — el valor del catálogo se usa tal cual (lib/servidor.ts:40) y la normalización que la quita sólo corre sobre el override manual, así que una barra de más produce //api/... Cuando el túnel muera, la salida es el drawer → 'Servidor'; no hace falta recompilar.",
+    "_urlNota": "Túnel rápido de Cloudflare (trycloudflare.com), no un hostname propio: el nombre lo asigna Cloudflare al levantar el túnel y CAMBIA cada vez que el proceso se reinicia. Mismo origen: el FE se sirve en / y el backend en /api. SIN barra final — el valor del catálogo se usa tal cual (lib/servidor.ts:40) y la normalización que la quita sólo corre sobre el override manual, así que una barra de más produce //api/... Cuando el túnel muera, la salida es el drawer → 'Servidor'; no hace falta recompilar. Es el mismo sitio que apunta marespi en el catálogo de recibos, y es a propósito: APK de PRUEBAS, confirmado por Alfredo el 27-nov-2026. Antes del APK de producción hay que poner el servidor real del beneficio.",
     "apiBaseUrl": "https://pharmacy-stud-moscow-rescue.trycloudflare.com",
     "logo": "laeva.png"
   },
