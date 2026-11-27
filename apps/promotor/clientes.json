@@ -63,7 +63,8 @@
     "nombreLargo": "Beneficio La Eva",
     "color": "#095ee9",
     "package": "cr.confeldan.promotor.laeva",
-    "apiBaseUrl": "http://192.168.100.10:5249",
+    "_urlNota": "Túnel rápido de Cloudflare (trycloudflare.com), no un hostname propio: el nombre lo asigna Cloudflare al levantar el túnel y CAMBIA cada vez que el proceso se reinicia. Mismo origen: el FE se sirve en / y el backend en /api. SIN barra final — el valor del catálogo se usa tal cual (lib/servidor.ts:40) y la normalización que la quita sólo corre sobre el override manual, así que una barra de más produce //api/... Cuando el túnel muera, la salida es el drawer → 'Servidor'; no hace falta recompilar.",
+    "apiBaseUrl": "https://pharmacy-stud-moscow-rescue.trycloudflare.com",
     "logo": "laeva.png"
   },
 
