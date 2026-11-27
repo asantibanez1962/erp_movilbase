@@ -70,8 +70,10 @@
     "nombreLargo": "Beneficio La Eva",
     "color": "#095ee9",
     "package": "cr.confeldan.recibos.laeva",
-    "apiBaseUrl": "http://192.168.100.10:5249",
+    "_apiBaseUrlNota": "Tunel de Cloudflare, verificado el 27-nov-2026: POST /api/auth/login con el cuerpo mal formado responde 400 application/problem+json, o sea la ruta del backend existe y lo anonimo funciona. Es de MISMO ORIGEN: / sirve el FE del ERP y /api el backend. Sin puerto: el tunel termina el TLS en 443. OJO DOS COSAS. (1) Es un tunel EFIMERO de trycloudflare.com: el hostname se pierde cuando se cae el proceso y vuelve con otro nombre, asi que este APK deja de resolver al primer reinicio; se corrige desde el cajon -> Servidor sin recompilar. (2) Es el MISMO hostname que declara marespi en este catalogo, verificado contra el backend de Marespi el 21-nov-2026: si el tunel sigue parado en ese servidor, este APK lee la base de Marespi y no la de La Eva. Confirmar a donde apunta antes de entregarlo.",
+    "apiBaseUrl": "https://pharmacy-stud-moscow-rescue.trycloudflare.com",
     "logo": "laeva.png",
+    "_logoImpresoNota": "Sin logo impreso todavia: no existe assets/clientes/impreso/laeva.png. El papel sale sin logo, que es preferible a imprimir el de otro. Se genera con scripts/logos-impresos.py cuando se decida el umbral de croma.",
     "logoImpreso": null
   },
   "diamante": {
